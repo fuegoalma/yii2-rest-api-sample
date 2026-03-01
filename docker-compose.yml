@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  web:
+    image: php:8.4-apache
+    env_file:
+      - .env
+    ports:
+      - "8084:80"
+    volumes:
+      - ./:/var/www/html
+    working_dir: /var/www/html
+    environment:
+      - APACHE_DOCUMENT_ROOT=/var/www/html/web
+    command: >
+      bash -c "
+      a2enmod rewrite &&
+      docker-php-ext-install pdo pdo_mysql mysqli &&
+      echo '<Directory /var/www/html/web>
+          AllowOverride All
+          Require all granted
+      </Directory>' > /etc/apache2/conf-available/yii2.conf &&
+      a2enconf yii2 &&
+      sed -i 's|DocumentRoot /var/www/html|DocumentRoot /var/www/html/web|g' /etc/apache2/sites-available/000-default.conf &&
+      apache2-foreground
+      "
+    networks:
+      - yii-network
+
+  db:
+    image: mysql:8.0
+    env_file:
+      - .env
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME}
+    ports:
+      - "3307:3306"
+    volumes:
+      - db-data:/var/lib/mysql
+    networks:
+      - yii-network
+
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    ports:
+      - "8085:80"
+    environment:
+      PMA_HOST: db
+      PMA_USER: 
+      PMA_PASSWORD: 
+      UPLOAD_LIMIT: 100M
+    depends_on:
+      - db
+    networks:
+      - yii-network
+
+networks:
+  yii-network:
+
+volumes:
+  db-data:
