@@ -33,18 +33,12 @@ DB_PASSWORD=your_password
 TEST_DB_NAME=your_database_test
 ```
 
-### 3. Start Docker containers
+### 3. Run setup
+
+Run this after configuring `.env`. It starts Docker, installs dependencies, creates both databases (test and prod), and applies all migrations:
 
 ```bash
-docker-compose up -d
-```
-
-### 4. Set up databases and run migrations
-
-Run this after configuring `.env`. Creates both the main and test databases, then applies all migrations:
-
-```bash
-./db_setup.sh
+./setup.sh
 ```
 
 ---
@@ -165,7 +159,7 @@ docker-compose exec web php vendor/bin/codecept run unit
 │   ├── unit/          # Unit tests
 │   └── _support/      # Codeception helpers and base classes
 ├── init.sh            # First-time project initialization
-└── db_setup.sh        # Database creation and migration runner
+└── setup.sh        # Database creation and migration runner
 ```
 
 ---
