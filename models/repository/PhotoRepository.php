@@ -15,8 +15,9 @@ class PhotoRepository implements ApiRepositoryInterface
     public function getAllDP(array $params = []): ActiveDataProvider
     {
         $query = Photo::find();
-        if (!empty($params))
+        if (!empty($params)) {
             $query->andWhere($params);
+        }
         return new ActiveDataProvider([
             'query' => $query,
             'pagination' => [

@@ -15,7 +15,8 @@ readonly class AlbumService implements ApiServiceInterface
 {
     public function __construct(
         private AlbumRepository $repository
-    ) {}
+    ) {
+    }
 
     public function getAll(array $params = []): ActiveDataProvider
     {

@@ -1,4 +1,5 @@
 <?php
+
 namespace app\controllers\basic;
 
 use app\components\ApiSerializer;

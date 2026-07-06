@@ -15,8 +15,9 @@ class UserRepository implements ApiRepositoryInterface
     public function getAllDP(array $params = []): ActiveDataProvider
     {
         $query = User::find();
-        if (!empty($params))
+        if (!empty($params)) {
             $query->andWhere($params);
+        }
         return new ActiveDataProvider([
             'query' => $query,
             'pagination' => [

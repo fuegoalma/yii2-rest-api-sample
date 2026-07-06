@@ -15,7 +15,8 @@ readonly class UserService implements ApiServiceInterface
 {
     public function __construct(
         private UserRepository $repository
-    ) {}
+    ) {
+    }
 
     public function getAll(array $params = []): ActiveDataProvider
     {

@@ -1,4 +1,5 @@
 <?php
+
 $baseUrl = getenv('BASE_URL') ?: 'http://localhost';
 
 return [

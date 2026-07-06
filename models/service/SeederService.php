@@ -16,7 +16,8 @@ readonly class SeederService
         private UserRepository $userRepository,
         private AlbumRepository $albumRepository,
         private PhotoRepository $photoRepository,
-    ) {}
+    ) {
+    }
 
     /**
      * @throws Exception

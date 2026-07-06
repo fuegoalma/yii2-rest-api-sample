@@ -1,4 +1,5 @@
 <?php
+
 namespace app\commands\basic;
 
 use yii\console\Controller;

@@ -52,3 +52,4 @@ tests/_support/_generated
 
 # Codeception
 !/tests/_output/.gitkeep
+/.php-cs-fixer.cache

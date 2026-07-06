@@ -1,4 +1,5 @@
 <?php
+
 namespace app\components;
 
 use Yii;
@@ -17,8 +18,7 @@ class JsonErrorHandler extends ErrorHandler
 
         $error_info = [];
 
-        if (YII_DEBUG)
-        {
+        if (YII_DEBUG) {
             $error_info = [
                 'file' => $exception->getFile(),
                 'line' => $exception->getLine(),

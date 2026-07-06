@@ -1,4 +1,5 @@
 <?php
+
 namespace app\commands;
 
 use app\commands\basic\BasicConsoleController;

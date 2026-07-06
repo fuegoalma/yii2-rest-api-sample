@@ -12,7 +12,8 @@ readonly class AlbumViewResponse
         public string $first_name,
         public string $last_name,
         public array $photos,
-    ) {}
+    ) {
+    }
 
     public static function fromModel(Album $album): self
     {
@@ -33,7 +34,7 @@ readonly class AlbumViewResponse
             'first_name' => $this->first_name,
             'last_name' => $this->last_name,
             'photos' => array_map(
-                fn($photo) => $photo->toArray(),
+                fn ($photo) => $photo->toArray(),
                 $this->photos
             ),
         ];
