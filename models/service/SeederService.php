@@ -51,7 +51,12 @@ readonly class SeederService
         for ($i = 0; $i < $count; $i++) {
             $name = 'name_' . Yii::$app->security->generateRandomString();
             $names[] = $name;
-            $data[] = [$name, 'surname_' . Yii::$app->security->generateRandomString(), $passwordHash];
+            $data[] = [
+                $name,
+                'surname_' . Yii::$app->security->generateRandomString(),
+                strtolower($name) . '@example.com',
+                $passwordHash,
+            ];
         }
 
         $this->userRepository->batchInsert($data);

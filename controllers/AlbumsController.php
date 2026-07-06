@@ -29,7 +29,7 @@ class AlbumsController extends ApiController
         return new AlbumCreateForm();
     }
 
-    protected function updateForm(): ApiForm
+    protected function updateForm(int $id): ApiForm
     {
         return new AlbumUpdateForm();
     }

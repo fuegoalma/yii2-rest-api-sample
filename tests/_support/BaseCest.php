@@ -10,6 +10,11 @@ use yii\db\Query;
 
 abstract class BaseCest
 {
+    protected const string AUTH_USER_EMAIL = 'auth.user@example.com';
+
+    /** id of the user every test is authenticated as */
+    protected int $authUserId = 0;
+
     /**
      * @throws Exception
      */
@@ -21,6 +26,39 @@ abstract class BaseCest
         $db->createCommand('TRUNCATE TABLE album')->execute();
         $db->createCommand('TRUNCATE TABLE user')->execute();
         $db->createCommand('SET FOREIGN_KEY_CHECKS=1')->execute();
+
+        $this->authenticate($I);
+    }
+
+    /**
+     * All endpoints require a JWT, so every test runs as this user.
+     *
+     * @throws Exception
+     */
+    protected function authenticate(FunctionalTester $I): void
+    {
+        $this->authUserId = $this->insertUser([
+            'first_name' => 'Auth',
+            'last_name'  => 'User',
+            'email'      => self::AUTH_USER_EMAIL,
+        ]);
+
+        $I->amBearerAuthenticated(Yii::$app->jwt->issue($this->authUserId));
+    }
+
+    /**
+     * User fixture with sensible defaults; pass only the fields the test cares about.
+     *
+     * @throws Exception
+     */
+    protected function insertUser(array $overrides = []): int
+    {
+        return $this->insertRecord('user', array_merge([
+            'first_name'    => 'John',
+            'last_name'     => 'Doe',
+            'email'         => 'john.doe@example.com',
+            'password_hash' => '$2y$13$hashedpassword',
+        ], $overrides));
     }
 
     /**

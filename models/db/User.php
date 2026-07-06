@@ -2,6 +2,7 @@
 
 namespace app\models\db;
 
+use app\components\JwtService;
 use Yii;
 use yii\base\Exception;
 use yii\db\ActiveQuery;
@@ -14,6 +15,7 @@ use yii\web\IdentityInterface;
  * @property int $id
  * @property string $first_name
  * @property string $last_name
+ * @property string $email
  * @property null|string $auth_key
  * @property null|string $access_token
  * @property string $password_hash
@@ -30,8 +32,11 @@ class User extends ActiveRecord implements IdentityInterface
     public function rules(): array
     {
         return [
-            [['first_name', 'last_name', 'password_hash'], 'required'],
+            [['first_name', 'last_name', 'email', 'password_hash'], 'required'],
             [['first_name', 'last_name'], 'string', 'max' => 255],
+            [['email'], 'string', 'max' => 255],
+            [['email'], 'email'],
+            [['email'], 'unique'],
             [['auth_key', 'access_token'], 'string', 'max' => 32],
             [['password_hash'], 'string', 'max' => 60],
         ];
@@ -43,6 +48,7 @@ class User extends ActiveRecord implements IdentityInterface
             'id' => 'ID',
             'first_name' => 'First Name',
             'last_name' => 'Last Name',
+            'email' => 'Email',
             'auth_key' => 'Auth Key',
             'access_token' => 'Access Token',
             'password_hash' => 'Password Hash',
@@ -55,6 +61,7 @@ class User extends ActiveRecord implements IdentityInterface
             'id',
             'first_name',
             'last_name',
+            'email',
         ];
     }
 
@@ -88,9 +95,17 @@ class User extends ActiveRecord implements IdentityInterface
         return static::findOne(['id' => $id]);
     }
 
+    /**
+     * The token is a stateless JWT: the user is resolved
+     * from its `sub` claim, nothing is stored in the DB.
+     */
     public static function findIdentityByAccessToken($token, $type = null): User|IdentityInterface|null
     {
-        return static::findOne(['access_token' => $token]);
+        /** @var JwtService $jwt */
+        $jwt = Yii::$app->get('jwt');
+        $userId = $jwt->getUserId((string) $token);
+
+        return $userId === null ? null : static::findOne(['id' => $userId]);
     }
 
     public function getId(): int

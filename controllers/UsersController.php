@@ -17,8 +17,8 @@ class UsersController extends ApiController
         return new UserCreateForm();
     }
 
-    protected function updateForm(): ApiForm
+    protected function updateForm(int $id): ApiForm
     {
-        return new UserUpdateForm();
+        return new UserUpdateForm($id);
     }
 }

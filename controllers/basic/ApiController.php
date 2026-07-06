@@ -2,20 +2,15 @@
 
 namespace app\controllers\basic;
 
-use app\components\ApiSerializer;
 use app\models\contract\service\ApiServiceInterface;
 use app\models\form\basic\ApiForm;
 use yii\data\ActiveDataProvider;
-use yii\filters\Cors;
 use yii\rest\ActiveController;
-use yii\web\Response;
 use Yii;
 
 abstract class ApiController extends ActiveController
 {
-    public $serializer = [
-        'class' => ApiSerializer::class,
-    ];
+    use ApiControllerTrait;
 
     public function __construct(
         $id,
@@ -28,28 +23,8 @@ abstract class ApiController extends ActiveController
 
     public function behaviors(): array
     {
-        $behaviors = parent::behaviors();
-
-        // off auth
-        unset($behaviors['authenticator']);
-
-        $behaviors['contentNegotiator']['formats'] = [
-            'application/json' => Response::FORMAT_JSON,
-        ];
-
-        // setting up CORS
-        $behaviors['corsFilter'] = [
-            'class' => Cors::class,
-            'cors' => [
-                'Origin' => ['*'],
-                'Access-Control-Request-Method' => ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'],
-                'Access-Control-Request-Headers' => ['*'],
-                'Access-Control-Allow-Credentials' => false,
-                'Access-Control-Max-Age' => 86400,
-            ],
-        ];
-
-        return $behaviors;
+        // every resource endpoint requires a valid JWT bearer token
+        return $this->apiBehaviors(parent::behaviors());
     }
 
     public function actions(): array
@@ -88,7 +63,7 @@ abstract class ApiController extends ActiveController
     public function actionUpdate(int $id): mixed
     {
         return $this->handleWrite(
-            $this->updateForm(),
+            $this->updateForm($id),
             fn (array $data) => $this->service->update($id, $data),
             200
         );
@@ -102,7 +77,11 @@ abstract class ApiController extends ActiveController
 
     abstract protected function createForm(): ApiForm;
 
-    abstract protected function updateForm(): ApiForm;
+    /**
+     * @param int $id id of the record being updated, for rules
+     *                that must exclude it (e.g. unique checks)
+     */
+    abstract protected function updateForm(int $id): ApiForm;
 
     /**
      * Shared write-action flow: validate the form request, run the service
@@ -125,15 +104,5 @@ abstract class ApiController extends ActiveController
 
         Yii::$app->response->statusCode = $successCode;
         return $model;
-    }
-
-    protected function validateRequest(ApiForm $form): bool
-    {
-        $form->load(Yii::$app->request->bodyParams);
-        if (!$form->validate()) {
-            Yii::$app->response->statusCode = 422;
-            return false;
-        }
-        return true;
     }
 }

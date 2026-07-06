@@ -80,6 +80,7 @@ class UserServiceTest extends Unit
         $result = $this->service->create([
             'first_name' => 'New',
             'last_name'  => 'User',
+            'email'      => 'unit.new@example.com',
             'password'   => 'secret123',
         ]);
 
@@ -98,6 +99,7 @@ class UserServiceTest extends Unit
 
         $result = $this->service->create([
             'last_name' => 'User',
+            'email'     => 'unit.new@example.com',
             'password'  => 'secret123',
         ]);
 
@@ -119,6 +121,7 @@ class UserServiceTest extends Unit
         $result = $this->service->create([
             'first_name' => 'New',
             'last_name'  => 'User',
+            'email'      => 'unit.new@example.com',
             'password'   => 'secret123',
         ]);
 
@@ -141,6 +144,7 @@ class UserServiceTest extends Unit
         $result = $this->service->create([
             'first_name'    => 'New',
             'last_name'     => 'User',
+            'email'         => 'unit.new@example.com',
             'password'      => 'secret123',
             'password_hash' => '$2y$13$client-supplied-hash',
         ]);
@@ -161,6 +165,7 @@ class UserServiceTest extends Unit
         $result = $this->service->create([
             'first_name'    => 'New',
             'last_name'     => 'User',
+            'email'         => 'unit.new@example.com',
             'password_hash' => '$2y$13$client-supplied-hash',
         ]);
 

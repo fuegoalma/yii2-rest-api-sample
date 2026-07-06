@@ -32,12 +32,19 @@ return [
             'showScriptName' => false,
             'enableStrictParsing' => true,
             'rules' => [
+                'POST,OPTIONS auth/login' => 'auth/login',
                 ['class' => 'yii\rest\UrlRule', 'controller' => 'users'],
                 ['class' => 'yii\rest\UrlRule', 'controller' => 'albums'],
             ],
         ],
         'user' => [
             'identityClass' => 'app\models\db\User',
+            'enableAutoLogin' => false,
+            'enableSession' => false,
+            'loginUrl' => null,
+        ],
+        'jwt' => [
+            'class' => 'app\components\JwtService',
         ],
         'errorHandler' => [
             'class' => 'app\components\JsonErrorHandler',

@@ -26,11 +26,7 @@ class AlbumsCest extends BaseCest
      */
     public function testIndexDoesNotReturnPhotos(FunctionalTester $I): void
     {
-        $userId = $this->insertRecord('user', [
-            'first_name'    => 'John',
-            'last_name'     => 'Doe',
-            'password_hash' => '$2y$13$hashedpassword',
-        ]);
+        $userId = $this->insertUser();
 
         $albumId = $this->insertRecord('album', [
             'user_id' => $userId,
@@ -71,10 +67,10 @@ class AlbumsCest extends BaseCest
      */
     public function testViewReturnsAlbumWithPhotosAndUserFields(FunctionalTester $I): void
     {
-        $userId = $this->insertRecord('user', [
-            'first_name'    => 'Jane',
-            'last_name'     => 'Smith',
-            'password_hash' => '$2y$13$hashedpassword',
+        $userId = $this->insertUser([
+            'first_name' => 'Jane',
+            'last_name'  => 'Smith',
+            'email'      => 'jane.smith@example.com',
         ]);
 
         $albumId = $this->insertRecord('album', [
@@ -123,11 +119,7 @@ class AlbumsCest extends BaseCest
      */
     public function testCreateReturnsCreatedAlbum(FunctionalTester $I): void
     {
-        $userId = $this->insertRecord('user', [
-            'first_name'    => 'John',
-            'last_name'     => 'Doe',
-            'password_hash' => '$2y$13$hashedpassword',
-        ]);
+        $userId = $this->insertUser();
 
         $I->sendPost('/albums', [
             'user_id' => $userId,
@@ -161,11 +153,7 @@ class AlbumsCest extends BaseCest
      */
     public function testCreateFailsWithMissingTitle(FunctionalTester $I): void
     {
-        $userId = $this->insertRecord('user', [
-            'first_name'    => 'John',
-            'last_name'     => 'Doe',
-            'password_hash' => '$2y$13$hashedpassword',
-        ]);
+        $userId = $this->insertUser();
 
         $I->sendPost('/albums', [
             'user_id' => $userId,
@@ -197,11 +185,7 @@ class AlbumsCest extends BaseCest
      */
     public function testUpdateWithPartialDataUpdatesOnlySentFields(FunctionalTester $I): void
     {
-        $userId = $this->insertRecord('user', [
-            'first_name'    => 'John',
-            'last_name'     => 'Doe',
-            'password_hash' => '$2y$13$hashedpassword',
-        ]);
+        $userId = $this->insertUser();
 
         $albumId = $this->insertRecord('album', [
             'user_id' => $userId,
@@ -229,11 +213,7 @@ class AlbumsCest extends BaseCest
      */
     public function testUpdateFailsWithTooLongTitle(FunctionalTester $I): void
     {
-        $userId = $this->insertRecord('user', [
-            'first_name'    => 'John',
-            'last_name'     => 'Doe',
-            'password_hash' => '$2y$13$hashedpassword',
-        ]);
+        $userId = $this->insertUser();
 
         $albumId = $this->insertRecord('album', [
             'user_id' => $userId,
@@ -257,11 +237,7 @@ class AlbumsCest extends BaseCest
      */
     public function testDeleteReturnsNoContent(FunctionalTester $I): void
     {
-        $userId = $this->insertRecord('user', [
-            'first_name'    => 'John',
-            'last_name'     => 'Doe',
-            'password_hash' => '$2y$13$hashedpassword',
-        ]);
+        $userId = $this->insertUser();
 
         $albumId = $this->insertRecord('album', [
             'user_id' => $userId,

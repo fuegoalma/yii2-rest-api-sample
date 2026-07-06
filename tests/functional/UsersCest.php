@@ -26,27 +26,24 @@ class UsersCest extends BaseCest
      */
     public function testIndexReturnsOnlyExpectedFields(FunctionalTester $I): void
     {
-        $this->insertRecord('user', [
-            'first_name'    => 'John',
-            'last_name'     => 'Doe',
-            'password_hash' => '$2y$13$hashedpassword',
-        ]);
+        $this->insertUser();
 
         $I->sendGet('/users');
         $I->seeResponseCodeIs(200);
 
+        // total counts the inserted user plus the authenticated user from _before
         $I->seeResponseContainsJson([
             'data' => [
                 'items' => [
-                    ['first_name' => 'John', 'last_name' => 'Doe'],
+                    ['first_name' => 'John', 'last_name' => 'Doe', 'email' => 'john.doe@example.com'],
                 ],
                 'pagination' => [
-                    'total'        => 1,
+                    'total'        => 2,
                     'per_page'     => 20,
                     'current_page' => 1,
                     'last_page'    => 1,
                     'from'         => 1,
-                    'to'           => 1,
+                    'to'           => 2,
                 ],
             ],
         ]);
@@ -58,11 +55,7 @@ class UsersCest extends BaseCest
      */
     public function testIndexOutOfRangePageReturnsEmptyItems(FunctionalTester $I): void
     {
-        $this->insertRecord('user', [
-            'first_name'    => 'John',
-            'last_name'     => 'Doe',
-            'password_hash' => '$2y$13$hashedpassword',
-        ]);
+        $this->insertUser();
 
         // Only one page of data exists; requesting page 99 must not clamp to page 1.
         $I->sendGet('/users?page=99');
@@ -71,7 +64,7 @@ class UsersCest extends BaseCest
             'data' => [
                 'items'      => [],
                 'pagination' => [
-                    'total'        => 1,
+                    'total'        => 2,
                     'per_page'     => 20,
                     'current_page' => 99,
                     'last_page'    => 1,
@@ -89,10 +82,10 @@ class UsersCest extends BaseCest
      */
     public function testViewReturnsUserWithAlbums(FunctionalTester $I): void
     {
-        $userId = $this->insertRecord('user', [
-            'first_name'    => 'Jane',
-            'last_name'     => 'Smith',
-            'password_hash' => '$2y$13$hashedpassword',
+        $userId = $this->insertUser([
+            'first_name' => 'Jane',
+            'last_name'  => 'Smith',
+            'email'      => 'jane.smith@example.com',
         ]);
 
         $albumId = $this->insertRecord('album', [
@@ -114,6 +107,7 @@ class UsersCest extends BaseCest
                 'id'         => $userId,
                 'first_name' => 'Jane',
                 'last_name'  => 'Smith',
+                'email'      => 'jane.smith@example.com',
                 'albums'     => [
                     ['title' => 'My Album'],
                 ],
@@ -137,6 +131,7 @@ class UsersCest extends BaseCest
         $I->sendPost('/users', [
             'first_name' => 'New',
             'last_name'  => 'User',
+            'email'      => 'new.user@example.com',
             'password'   => 'secret123',
         ]);
 
@@ -146,6 +141,7 @@ class UsersCest extends BaseCest
             'data'    => [
                 'first_name' => 'New',
                 'last_name'  => 'User',
+                'email'      => 'new.user@example.com',
             ],
         ]);
     }
@@ -155,6 +151,7 @@ class UsersCest extends BaseCest
         $I->sendPost('/users', [
             'first_name' => 'Hash',
             'last_name'  => 'Check',
+            'email'      => 'hash.check@example.com',
             'password'   => 'secret123',
         ]);
 
@@ -184,6 +181,7 @@ class UsersCest extends BaseCest
         $I->sendPost('/users', [
             'first_name'    => 'New',
             'last_name'     => 'User',
+            'email'         => 'new.user@example.com',
             'password_hash' => '$2y$13$hashedpassword',
         ]);
 
@@ -198,6 +196,7 @@ class UsersCest extends BaseCest
         $I->sendPost('/users', [
             'first_name' => 'New',
             'last_name'  => 'User',
+            'email'      => 'new.user@example.com',
             'password'   => '123',
         ]);
 
@@ -207,11 +206,46 @@ class UsersCest extends BaseCest
         ]);
     }
 
+    public function testCreateFailsWithInvalidEmail(FunctionalTester $I): void
+    {
+        $I->sendPost('/users', [
+            'first_name' => 'New',
+            'last_name'  => 'User',
+            'email'      => 'not-an-email',
+            'password'   => 'secret123',
+        ]);
+
+        $I->seeResponseCodeIs(422);
+        $I->seeResponseContainsJson([
+            'success' => false,
+        ]);
+    }
+
+    public function testCreateFailsWithDuplicateEmail(FunctionalTester $I): void
+    {
+        // the authenticated user from _before already owns this email
+        $I->sendPost('/users', [
+            'first_name' => 'New',
+            'last_name'  => 'User',
+            'email'      => self::AUTH_USER_EMAIL,
+            'password'   => 'secret123',
+        ]);
+
+        $I->seeResponseCodeIs(422);
+        $I->seeResponseContainsJson([
+            'success' => false,
+        ]);
+        $I->seeResponseContainsJson([
+            'data' => ['error' => ['email' => ['Email "' . self::AUTH_USER_EMAIL . '" has already been taken.']]],
+        ]);
+    }
+
     public function testCreateIgnoresServerManagedFields(FunctionalTester $I): void
     {
         $I->sendPost('/users', [
             'first_name'    => 'Sneaky',
             'last_name'     => 'User',
+            'email'         => 'sneaky.user@example.com',
             'password'      => 'secret123',
             'auth_key'      => 'client-supplied-key',
             'access_token'  => 'client-supplied-token',
@@ -237,10 +271,10 @@ class UsersCest extends BaseCest
      */
     public function testUpdateReturnsUpdatedUser(FunctionalTester $I): void
     {
-        $userId = $this->insertRecord('user', [
-            'first_name'    => 'Old',
-            'last_name'     => 'Name',
-            'password_hash' => '$2y$13$hashedpassword',
+        $userId = $this->insertUser([
+            'first_name' => 'Old',
+            'last_name'  => 'Name',
+            'email'      => 'old.name@example.com',
         ]);
 
         $I->sendPut('/users/' . $userId, [
@@ -272,11 +306,88 @@ class UsersCest extends BaseCest
     /**
      * @throws Exception
      */
+    public function testUpdateChangesEmail(FunctionalTester $I): void
+    {
+        $userId = $this->insertUser([
+            'first_name' => 'Old',
+            'last_name'  => 'Name',
+            'email'      => 'old.name@example.com',
+        ]);
+
+        $I->sendPut('/users/' . $userId, [
+            'email' => 'brand.new@example.com',
+        ]);
+
+        $I->seeResponseCodeIs(200);
+        $I->seeResponseContainsJson([
+            'success' => true,
+            'data'    => [
+                'email' => 'brand.new@example.com',
+            ],
+        ]);
+    }
+
+    /**
+     * @throws Exception
+     */
+    public function testUpdateKeepsOwnEmail(FunctionalTester $I): void
+    {
+        // sending the user's current email must not trigger the unique check
+        $userId = $this->insertUser([
+            'first_name' => 'Old',
+            'last_name'  => 'Name',
+            'email'      => 'old.name@example.com',
+        ]);
+
+        $I->sendPut('/users/' . $userId, [
+            'first_name' => 'New',
+            'email'      => 'old.name@example.com',
+        ]);
+
+        $I->seeResponseCodeIs(200);
+        $I->seeResponseContainsJson([
+            'success' => true,
+            'data'    => [
+                'first_name' => 'New',
+                'email'      => 'old.name@example.com',
+            ],
+        ]);
+    }
+
+    /**
+     * @throws Exception
+     */
+    public function testUpdateFailsWithEmailTakenByAnotherUser(FunctionalTester $I): void
+    {
+        $userId = $this->insertUser([
+            'first_name' => 'Old',
+            'last_name'  => 'Name',
+            'email'      => 'old.name@example.com',
+        ]);
+
+        // the authenticated user from _before already owns this email
+        $I->sendPut('/users/' . $userId, [
+            'email' => self::AUTH_USER_EMAIL,
+        ]);
+
+        $I->seeResponseCodeIs(422);
+        $I->seeResponseContainsJson([
+            'success' => false,
+        ]);
+
+        $row = $this->grabFromTable('user', ['id' => $userId]);
+        Assert::assertSame('old.name@example.com', $row['email']);
+    }
+
+    /**
+     * @throws Exception
+     */
     public function testUpdateWithoutPasswordKeepsPasswordHash(FunctionalTester $I): void
     {
-        $userId = $this->insertRecord('user', [
+        $userId = $this->insertUser([
             'first_name'    => 'Old',
             'last_name'     => 'Name',
+            'email'         => 'old.name@example.com',
             'password_hash' => '$2y$13$originalhash',
         ]);
 
@@ -295,9 +406,10 @@ class UsersCest extends BaseCest
      */
     public function testUpdateWithPasswordChangesPasswordHash(FunctionalTester $I): void
     {
-        $userId = $this->insertRecord('user', [
+        $userId = $this->insertUser([
             'first_name'    => 'Old',
             'last_name'     => 'Name',
+            'email'         => 'old.name@example.com',
             'password_hash' => '$2y$13$originalhash',
         ]);
 
@@ -319,9 +431,10 @@ class UsersCest extends BaseCest
      */
     public function testUpdateIgnoresClientSuppliedPasswordHash(FunctionalTester $I): void
     {
-        $userId = $this->insertRecord('user', [
+        $userId = $this->insertUser([
             'first_name'    => 'Old',
             'last_name'     => 'Name',
+            'email'         => 'old.name@example.com',
             'password_hash' => '$2y$13$originalhash',
         ]);
 
@@ -340,11 +453,10 @@ class UsersCest extends BaseCest
      */
     public function testUpdateFailsWithTooLongFirstName(FunctionalTester $I): void
     {
-        // direct DB fixture: the table only has a password_hash column
-        $userId = $this->insertRecord('user', [
-            'first_name'    => 'Old',
-            'last_name'     => 'Name',
-            'password_hash' => '$2y$13$hashedpassword',
+        $userId = $this->insertUser([
+            'first_name' => 'Old',
+            'last_name'  => 'Name',
+            'email'      => 'old.name@example.com',
         ]);
 
         $I->sendPut('/users/' . $userId, [
@@ -364,10 +476,10 @@ class UsersCest extends BaseCest
      */
     public function testDeleteReturnsNoContent(FunctionalTester $I): void
     {
-        $userId = $this->insertRecord('user', [
-            'first_name'    => 'To',
-            'last_name'     => 'Delete',
-            'password_hash' => '$2y$13$hashedpassword',
+        $userId = $this->insertUser([
+            'first_name' => 'To',
+            'last_name'  => 'Delete',
+            'email'      => 'to.delete@example.com',
         ]);
 
         $I->sendDelete('/users/' . $userId);

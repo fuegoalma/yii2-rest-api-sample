@@ -24,7 +24,12 @@ class UserRepository extends BaseRepository
      */
     public function batchInsert(array $data): void
     {
-        $this->batchInsertRows(['first_name', 'last_name', 'password_hash'], $data);
+        $this->batchInsertRows(['first_name', 'last_name', 'email', 'password_hash'], $data);
+    }
+
+    public function findByEmail(string $email): ?User
+    {
+        return User::findOne(['email' => $email]);
     }
 
     public function findByFirstNames(array $names): array

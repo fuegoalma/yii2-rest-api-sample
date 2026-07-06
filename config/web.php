@@ -29,7 +29,12 @@ $config = [
         ],
         'user' => [
             'identityClass' => 'app\models\db\User',
-            'enableAutoLogin' => true,
+            'enableAutoLogin' => false,
+            'enableSession' => false,
+            'loginUrl' => null,
+        ],
+        'jwt' => [
+            'class' => 'app\components\JwtService',
         ],
         'errorHandler' => [
             'class' => 'app\components\JsonErrorHandler',
@@ -56,6 +61,7 @@ $config = [
             'showScriptName' => false,
             'rules' => [
                 // REST API routes
+                'POST,OPTIONS auth/login' => 'auth/login',
                 ['class' => 'yii\rest\UrlRule',
                     'controller' => ['users', 'albums'],
                     'pluralize' => false,

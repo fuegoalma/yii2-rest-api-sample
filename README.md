@@ -31,7 +31,11 @@ DB_NAME=your_database
 DB_USER=root
 DB_PASSWORD=your_password
 TEST_DB_NAME=your_database_test
+JWT_SECRET=your-random-secret-at-least-32-chars
+JWT_TTL=3600
 ```
+
+`JWT_SECRET` signs the API access tokens (HS256) and must be at least 32 characters long — generate one with `openssl rand -hex 32`. `JWT_TTL` is the token lifetime in seconds.
 
 ### 3. Run setup
 
@@ -187,7 +191,46 @@ docker-compose exec web php vendor/bin/php-cs-fixer fix
 
 ---
 
+## Authentication
+
+All resource endpoints require a JWT. Obtain one via the public login endpoint:
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/auth/login` | Exchange `email` + `password` for a JWT |
+
+```bash
+curl -X POST http://localhost:8084/auth/login \
+    -H 'Content-Type: application/json' \
+    -d '{"email": "user@example.com", "password": "secret123"}'
+```
+
+**Response:**
+```json
+{
+    "success": true,
+    "data": {
+        "access_token": "eyJ0eXAiOiJKV1Qi...",
+        "token_type": "Bearer",
+        "expires_in": 3600
+    },
+    "code": 200
+}
+```
+
+Send the token with every other request:
+
+```bash
+curl http://localhost:8084/users -H 'Authorization: Bearer <access_token>'
+```
+
+Requests without a valid (unexpired, correctly signed) token get a `401` response. Invalid credentials on login also return `401`; validation errors return `422`.
+
+---
+
 ## API Endpoints
+
+All endpoints below require the `Authorization: Bearer <token>` header.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
