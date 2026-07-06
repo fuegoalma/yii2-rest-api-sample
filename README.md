@@ -198,6 +198,7 @@ docker-compose exec web php vendor/bin/php-cs-fixer fix
 | GET | `/albums` | List all albums |
 | GET | `/albums/{id}` | Get album with photos and user info |
 | POST | `/albums` | Create an album |
+| PUT | `/albums/{id}` | Update an album |
 | DELETE | `/albums/{id}` | Delete an album |
 
 ### Response Format
