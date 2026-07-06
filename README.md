@@ -137,6 +137,28 @@ docker-compose exec web php vendor/bin/codecept run unit
 
 ---
 
+## Code Style
+
+The project follows the [PSR-12](https://www.php-fig.org/psr/psr-12/) coding standard, enforced with [PHP CS Fixer](https://github.com/PHP-CS-Fixer/PHP-CS-Fixer) (configuration in `.php-cs-fixer.dist.php`).
+
+#### Check code style
+
+Shows the violations and a diff of what would be changed, without modifying any files:
+
+```bash
+docker-compose exec web php vendor/bin/php-cs-fixer fix --dry-run --diff
+```
+
+#### Fix code style
+
+Automatically reformats all project files to comply with PSR-12:
+
+```bash
+docker-compose exec web php vendor/bin/php-cs-fixer fix
+```
+
+---
+
 ## Project Structure
 
 ```
