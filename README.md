@@ -174,6 +174,7 @@ docker-compose exec web php vendor/bin/php-cs-fixer fix
 │   ├── contract/      # Interfaces (repository & service contracts)
 │   ├── db/            # ActiveRecord models
 │   ├── dto/           # Data Transfer Objects
+│   ├── form/          # Form requests (validation of incoming request data)
 │   ├── repository/    # Repository layer (database access)
 │   └── service/       # Service layer (business logic)
 ├── tests/

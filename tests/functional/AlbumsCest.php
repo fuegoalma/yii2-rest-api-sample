@@ -3,6 +3,7 @@
 namespace tests\functional;
 
 use FunctionalTester;
+use PHPUnit\Framework\Assert;
 use Yii;
 use yii\db\Exception;
 
@@ -168,6 +169,79 @@ class AlbumsCest extends BaseCest
 
         $I->sendPost('/albums', [
             'user_id' => $userId,
+        ]);
+
+        $I->seeResponseCodeIs(422);
+        $I->seeResponseContainsJson([
+            'success' => false,
+        ]);
+    }
+
+    public function testCreateFailsWithNonIntegerUserId(FunctionalTester $I): void
+    {
+        $I->sendPost('/albums', [
+            'user_id' => 'not-a-number',
+            'title'   => 'Bad Album',
+        ]);
+
+        $I->seeResponseCodeIs(422);
+        $I->seeResponseContainsJson([
+            'success' => false,
+        ]);
+    }
+
+    // ==================== UPDATE ====================
+
+    /**
+     * @throws Exception
+     */
+    public function testUpdateWithPartialDataUpdatesOnlySentFields(FunctionalTester $I): void
+    {
+        $userId = $this->insertRecord('user', [
+            'first_name'    => 'John',
+            'last_name'     => 'Doe',
+            'password_hash' => '$2y$13$hashedpassword',
+        ]);
+
+        $albumId = $this->insertRecord('album', [
+            'user_id' => $userId,
+            'title'   => 'Old Title',
+        ]);
+
+        $I->sendPut('/albums/' . $albumId, [
+            'title' => 'New Title',
+        ]);
+
+        $I->seeResponseCodeIs(200);
+        $I->seeResponseContainsJson([
+            'success' => true,
+            'data'    => [
+                'title' => 'New Title',
+            ],
+        ]);
+
+        $row = $this->grabFromTable('album', ['id' => $albumId]);
+        Assert::assertSame($userId, (int) $row['user_id']);
+    }
+
+    /**
+     * @throws Exception
+     */
+    public function testUpdateFailsWithTooLongTitle(FunctionalTester $I): void
+    {
+        $userId = $this->insertRecord('user', [
+            'first_name'    => 'John',
+            'last_name'     => 'Doe',
+            'password_hash' => '$2y$13$hashedpassword',
+        ]);
+
+        $albumId = $this->insertRecord('album', [
+            'user_id' => $userId,
+            'title'   => 'Old Title',
+        ]);
+
+        $I->sendPut('/albums/' . $albumId, [
+            'title' => str_repeat('a', 256),
         ]);
 
         $I->seeResponseCodeIs(422);

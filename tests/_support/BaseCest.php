@@ -36,6 +36,16 @@ abstract class BaseCest
             ->getLastInsertID();
     }
 
+    protected function grabFromTable(string $table, array $condition): ?array
+    {
+        $row = (new Query())
+            ->from($table)
+            ->where($condition)
+            ->one();
+
+        return $row ?: null;
+    }
+
     protected function dontSeeInTable(string $table, array $condition): void
     {
         $exists = (new Query())

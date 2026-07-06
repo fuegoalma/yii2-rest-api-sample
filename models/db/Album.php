@@ -2,7 +2,6 @@
 
 namespace app\models\db;
 
-use Yii;
 use yii\db\ActiveQuery;
 use yii\db\ActiveRecord;
 

@@ -38,17 +38,18 @@ App is served at http://localhost:8084, phpMyAdmin at http://localhost:8085, MyS
 
 ## Architecture
 
-Layered flow for every endpoint: **Controller → Service → Repository → ActiveRecord model**, with interfaces in `models/contract/` defining the service and repository shapes.
+Layered flow for every endpoint: **Controller → Form Request → Service → Repository → ActiveRecord model**, with interfaces in `models/contract/` defining the service and repository shapes.
 
 - `controllers/basic/ApiController.php` — abstract base extending `yii\rest\ActiveController`. It disables auth, sets up CORS/JSON, replaces the default REST actions with its own generic `actionIndex/View/Create/Update/Delete` implementations that delegate to `getService()`. Concrete controllers (`UsersController`, `AlbumsController`) only set `$modelClass`, inject their service via constructor promotion (resolved by Yii's DI container), and implement `getService()`. Override an action only when the response differs (e.g. `AlbumsController::actionView` returns an `AlbumViewResponse` DTO).
 - `models/service/` — `readonly` classes implementing `ApiServiceInterface`; business logic and `NotFoundHttpException` on missing records. Validation failures are returned as the model with errors; the base controller converts them to a 422.
 - `models/repository/` — implement `ApiRepositoryInterface`; all DB access (queries, `ActiveDataProvider` with pageSize 20, batch inserts for seeding).
+- `models/form/` — form requests extending `basic/ApiForm` (a `yii\base\Model`); validate raw body params in the controller before anything reaches the service. Per resource: an abstract base with type/length rules plus `*CreateForm` (adds `required`) and `*UpdateForm` (all optional — partial updates). Only `validatedData()` (attributes actually present in the request) is passed on, so clients can't set server-managed fields (`auth_key`, `access_token`, `password_hash` — clients send plain `password`, hashed in `UserService`). Concrete controllers implement `createForm()`/`updateForm()`.
 - `models/db/` — ActiveRecord models (`User`, `Album`, `Photo`).
 - `models/dto/` — readonly response DTOs with `fromModel()`/`toArray()`.
 
 **Unified response format**: every response is `{"success": bool, "data": ..., "code": int}`. This is enforced in two places — `components/ApiSerializer.php` (wraps normal REST responses, converts ≥400 statuses to the error shape) and `components/JsonErrorHandler.php` (renders uncaught exceptions in the same shape, with file/line/trace only when `YII_DEBUG`). New endpoints get this automatically; don't hand-build response envelopes.
 
-**Routing**: `yii\rest\UrlRule` in `config/web.php` with `pluralize => false` for `users` and `albums`. Adding a resource means: migration, AR model, repository + service (with contracts), controller extending `ApiController`, and adding the controller to the `urlManager` rule.
+**Routing**: `yii\rest\UrlRule` in `config/web.php` with `pluralize => false` for `users` and `albums`. Adding a resource means: migration, AR model, repository + service (with contracts), create/update form requests, controller extending `ApiController`, and adding the controller to the `urlManager` rule.
 
 **Console commands** live in `commands/` (namespace `app\commands`), extend `basic/BasicConsoleController` (prints elapsed execution time after each action), and use the same constructor DI pattern as web controllers. `config/console.php` maps `migrate`, `migrate-test` (same `migrations/` path, different DB component), and `migration-creator`.
 

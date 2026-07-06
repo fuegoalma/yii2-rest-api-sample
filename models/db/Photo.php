@@ -27,7 +27,7 @@ class Photo extends ActiveRecord
     public function rules(): array
     {
         return [
-            [['album_id', 'title', 'url'], 'required'],
+            [['album_id', 'title', 'file_name'], 'required'],
             [['album_id'], 'integer'],
             [['title', 'file_name'], 'string', 'max' => 255],
             [

@@ -78,9 +78,9 @@ class UserServiceTest extends Unit
             ->willReturn(true);
 
         $result = $this->service->create([
-            'first_name'    => 'New',
-            'last_name'     => 'User',
-            'password_hash' => '$2y$13$hashedpassword',
+            'first_name' => 'New',
+            'last_name'  => 'User',
+            'password'   => 'secret123',
         ]);
 
         $this->assertEquals('New', $result->first_name);
@@ -97,12 +97,75 @@ class UserServiceTest extends Unit
             ->method('save');
 
         $result = $this->service->create([
-            'last_name'     => 'User',
-            'password_hash' => '$2y$13$hashedpassword',
+            'last_name' => 'User',
+            'password'  => 'secret123',
         ]);
 
         $this->assertTrue($result->hasErrors());
         $this->assertArrayHasKey('first_name', $result->getErrors());
+    }
+
+    /**
+     * @throws \yii\db\Exception
+     */
+    public function testCreateHashesPlainPassword(): void
+    {
+        $this->repositoryMock
+            ->expects($this->once())
+            ->method('save')
+            ->willReturn(true);
+
+        /** @var User $result */
+        $result = $this->service->create([
+            'first_name' => 'New',
+            'last_name'  => 'User',
+            'password'   => 'secret123',
+        ]);
+
+        $this->assertFalse($result->hasErrors());
+        $this->assertNotSame('secret123', $result->password_hash);
+        $this->assertTrue($result->validatePassword('secret123'));
+    }
+
+    /**
+     * @throws \yii\db\Exception
+     */
+    public function testCreateIgnoresClientSuppliedPasswordHash(): void
+    {
+        $this->repositoryMock
+            ->expects($this->once())
+            ->method('save')
+            ->willReturn(true);
+
+        /** @var User $result */
+        $result = $this->service->create([
+            'first_name'    => 'New',
+            'last_name'     => 'User',
+            'password'      => 'secret123',
+            'password_hash' => '$2y$13$client-supplied-hash',
+        ]);
+
+        $this->assertNotSame('$2y$13$client-supplied-hash', $result->password_hash);
+        $this->assertTrue($result->validatePassword('secret123'));
+    }
+
+    /**
+     * @throws \yii\db\Exception
+     */
+    public function testCreateWithoutPasswordFailsValidation(): void
+    {
+        $this->repositoryMock
+            ->expects($this->never())
+            ->method('save');
+
+        $result = $this->service->create([
+            'first_name'    => 'New',
+            'last_name'     => 'User',
+            'password_hash' => '$2y$13$client-supplied-hash',
+        ]);
+
+        $this->assertTrue($result->hasErrors());
+        $this->assertArrayHasKey('password_hash', $result->getErrors());
     }
 
     // ==================== delete ====================

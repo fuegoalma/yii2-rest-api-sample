@@ -47,15 +47,7 @@ abstract readonly class BaseCrudService implements ApiServiceInterface
     public function create(array $data): ActiveRecord
     {
         $modelClass = $this->modelClass();
-        $model = new $modelClass();
-        $model->load($data, '');
-
-        if (!$model->validate()) {
-            return $model;
-        }
-
-        $this->repository->save($model);
-        return $model;
+        return $this->saveValidated(new $modelClass(), $data);
     }
 
     /**
@@ -64,9 +56,23 @@ abstract readonly class BaseCrudService implements ApiServiceInterface
      */
     public function update(int $id, array $data): ActiveRecord
     {
-        $model = $this->findOrFail($id);
+        return $this->saveValidated($this->findOrFail($id), $data);
+    }
+
+    /**
+     * Loads data into the model and saves it only when valid;
+     * an invalid model is returned with its errors and never persisted.
+     *
+     * @throws Exception
+     */
+    protected function saveValidated(ActiveRecord $model, array $data): ActiveRecord
+    {
         $model->load($data, '');
-        $this->repository->save($model);
+
+        if ($model->validate()) {
+            $this->repository->save($model);
+        }
+
         return $model;
     }
 
