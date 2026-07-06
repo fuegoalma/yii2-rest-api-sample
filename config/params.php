@@ -8,6 +8,7 @@ return [
     'senderEmail' => 'noreply@example.com',
     'senderName' => 'Example.com mailer',
     'base_url' => $baseUrl,
-    'photo_base_url' => $baseUrl . '/default-images',
+    // filesystem base for uploaded photos; each album gets its own subdirectory
+    'photo_upload_path' => '@webroot/uploads/albums',
     'default_password' => getenv('DEFAULT_PASSWORD') ?: ''
 ];

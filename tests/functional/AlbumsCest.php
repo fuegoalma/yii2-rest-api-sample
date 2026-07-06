@@ -2,9 +2,9 @@
 
 namespace tests\functional;
 
+use app\components\PhotoUrlBuilder;
 use FunctionalTester;
 use PHPUnit\Framework\Assert;
-use Yii;
 use yii\db\Exception;
 
 class AlbumsCest extends BaseCest
@@ -79,9 +79,10 @@ class AlbumsCest extends BaseCest
         ]);
 
         $this->insertRecord('photo', [
-            'album_id' => $albumId,
+            'album_id'  => $albumId,
             'title'     => 'First Photo',
             'file_name' => 'image1.jpg',
+            'source'    => 'seed',
         ]);
 
         $I->sendGet('/albums/' . $albumId);
@@ -96,7 +97,7 @@ class AlbumsCest extends BaseCest
                 'photos'     => [
                     [
                         'title' => 'First Photo',
-                        'url'   => Yii::$app->params['photo_base_url'] . '/image1.jpg',
+                        'url'   => PhotoUrlBuilder::build('image1.jpg', 'seed'),
                     ],
                 ],
             ],

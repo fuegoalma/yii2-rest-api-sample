@@ -244,6 +244,20 @@ All endpoints below require the `Authorization: Bearer <token>` header.
 | POST | `/albums` | Create an album |
 | PUT | `/albums/{id}` | Update an album |
 | DELETE | `/albums/{id}` | Delete an album |
+| GET | `/albums/{albumId}/photos` | List the photos of an album |
+| POST | `/albums/{albumId}/photos` | Upload a photo to an album (`multipart/form-data`) |
+| GET | `/photos/{id}` | Get a single photo |
+| PUT | `/photos/{id}` | Update a photo (title only) |
+| DELETE | `/photos/{id}` | Delete a photo (removes its file) |
+
+Photos are always scoped to an album — there is no flat `GET /photos` listing. Uploads take `title` + `file` as `multipart/form-data`; the image (`jpg, jpeg, png, webp, gif, avif`) is converted to WebP (quality 80), resized to fit 500×500 preserving aspect ratio, and stored under `web/uploads/albums/{albumId}/`.
+
+```bash
+curl -X POST http://localhost:8084/albums/1/photos \
+  -H "Authorization: Bearer <token>" \
+  -F "title=My Photo" \
+  -F "file=@/path/to/image.jpg"
+```
 
 ### Response Format
 

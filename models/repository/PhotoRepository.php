@@ -23,6 +23,6 @@ class PhotoRepository extends BaseRepository
      */
     public function batchInsert(array $data): void
     {
-        $this->batchInsertRows(['album_id', 'title', 'file_name'], $data);
+        $this->batchInsertRows(['album_id', 'title', 'file_name', 'source'], $data);
     }
 }

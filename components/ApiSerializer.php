@@ -15,7 +15,7 @@ class ApiSerializer extends Serializer
         $status_code = Yii::$app->response->statusCode;
 
         if ($status_code >= 400) {
-            return BasicResponse::error('An error occurred during execution', $data, $status_code)->toArray();
+            return BasicResponse::error('An error occurred during execution', (array) $data, $status_code)->toArray();
         }
 
         if ($data instanceof DataProviderInterface) {

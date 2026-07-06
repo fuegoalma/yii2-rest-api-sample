@@ -23,7 +23,7 @@ echo "📦 Installing composer dependencies..."
 docker-compose exec web composer install
 
 echo "🔐 Setting permissions..."
-docker-compose exec web chmod -R 777 runtime web/assets
+docker-compose exec web chmod -R 777 runtime web/assets web/uploads
 
 echo "🗄️  Setting up databases..."
 

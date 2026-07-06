@@ -2,6 +2,7 @@
 
 namespace app\models\service;
 
+use app\models\db\Photo;
 use app\models\db\User;
 use app\models\repository\AlbumRepository;
 use app\models\repository\PhotoRepository;
@@ -104,6 +105,7 @@ readonly class SeederService
                     $albumId,
                     'photo_' . Yii::$app->security->generateRandomString(),
                     rand(1, 10) . '.jpg',
+                    Photo::SOURCE_SEED,
                 ];
             }
         }

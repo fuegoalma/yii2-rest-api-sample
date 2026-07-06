@@ -3,13 +3,17 @@
 $params = require __DIR__ . '/params.php';
 $db = require __DIR__ . '/test_db.php';
 
+// keep uploaded test images out of the web root
+$container = require __DIR__ . '/di.php';
+$container['definitions'][\app\components\ImageProcessor::class]['uploadPath'] = '@runtime/uploads/albums';
+
 /**
  * Application configuration shared by all test types
  */
 return [
     'id' => 'basic-tests',
     'basePath' => dirname(__DIR__),
-    'container' => require __DIR__ . '/di.php',
+    'container' => $container,
     'aliases' => [
         '@bower' => '@vendor/bower-asset',
         '@npm'   => '@vendor/npm-asset',
@@ -33,8 +37,12 @@ return [
             'enableStrictParsing' => true,
             'rules' => [
                 'POST,OPTIONS auth/login' => 'auth/login',
+                'GET albums/<albumId:\d+>/photos' => 'photos/index',
+                'POST albums/<albumId:\d+>/photos' => 'photos/create',
+                'OPTIONS albums/<albumId:\d+>/photos' => 'photos/options',
                 ['class' => 'yii\rest\UrlRule', 'controller' => 'users'],
                 ['class' => 'yii\rest\UrlRule', 'controller' => 'albums'],
+                ['class' => 'yii\rest\UrlRule', 'controller' => 'photos', 'except' => ['index', 'create']],
             ],
         ],
         'user' => [

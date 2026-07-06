@@ -2,7 +2,7 @@
 
 namespace app\models\db;
 
-use Yii;
+use app\components\PhotoUrlBuilder;
 use yii\db\ActiveQuery;
 use yii\db\ActiveRecord;
 
@@ -13,12 +13,18 @@ use yii\db\ActiveRecord;
  * @property int $album_id
  * @property string $title
  * @property string $file_name
+ * @property string $source
  *
  * @property string|null $url
  * @property Album $album
  */
 class Photo extends ActiveRecord
 {
+    /** demo images bundled with the app, served from `default-images` */
+    public const string SOURCE_SEED = 'seed';
+    /** user-uploaded images, served from `uploads/albums/<album_id>` */
+    public const string SOURCE_PHOTO = 'photo';
+
     public static function tableName(): string
     {
         return 'photo';
@@ -27,9 +33,10 @@ class Photo extends ActiveRecord
     public function rules(): array
     {
         return [
-            [['album_id', 'title', 'file_name'], 'required'],
+            [['album_id', 'title', 'file_name', 'source'], 'required'],
             [['album_id'], 'integer'],
             [['title', 'file_name'], 'string', 'max' => 255],
+            [['source'], 'in', 'range' => [self::SOURCE_SEED, self::SOURCE_PHOTO]],
             [
                 ['album_id'],
                 'exist',
@@ -47,6 +54,7 @@ class Photo extends ActiveRecord
             'album_id' => 'Album ID',
             'title' => 'Title',
             'file_name' => 'File Name',
+            'source' => 'Source',
             'url' => 'Url',
         ];
     }
@@ -62,15 +70,7 @@ class Photo extends ActiveRecord
 
     public function getUrl(): ?string
     {
-        if (empty($this->file_name)) {
-            return null;
-        }
-        return Yii::$app->params['photo_base_url'] . '/' . $this->file_name;
-    }
-
-    public function setUrl(string $path): void
-    {
-        $this->file_name = basename($path);
+        return PhotoUrlBuilder::build((string) $this->file_name, (string) $this->source, $this->album_id);
     }
 
     public function getAlbum(): ActiveQuery

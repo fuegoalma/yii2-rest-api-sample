@@ -62,9 +62,19 @@ $config = [
             'rules' => [
                 // REST API routes
                 'POST,OPTIONS auth/login' => 'auth/login',
+                // photos are nested under their album for listing and creation
+                'GET albums/<albumId:\d+>/photos' => 'photos/index',
+                'POST albums/<albumId:\d+>/photos' => 'photos/create',
+                'OPTIONS albums/<albumId:\d+>/photos' => 'photos/options',
                 ['class' => 'yii\rest\UrlRule',
                     'controller' => ['users', 'albums'],
                     'pluralize' => false,
+                ],
+                // photos/<id> for view/update/delete only — no flat collection
+                ['class' => 'yii\rest\UrlRule',
+                    'controller' => ['photos'],
+                    'pluralize' => false,
+                    'except' => ['index', 'create'],
                 ],
             ],
         ],
