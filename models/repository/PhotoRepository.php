@@ -2,55 +2,20 @@
 
 namespace app\models\repository;
 
-use app\models\contract\repository\ApiRepositoryInterface;
 use app\models\db\Photo;
-use yii\data\ActiveDataProvider;
-use yii\db\ActiveRecord;
+use app\models\repository\basic\BaseRepository;
 use yii\db\Exception;
-use yii\db\StaleObjectException;
-use Yii;
 
-class PhotoRepository implements ApiRepositoryInterface
+class PhotoRepository extends BaseRepository
 {
-    public function getAllDP(array $params = []): ActiveDataProvider
+    protected function modelClass(): string
     {
-        $query = Photo::find();
-        if (!empty($params)) {
-            $query->andWhere($params);
-        }
-        return new ActiveDataProvider([
-            'query' => $query,
-            'pagination' => [
-                'pageSize' => 20,
-            ],
-        ]);
+        return Photo::class;
     }
 
-    public function findById(int $id): ?ActiveRecord
+    protected function viewRelations(): array
     {
-        return Photo::find()
-            ->with(['photos', 'user'])
-            ->where(['photo.id' => $id])
-            ->one();
-    }
-
-    /**
-     * @param Photo $model
-     * @throws Exception
-     */
-    public function save(mixed $model): bool
-    {
-        return $model->save();
-    }
-
-    /**
-     * @param Photo $model
-     * @throws StaleObjectException
-     * @throws \Throwable
-     */
-    public function delete(mixed $model): bool
-    {
-        return (bool) $model->delete();
+        return ['album'];
     }
 
     /**
@@ -58,12 +23,6 @@ class PhotoRepository implements ApiRepositoryInterface
      */
     public function batchInsert(array $data): void
     {
-        Yii::$app->db
-            ->createCommand()
-            ->batchInsert(
-                Photo::tableName(),
-                ['album_id', 'title', 'file_name'],
-                $data
-            )->execute();
+        $this->batchInsertRows(['album_id', 'title', 'file_name'], $data);
     }
 }

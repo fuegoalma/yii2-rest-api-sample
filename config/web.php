@@ -7,6 +7,7 @@ $config = [
     'id' => 'basic',
     'basePath' => dirname(__DIR__),
     'bootstrap' => ['log'],
+    'container' => require __DIR__ . '/di.php',
     'aliases' => [
         '@bower' => '@vendor/bower-asset',
         '@npm'   => '@vendor/npm-asset',
@@ -14,7 +15,7 @@ $config = [
     'components' => [
         'request' => [
             // !!! insert a secret key in the following (if it is empty) - this is required by cookie validation
-            'cookieValidationKey' => 's9pN1DDqFaqIciv0IkCcrwboi3C0dHmb',
+            'cookieValidationKey' => getenv('COOKIE_VALIDATION_KEY') ?: '',
             'parsers' => [
                 'application/json' => 'yii\web\JsonParser',
             ],

@@ -16,6 +16,15 @@ abstract class ApiController extends ActiveController
         'class' => ApiSerializer::class,
     ];
 
+    public function __construct(
+        $id,
+        $module,
+        protected readonly ApiServiceInterface $service,
+        $config = []
+    ) {
+        parent::__construct($id, $module, $config);
+    }
+
     public function behaviors(): array
     {
         $behaviors = parent::behaviors();
@@ -55,22 +64,20 @@ abstract class ApiController extends ActiveController
         return $actions;
     }
 
-    abstract protected function getService(): ApiServiceInterface;
-
     public function actionIndex(): ActiveDataProvider
     {
-        return $this->getService()->getAll();
+        return $this->service->getAll();
     }
 
     public function actionView(int $id): array
     {
-        $model = $this->getService()->findOrFail($id);
+        $model = $this->service->findOrFail($id);
         return $model->toArray([], $model->extraFields());
     }
 
     public function actionCreate(): mixed
     {
-        $model = $this->getService()->create(Yii::$app->request->bodyParams);
+        $model = $this->service->create(Yii::$app->request->bodyParams);
 
         if ($model->hasErrors()) {
             Yii::$app->response->statusCode = 422;
@@ -83,7 +90,7 @@ abstract class ApiController extends ActiveController
 
     public function actionUpdate(int $id): mixed
     {
-        $model = $this->getService()->update($id, Yii::$app->request->bodyParams);
+        $model = $this->service->update($id, Yii::$app->request->bodyParams);
 
         if ($model->hasErrors()) {
             Yii::$app->response->statusCode = 422;
@@ -95,7 +102,7 @@ abstract class ApiController extends ActiveController
 
     public function actionDelete(int $id): void
     {
-        $this->getService()->delete($id);
+        $this->service->delete($id);
         Yii::$app->response->statusCode = 204;
     }
 }

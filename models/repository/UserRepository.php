@@ -2,55 +2,21 @@
 
 namespace app\models\repository;
 
-use app\models\contract\repository\ApiRepositoryInterface;
 use app\models\db\User;
-use yii\data\ActiveDataProvider;
-use yii\db\ActiveRecord;
+use app\models\repository\basic\BaseRepository;
 use yii\db\Exception;
-use yii\db\StaleObjectException;
 use Yii;
 
-class UserRepository implements ApiRepositoryInterface
+class UserRepository extends BaseRepository
 {
-    public function getAllDP(array $params = []): ActiveDataProvider
+    protected function modelClass(): string
     {
-        $query = User::find();
-        if (!empty($params)) {
-            $query->andWhere($params);
-        }
-        return new ActiveDataProvider([
-            'query' => $query,
-            'pagination' => [
-                'pageSize' => 20,
-            ],
-        ]);
+        return User::class;
     }
 
-    public function findById(int $id): ?ActiveRecord
+    protected function viewRelations(): array
     {
-        return User::find()
-            ->with('albums')
-            ->where(['user.id' => $id])
-            ->one();
-    }
-
-    /**
-     * @param User $model
-     * @throws Exception
-     */
-    public function save(mixed $model): bool
-    {
-        return $model->save();
-    }
-
-    /**
-     * @param User $model
-     * @throws StaleObjectException
-     * @throws \Throwable
-     */
-    public function delete(mixed $model): bool
-    {
-        return (bool) $model->delete();
+        return ['albums'];
     }
 
     /**
@@ -58,13 +24,7 @@ class UserRepository implements ApiRepositoryInterface
      */
     public function batchInsert(array $data): void
     {
-        Yii::$app->db
-            ->createCommand()
-            ->batchInsert(
-                User::tableName(),
-                ['first_name', 'last_name', 'password_hash'],
-                $data
-            )->execute();
+        $this->batchInsertRows(['first_name', 'last_name', 'password_hash'], $data);
     }
 
     public function findByFirstNames(array $names): array

@@ -26,7 +26,8 @@ class JsonErrorHandler extends ErrorHandler
             ];
         }
 
-        Yii::$app->response->data = BasicResponse::error($exception->getMessage(), $error_info, $statusCode);
+        Yii::$app->response->statusCode = $statusCode;
+        Yii::$app->response->data = BasicResponse::error($exception->getMessage(), $error_info, $statusCode)->toArray();
         Yii::$app->response->send();
     }
 }

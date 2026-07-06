@@ -2,8 +2,6 @@
 
 namespace app\models\dto;
 
-use Yii;
-
 readonly class BasicResponse
 {
     public bool $success;
@@ -24,7 +22,6 @@ readonly class BasicResponse
 
     public static function error(string $message, array $error = [], int $code = 422): self
     {
-        Yii::$app->response->statusCode = $code;
         return new self(false, [
             'message' => $message,
             'error' => $error,
