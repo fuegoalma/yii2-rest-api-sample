@@ -45,6 +45,21 @@ class AlbumsCest extends BaseCest
         $I->sendGet('/albums');
         $I->seeResponseCodeIs(200);
 
+        $I->seeResponseContainsJson([
+            'data' => [
+                'items' => [
+                    ['id' => $albumId, 'title' => 'Test Album'],
+                ],
+                'pagination' => [
+                    'total'        => 1,
+                    'per_page'     => 20,
+                    'current_page' => 1,
+                    'last_page'    => 1,
+                    'from'         => 1,
+                    'to'           => 1,
+                ],
+            ],
+        ]);
         $I->dontSeeResponseContainsJson(['photos' => []]);
     }
 
