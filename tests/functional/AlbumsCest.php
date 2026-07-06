@@ -3,6 +3,7 @@
 namespace tests\functional;
 
 use FunctionalTester;
+use Yii;
 use yii\db\Exception;
 
 class AlbumsCest extends BaseCest
@@ -37,8 +38,8 @@ class AlbumsCest extends BaseCest
 
         $this->insertRecord('photo', [
             'album_id' => $albumId,
-            'title'    => 'Test Photo',
-            'url'      => 'http://localhost/image.jpg',
+            'title'     => 'Test Photo',
+            'file_name' => 'image.jpg',
         ]);
 
         $I->sendGet('/albums');
@@ -67,8 +68,8 @@ class AlbumsCest extends BaseCest
 
         $this->insertRecord('photo', [
             'album_id' => $albumId,
-            'title'    => 'First Photo',
-            'url'      => 'http://localhost/image1.jpg',
+            'title'     => 'First Photo',
+            'file_name' => 'image1.jpg',
         ]);
 
         $I->sendGet('/albums/' . $albumId);
@@ -83,7 +84,7 @@ class AlbumsCest extends BaseCest
                 'photos'     => [
                     [
                         'title' => 'First Photo',
-                        'url'   => 'http://localhost/image1.jpg',
+                        'url'   => Yii::$app->params['photo_base_url'] . '/image1.jpg',
                     ],
                 ],
             ],

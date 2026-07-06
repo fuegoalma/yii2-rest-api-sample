@@ -61,8 +61,8 @@ class UsersCest extends BaseCest
 
         $this->insertRecord('photo', [
             'album_id' => $albumId,
-            'title'    => 'My Photo',
-            'url'      => 'http://localhost/image.jpg',
+            'title'     => 'My Photo',
+            'file_name' => 'image.jpg',
         ]);
 
         $I->sendGet('/users/' . $userId);

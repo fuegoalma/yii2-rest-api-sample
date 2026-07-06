@@ -12,8 +12,9 @@ use yii\db\ActiveRecord;
  * @property int $id
  * @property int $album_id
  * @property string $title
- * @property string $url
+ * @property string $file_name
  *
+ * @property string|null $url
  * @property Album $album
  */
 class Photo extends ActiveRecord
@@ -28,7 +29,7 @@ class Photo extends ActiveRecord
         return [
             [['album_id', 'title', 'url'], 'required'],
             [['album_id'], 'integer'],
-            [['title', 'url'], 'string', 'max' => 255],
+            [['title', 'file_name'], 'string', 'max' => 255],
             [
                 ['album_id'],
                 'exist',
@@ -45,6 +46,7 @@ class Photo extends ActiveRecord
             'id' => 'ID',
             'album_id' => 'Album ID',
             'title' => 'Title',
+            'file_name' => 'File Name',
             'url' => 'Url',
         ];
     }
@@ -56,6 +58,19 @@ class Photo extends ActiveRecord
             'title',
             'url'
         ];
+    }
+
+    public function getUrl(): ?string
+    {
+        if (empty($this->file_name)) {
+            return null;
+        }
+        return Yii::$app->params['photo_base_url'] . '/' . $this->file_name;
+    }
+
+    public function setUrl(string $path): void
+    {
+        $this->file_name = basename($path);
     }
 
     public function getAlbum(): ActiveQuery

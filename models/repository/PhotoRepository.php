@@ -61,7 +61,7 @@ class PhotoRepository implements ApiRepositoryInterface
             ->createCommand()
             ->batchInsert(
                 Photo::tableName(),
-                ['album_id', 'title', 'url'],
+                ['album_id', 'title', 'file_name'],
                 $data
             )->execute();
     }

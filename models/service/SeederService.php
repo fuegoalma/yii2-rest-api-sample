@@ -9,7 +9,6 @@ use app\models\repository\UserRepository;
 use yii\db\Exception;
 use Yii;
 use yii\helpers\ArrayHelper;
-use yii\helpers\Url;
 
 readonly class SeederService
 {
@@ -98,7 +97,7 @@ readonly class SeederService
                 $data[] = [
                     $albumId,
                     'photo_' . Yii::$app->security->generateRandomString(),
-                    Url::to('/default-images/' . rand(1, 10) . '.jpg', true),
+                    rand(1, 10) . '.jpg',
                 ];
             }
         }
