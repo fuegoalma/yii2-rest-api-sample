@@ -222,3 +222,27 @@ All endpoints return a unified JSON response:
     "code": 404
 }
 ```
+
+**Paginated list** (`GET /users`, `GET /albums`) — items are wrapped alongside a `pagination` block:
+```json
+{
+    "success": true,
+    "data": {
+        "items": [
+            { "id": 1, "title": "..." },
+            { "id": 2, "title": "..." }
+        ],
+        "pagination": {
+            "total": 100,
+            "per_page": 20,
+            "current_page": 1,
+            "last_page": 5,
+            "from": 1,
+            "to": 20
+        }
+    },
+    "code": 200
+}
+```
+
+Use the `?page=N` query parameter to navigate pages.

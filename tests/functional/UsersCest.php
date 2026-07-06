@@ -35,10 +35,49 @@ class UsersCest extends BaseCest
 
         $I->seeResponseContainsJson([
             'data' => [
-                ['first_name' => 'John', 'last_name' => 'Doe'],
+                'items' => [
+                    ['first_name' => 'John', 'last_name' => 'Doe'],
+                ],
+                'pagination' => [
+                    'total'        => 1,
+                    'per_page'     => 20,
+                    'current_page' => 1,
+                    'last_page'    => 1,
+                    'from'         => 1,
+                    'to'           => 1,
+                ],
             ],
         ]);
         $I->dontSeeResponseContainsJson(['password_hash' => '$2y$13$hashedpassword']);
+    }
+
+    /**
+     * @throws Exception
+     */
+    public function testIndexOutOfRangePageReturnsEmptyItems(FunctionalTester $I): void
+    {
+        $this->insertRecord('user', [
+            'first_name'    => 'John',
+            'last_name'     => 'Doe',
+            'password_hash' => '$2y$13$hashedpassword',
+        ]);
+
+        // Only one page of data exists; requesting page 99 must not clamp to page 1.
+        $I->sendGet('/users?page=99');
+        $I->seeResponseCodeIs(200);
+        $I->seeResponseContainsJson([
+            'data' => [
+                'items'      => [],
+                'pagination' => [
+                    'total'        => 1,
+                    'per_page'     => 20,
+                    'current_page' => 99,
+                    'last_page'    => 1,
+                    'from'         => 0,
+                    'to'           => 0,
+                ],
+            ],
+        ]);
     }
 
     // ==================== VIEW ====================

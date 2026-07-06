@@ -35,6 +35,9 @@ abstract class BaseRepository implements ApiRepositoryInterface
             'query' => $query,
             'pagination' => [
                 'pageSize' => static::PAGE_SIZE,
+                // Don't clamp an out-of-range page back to the last page —
+                // return an empty result set instead (proper REST behavior).
+                'validatePage' => false,
             ],
         ]);
     }
