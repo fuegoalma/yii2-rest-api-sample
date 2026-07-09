@@ -6,7 +6,7 @@ WEB := $(DC) exec -T web
         migration-create migration-update \
         seed seed-clear \
         test test-unit test-functional test-one build \
-        cs-check cs-fix
+        cs-check cs-fix stan
 
 help:
 	@echo "Available targets:"
@@ -29,6 +29,7 @@ help:
 	@echo "  build                Rebuild Codeception support classes (after changing modules)"
 	@echo "  cs-check             Show PSR-12 code style violations (dry-run)"
 	@echo "  cs-fix               Auto-fix PSR-12 code style violations"
+	@echo "  stan                 Run PHPStan static analysis"
 
 init:
 	./init.sh
@@ -91,3 +92,6 @@ cs-check:
 
 cs-fix:
 	$(WEB) php vendor/bin/php-cs-fixer fix
+
+stan:
+	$(WEB) php vendor/bin/phpstan analyse --no-progress --memory-limit=512M

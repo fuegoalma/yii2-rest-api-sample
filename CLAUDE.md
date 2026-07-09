@@ -41,6 +41,9 @@ make build                # after changing Codeception modules
 # Code style (PSR-12, PHP CS Fixer)
 make cs-check             # dry-run, shows violations/diff
 make cs-fix               # auto-fix
+
+# Static analysis (PHPStan, level 5, config in phpstan.neon.dist)
+make stan
 ```
 
 The `Makefile` wraps `docker-compose exec -T web ...` (see `make sh` for an interactive shell into the container, which keeps a TTY). Adding a new recurring command should get a `Makefile` target rather than being typed out in full each time.
@@ -79,3 +82,9 @@ Layered flow for every endpoint: **Controller → Form Request → Service → R
 - Unit tests (`tests/unit/`) test services in isolation with PHPUnit mocks of the repositories (and of `ImageProcessor` for `PhotoService`) — no DB (except rules that query during `validate()`, e.g. `User`'s `unique` email and `Photo`'s `album_id` `exist`).
 - `PhotosCest` uploads with `$I->sendPost($url, ['title' => ...], ['file' => $path])` and generates image fixtures on the fly with Imagick; it asserts the stored file is WebP and correctly resized. Photo fixtures inserted directly need a `source` value (`'seed'`/`'photo'`).
 - `config/test.php` uses strict URL parsing and disables CSRF; test DB config is `config/test_db.php`.
+
+## CI & Static Analysis
+
+`.github/workflows/ci.yml` runs on every push and pull request: `composer install`, then three gates — PHP CS Fixer (`--dry-run`), PHPStan, and the full Codeception suite against a MySQL 8 service. It runs natively on the runner (PHP 8.4 + Imagick via `shivammathur/setup-php`), not through Docker; DB/JWT/rate-limit config is passed as workflow `env:` (the same vars the app reads via `getenv()`), and only the test DB is migrated (`migrate-test/up`). Keep the CI steps in sync with the `Makefile` targets (`cs-check`, `stan`, `test`) — they must stay runnable both ways.
+
+PHPStan config is `phpstan.neon.dist` (level 5, scans `commands`/`components`/`config`/`controllers`/`models`). Two non-obvious settings make it green without false positives: `bootstrapFiles` + `scanFiles` both point at `vendor/yiisoft/yii2/Yii.php` so the global `Yii` class (a generic subclass of `BaseYii`) is both executed for its constants and reflected for its inherited static methods (`Yii::getAlias()` etc.); and `dynamicConstantNames` lists `YII_DEBUG`/`YII_ENV*` because `BaseYii` defines them as `false`/`'prod'` defaults, so without this PHPStan reports every `if (YII_DEBUG)` branch as dead code. PHPStan needs `--memory-limit=512M` (the web container's PHP caps at 128M). Fix real type errors rather than lowering the level or adding ignores.

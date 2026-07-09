@@ -1,6 +1,10 @@
 # Yii2 REST API
 
+[![CI](https://github.com/fuegoalma/yii2-rest-api-sample/actions/workflows/ci.yml/badge.svg)](https://github.com/fuegoalma/yii2-rest-api-sample/actions/workflows/ci.yml)
+
 A REST API built with Yii2 following SOLID, DRY, and KISS principles. Implements a service/repository architecture with a unified response format.
+
+Every push and pull request is checked by [GitHub Actions](.github/workflows/ci.yml): code style (PHP CS Fixer), static analysis (PHPStan), and the full Codeception suite against MySQL.
 
 ---
 
@@ -174,9 +178,26 @@ make cs-fix
 
 ---
 
+## Static Analysis
+
+The project is analysed with [PHPStan](https://phpstan.org/) (level 5, configuration in `phpstan.neon.dist`).
+
+```bash
+make stan
+```
+
+---
+
+## Continuous Integration
+
+[GitHub Actions](.github/workflows/ci.yml) runs on every push and pull request. It installs dependencies, spins up a MySQL service, and runs the same three gates as locally — code style, static analysis, and the full test suite. The badge at the top of this README reflects the latest run on the default branch.
+
+---
+
 ## Project Structure
 
 ```
+├── .github/workflows/ # CI pipeline (cs-fixer, phpstan, tests)
 ├── commands/          # Console commands (seeders, etc.)
 ├── config/            # Application configuration
 │   ├── db.php         # Main database config (reads from .env)

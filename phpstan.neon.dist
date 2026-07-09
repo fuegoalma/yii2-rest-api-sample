@@ -1,0 +1,24 @@
+parameters:
+    level: 5
+    paths:
+        - commands
+        - components
+        - config
+        - controllers
+        - models
+    # defines the global `Yii` class, its constants and the framework's
+    # @property annotations so component access is typed correctly
+    bootstrapFiles:
+        - vendor/yiisoft/yii2/Yii.php
+    # makes the generic `Yii` class's inherited static methods (getAlias, etc.)
+    # visible to reflection, not just executed for side effects
+    scanFiles:
+        - vendor/yiisoft/yii2/Yii.php
+    # these are defined by the entry script per environment; the framework's
+    # `false`/`prod` defaults are not their real runtime value
+    dynamicConstantNames:
+        - YII_DEBUG
+        - YII_ENV
+        - YII_ENV_DEV
+        - YII_ENV_PROD
+        - YII_ENV_TEST

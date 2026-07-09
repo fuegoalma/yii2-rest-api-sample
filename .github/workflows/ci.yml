@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  checks:
+    name: cs-fixer · phpstan · tests
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: yii2_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -uroot -proot --silent"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+
+    env:
+      DB_HOST: 127.0.0.1
+      DB_NAME: yii2_test
+      DB_USER: root
+      DB_PASSWORD: root
+      TEST_DB_NAME: yii2_test
+      BASE_URL: http://localhost:8084
+      DEFAULT_PASSWORD: '123456'
+      COOKIE_VALIDATION_KEY: ci-cookie-validation-key-change-me
+      JWT_SECRET: ci-jwt-secret-at-least-32-characters-long
+      JWT_TTL: '3600'
+      LOGIN_RATE_LIMIT_ATTEMPTS: '5'
+      LOGIN_RATE_LIMIT_WINDOW: '60'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP 8.4
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: imagick, pdo_mysql, mysqli
+          coverage: none
+          tools: composer:v2
+
+      - name: Cache Composer packages
+        uses: actions/cache@v4
+        with:
+          path: vendor
+          key: composer-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-
+
+      - name: Install dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      # --- static gates first: fast feedback, no database needed ---
+      - name: Code style (PHP CS Fixer)
+        run: vendor/bin/php-cs-fixer fix --dry-run --diff
+
+      - name: Static analysis (PHPStan)
+        run: vendor/bin/phpstan analyse --no-progress --memory-limit=512M
+
+      # --- tests: migrate the test DB, then run the suite ---
+      - name: Run migrations
+        run: php yii migrate-test/up --interactive=0
+
+      - name: Run tests
+        run: vendor/bin/codecept run

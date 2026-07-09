@@ -19,7 +19,7 @@ class AlbumsController extends ApiController
      */
     public function actionView(int $id): array
     {
-        /** @var $album Album */
+        /** @var Album $album */
         $album = $this->service->findOrFail($id);
         return AlbumViewResponse::fromModel($album)->toArray();
     }
