@@ -18,7 +18,7 @@ A REST API built with Yii2 following SOLID, DRY, and KISS principles. Implements
 Run this once to create your `.env` file and install dependencies:
 
 ```bash
-./init.sh
+make init
 ```
 
 ### 2. Configure your environment
@@ -42,7 +42,7 @@ JWT_TTL=3600
 Run this after configuring `.env`. It starts Docker, installs dependencies, creates both databases (test and prod), and applies all migrations:
 
 ```bash
-./setup.sh
+make setup
 ```
 
 ---
