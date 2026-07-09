@@ -4,11 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Yii2 (basic template) REST API for users, albums, and photos. PHP 8.4, MySQL 8, everything runs inside Docker — all PHP/console commands must be executed through `docker-compose exec web`. The PHP image is extended at container start (see `docker-compose.yml`) with the **Imagick** extension, used for photo uploads.
+Yii2 (basic template) REST API for users, albums, and photos. PHP 8.4, MySQL 8, everything runs inside Docker — all PHP/console commands must be executed through `docker-compose exec web` (use the `Makefile` shortcuts below, e.g. `make test` instead of typing the full command). The PHP image is extended at container start (see `docker-compose.yml`) with the **Imagick** extension, used for photo uploads.
 
 **All code MUST follow SOLID, DRY, and KISS.** Non-negotiable for every change: no duplicated logic (extract shared code into base classes/traits/helpers, including tests), depend on interfaces from `models/contract/` rather than concretions, keep each class to a single responsibility, and prefer the simplest design that works — don't add abstractions for hypothetical future needs. When touching existing code that violates these principles, fix the violation rather than extending it.
 
 ## Commands
+
+All PHP/console commands run inside the `web` container; use the `Makefile` shortcuts (`make help` lists all of them) instead of typing `docker-compose exec web ...` by hand:
 
 ```bash
 # First-time setup
@@ -16,25 +18,32 @@ Yii2 (basic template) REST API for users, albums, and photos. PHP 8.4, MySQL 8, 
 ./setup.sh         # starts Docker, composer install, creates main + test DBs, runs migrations on both
 
 # Migrations (two DBs: main and test — keep both migrated)
-docker-compose exec web php yii migrate/up --interactive=0
-docker-compose exec web php yii migrate-test/up --interactive=0
+make migrate                        # both DBs
+make migrate-main                   # main only
+make migrate-test                   # test only
 
 # Generate migrations from existing DB schema (bizley/yii2-migration)
-docker-compose exec web php yii migration-creator/create <table>   # or '*' for all
-docker-compose exec web php yii migration-creator/update <table>   # diff against migration history
+make migration-create table=<table>   # or table='*' for all
+make migration-update table=<table>   # diff against migration history
 
 # Seed data
-docker-compose exec web php yii seeder/create   # optional count arg, default 10
-docker-compose exec web php yii seeder/clear
+make seed                # optional count=N arg, default 10
+make seed-clear
 
 # Tests (Codeception, run against TEST_DB_NAME via config/test.php)
-docker-compose exec web php vendor/bin/codecept run                # all
-docker-compose exec web php vendor/bin/codecept run functional
-docker-compose exec web php vendor/bin/codecept run unit
-docker-compose exec web php vendor/bin/codecept run functional UsersCest                 # one class
-docker-compose exec web php vendor/bin/codecept run functional UsersCest:testMethodName  # one test
-docker-compose exec web php vendor/bin/codecept build              # after changing Codeception modules
+make test                                            # all
+make test-functional
+make test-unit
+make test-one suite=functional class=UsersCest                 # one class
+make test-one suite=functional class=UsersCest:testMethodName  # one test
+make build                # after changing Codeception modules
+
+# Code style (PSR-12, PHP CS Fixer)
+make cs-check             # dry-run, shows violations/diff
+make cs-fix               # auto-fix
 ```
+
+The `Makefile` wraps `docker-compose exec -T web ...` (see `make sh` for an interactive shell into the container, which keeps a TTY). Adding a new recurring command should get a `Makefile` target rather than being typed out in full each time.
 
 App is served at http://localhost:8084, phpMyAdmin at http://localhost:8085, MySQL exposed on host port 3307. DB credentials come from `.env` (read via `getenv()` in `config/db.php` / `config/test_db.php`).
 

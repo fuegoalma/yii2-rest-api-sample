@@ -54,14 +54,16 @@ Migrations are managed using the standard Yii2 migration tool.
 #### Apply migrations to main database
 
 ```bash
-docker-compose exec web php yii migrate/up --interactive=0
+make migrate-main
 ```
 
 #### Apply migrations to test database
 
 ```bash
-docker-compose exec web php yii migrate-test/up --interactive=0
+make migrate-test
 ```
+
+Or run both at once with `make migrate`.
 
 ---
 
@@ -72,13 +74,13 @@ The project uses [bizley/yii2-migration](https://github.com/bizley/yii2-migratio
 #### Generate migrations for all tables
 
 ```bash
-docker-compose exec web php yii migration-creator/create '*'
+make migration-create table='*'
 ```
 
 #### Generate a migration for a specific table
 
 ```bash
-docker-compose exec web php yii migration-creator/create user
+make migration-create table=user
 ```
 
 #### Generate an update migration for a specific table
@@ -86,7 +88,7 @@ docker-compose exec web php yii migration-creator/create user
 Compares current schema with migration history and generates a diff:
 
 ```bash
-docker-compose exec web php yii migration-creator/update user
+make migration-update table=user
 ```
 
 ---
@@ -98,13 +100,15 @@ Seeders populate the database with generated test data.
 #### Generate seed data
 
 ```bash
-docker-compose exec web php yii seeder/create
+make seed
 ```
+
+Pass a count with `make seed count=20` (default is 10).
 
 #### Clear all seeded data
 
 ```bash
-docker-compose exec web php yii seeder/clear
+make seed-clear
 ```
 
 ---
@@ -118,25 +122,32 @@ The project uses [Codeception](https://codeception.com/) for functional and unit
 Run this after adding or removing Codeception modules:
 
 ```bash
-docker-compose exec web php vendor/bin/codecept build
+make build
 ```
 
 #### Run all tests
 
 ```bash
-docker-compose exec web php vendor/bin/codecept run
+make test
 ```
 
 #### Run only functional tests
 
 ```bash
-docker-compose exec web php vendor/bin/codecept run functional
+make test-functional
 ```
 
 #### Run only unit tests
 
 ```bash
-docker-compose exec web php vendor/bin/codecept run unit
+make test-unit
+```
+
+#### Run a single test class or method
+
+```bash
+make test-one suite=functional class=UsersCest
+make test-one suite=functional class=UsersCest:testMethodName
 ```
 
 ---
@@ -150,7 +161,7 @@ The project follows the [PSR-12](https://www.php-fig.org/psr/psr-12/) coding sta
 Shows the violations and a diff of what would be changed, without modifying any files:
 
 ```bash
-docker-compose exec web php vendor/bin/php-cs-fixer fix --dry-run --diff
+make cs-check
 ```
 
 #### Fix code style
@@ -158,7 +169,7 @@ docker-compose exec web php vendor/bin/php-cs-fixer fix --dry-run --diff
 Automatically reformats all project files to comply with PSR-12:
 
 ```bash
-docker-compose exec web php vendor/bin/php-cs-fixer fix
+make cs-fix
 ```
 
 ---
@@ -186,7 +197,8 @@ docker-compose exec web php vendor/bin/php-cs-fixer fix
 │   ├── unit/          # Unit tests
 │   └── _support/      # Codeception helpers and base classes
 ├── init.sh            # First-time project initialization
-└── setup.sh        # Database creation and migration runner
+├── setup.sh           # Database creation and migration runner
+└── Makefile           # Short aliases for docker-compose exec commands (make help)
 ```
 
 ---
