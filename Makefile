@@ -1,7 +1,7 @@
-DC  := docker-compose
+DC  := docker compose
 WEB := $(DC) exec -T web
 
-.PHONY: help init setup up down restart logs sh \
+.PHONY: help init setup up down restart rebuild logs sh \
         migrate migrate-main migrate-test \
         migration-create migration-update \
         seed seed-clear \
@@ -13,6 +13,7 @@ help:
 	@echo "  init                 Create .env from .env.example"
 	@echo "  setup                Start Docker, install deps, create DBs, run migrations"
 	@echo "  up / down / restart  Docker Compose lifecycle"
+	@echo "  rebuild              Rebuild the web image via BuildKit/buildx (after changing the Dockerfile)"
 	@echo "  logs                 Follow container logs"
 	@echo "  sh                   Shell into the web container"
 	@echo "  migrate              Run migrations on main + test DBs"
@@ -45,6 +46,10 @@ down:
 
 restart:
 	$(DC) restart
+
+rebuild:
+	$(DC) build web
+	$(DC) up -d web
 
 logs:
 	$(DC) logs -f

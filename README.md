@@ -1,17 +1,31 @@
 # Yii2 REST API
 
-[![CI](https://github.com/fuegoalma/yii2-rest-api-sample/actions/workflows/ci.yml/badge.svg)](https://github.com/fuegoalma/yii2-rest-api-sample/actions/workflows/ci.yml)
+**CI** &nbsp; [![CI](https://github.com/fuegoalma/yii2-rest-api-sample/actions/workflows/ci.yml/badge.svg)](https://github.com/fuegoalma/yii2-rest-api-sample/actions/workflows/ci.yml)
+
+**CD** &nbsp; [![CD](https://github.com/fuegoalma/yii2-rest-api-sample/actions/workflows/cd.yml/badge.svg)](https://github.com/fuegoalma/yii2-rest-api-sample/actions/workflows/cd.yml)
 
 A REST API built with Yii2 following SOLID, DRY, and KISS principles. Implements a service/repository architecture with a unified response format.
 
-Every push and pull request is checked by [GitHub Actions](.github/workflows/ci.yml): code style (PHP CS Fixer), static analysis (PHPStan), and the full Codeception suite against MySQL.
+The project ships a full **CI/CD** pipeline on [GitHub Actions](.github/workflows/):
+
+- **CI** ([`ci.yml`](.github/workflows/ci.yml)) — runs on every push and pull request: code style (PHP CS Fixer), static analysis (PHPStan), and the full Codeception suite against MySQL.
+- **CD** ([`cd.yml`](.github/workflows/cd.yml)) — chains off a green CI on `master`: builds a self-contained production Docker image from the [`Dockerfile`](Dockerfile) (proving the app containerises and is deployable) and runs a `production` GitHub Environment deployment. The release step is simulated — this sample intentionally provisions no real server — but the whole CI → build → deploy chain runs on every green build.
 
 ---
 
 ## Requirements
 
-- Docker
-- Docker Compose
+- **Docker** (Engine 20.10+)
+- **Docker Compose v2** — the `docker compose` plugin (with a space), *not* the legacy `docker-compose` v1
+- **Buildx** — the BuildKit builder plugin, used to build the image
+
+On Ubuntu these two plugins come from the `docker-compose-v2` and `docker-buildx` packages:
+
+```bash
+sudo apt-get install -y docker-compose-v2 docker-buildx
+```
+
+Verify with `docker compose version` and `docker buildx version`.
 
 ---
 
@@ -47,6 +61,29 @@ Run this after configuring `.env`. It starts Docker, installs dependencies, crea
 
 ```bash
 make setup
+```
+
+> The **first** `make setup` builds the Docker image (Imagick + PHP extensions are baked in via Buildx), so it takes a minute. Every subsequent `make up` starts instantly — the image is already built. If you later change the [`Dockerfile`](Dockerfile), rebuild the image with `make rebuild`.
+
+---
+
+## Docker Environment
+
+The whole environment is defined by a single **multi-stage** [`Dockerfile`](Dockerfile) — one source of truth, no runtime installs:
+
+| Stage | Used by | What it contains |
+|-------|---------|------------------|
+| `base` | — | Shared runtime: PHP 8.4 + Apache, Imagick, `pdo_mysql`/`mysqli`, Composer |
+| `dev`  | `docker-compose.yml` (`target: dev`) | Your code and `vendor/` are bind-mounted from the host, so edits are live and `make` commands run against your local files |
+| `prod` | CD pipeline (`target: prod`) | Self-contained image: production dependencies (`--no-dev`) and app code baked in, no volumes |
+
+Local development uses the `dev` stage through Docker Compose. Handy lifecycle shortcuts (see `make help` for the full list):
+
+```bash
+make up        # start the stack
+make down      # stop and remove the stack
+make sh        # open a shell inside the web container
+make rebuild   # rebuild the web image via Buildx (after editing the Dockerfile)
 ```
 
 ---
@@ -188,16 +225,22 @@ make stan
 
 ---
 
-## Continuous Integration
+## Continuous Integration & Delivery
 
-[GitHub Actions](.github/workflows/ci.yml) runs on every push and pull request. It installs dependencies, spins up a MySQL service, and runs the same three gates as locally — code style, static analysis, and the full test suite. The badge at the top of this README reflects the latest run on the default branch.
+The project ships a two-stage GitHub Actions pipeline — the two badges at the top of this README reflect the latest runs on the default branch:
+
+- **CI** ([`ci.yml`](.github/workflows/ci.yml)) — runs on every push and pull request. It installs dependencies, spins up a MySQL service, and runs the same three gates as locally: code style (PHP CS Fixer), static analysis (PHPStan), and the full test suite.
+- **CD** ([`cd.yml`](.github/workflows/cd.yml)) — runs only *after* CI passes on `master`. It builds the self-contained production image (the `prod` stage of the [`Dockerfile`](Dockerfile), via Buildx) to prove the app containerises and is deployable, then runs a deployment through a `production` GitHub Environment. The release step itself is **simulated** — this sample intentionally provisions no real server — but the complete CI → build → deploy chain runs on every green build.
 
 ---
 
 ## Project Structure
 
 ```
-├── .github/workflows/ # CI pipeline (cs-fixer, phpstan, tests)
+├── .github/workflows/ # CI (cs-fixer, phpstan, tests) + CD (build image, deploy) pipelines
+├── Dockerfile         # Multi-stage image: base → dev → prod
+├── .dockerignore      # Build-context excludes for the prod image
+├── docker-compose.yml # Local dev stack (web + db + phpMyAdmin), builds the dev stage
 ├── commands/          # Console commands (seeders, etc.)
 ├── config/            # Application configuration
 │   ├── db.php         # Main database config (reads from .env)
@@ -219,7 +262,7 @@ make stan
 │   └── _support/      # Codeception helpers and base classes
 ├── init.sh            # First-time project initialization
 ├── setup.sh           # Database creation and migration runner
-└── Makefile           # Short aliases for docker-compose exec commands (make help)
+└── Makefile           # Short aliases for docker compose exec commands (make help)
 ```
 
 ---

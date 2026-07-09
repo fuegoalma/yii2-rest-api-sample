@@ -1,8 +1,8 @@
-version: '3.8'
-
 services:
   web:
-    image: php:8.4-apache
+    build:
+      context: .
+      target: dev
     env_file:
       - .env
     ports:
@@ -10,24 +10,6 @@ services:
     volumes:
       - ./:/var/www/html
     working_dir: /var/www/html
-    environment:
-      - APACHE_DOCUMENT_ROOT=/var/www/html/web
-    command: >
-      bash -c "
-      a2enmod rewrite &&
-      apt-get update &&
-      apt-get install -y libmagickwand-dev &&
-      (printf '\n' | pecl install imagick) &&
-      docker-php-ext-enable imagick &&
-      docker-php-ext-install pdo pdo_mysql mysqli &&
-      echo '<Directory /var/www/html/web>
-          AllowOverride All
-          Require all granted
-      </Directory>' > /etc/apache2/conf-available/yii2.conf &&
-      a2enconf yii2 &&
-      sed -i 's|DocumentRoot /var/www/html|DocumentRoot /var/www/html/web|g' /etc/apache2/sites-available/000-default.conf &&
-      apache2-foreground
-      "
     networks:
       - yii-network
 

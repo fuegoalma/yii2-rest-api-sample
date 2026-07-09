@@ -4,13 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Yii2 (basic template) REST API for users, albums, and photos. PHP 8.4, MySQL 8, everything runs inside Docker — all PHP/console commands must be executed through `docker-compose exec web` (use the `Makefile` shortcuts below, e.g. `make test` instead of typing the full command). The PHP image is extended at container start (see `docker-compose.yml`) with the **Imagick** extension, used for photo uploads.
+Yii2 (basic template) REST API for users, albums, and photos. PHP 8.4, MySQL 8, everything runs inside Docker (Compose **v2** — invoke it as `docker compose`, with a space, not the legacy `docker-compose`) — all PHP/console commands must be executed through `docker compose exec web` (use the `Makefile` shortcuts below, e.g. `make test` instead of typing the full command). The environment is defined by a single multi-stage `Dockerfile` (`base` → `dev` → `prod`); the **Imagick** extension (used for photo uploads) plus `pdo_mysql`/`mysqli`/Composer are baked into the `base` stage. `docker-compose.yml` builds the `dev` stage (`target: dev`) and bind-mounts the project directory, so `composer install` and the code live on the host and container startup is instant; the CD pipeline builds the self-contained `prod` stage. Keep the `Dockerfile`'s `base` stage as the single source of truth for the runtime — don't reintroduce runtime extension installs in compose.
 
 **All code MUST follow SOLID, DRY, and KISS.** Non-negotiable for every change: no duplicated logic (extract shared code into base classes/traits/helpers, including tests), depend on interfaces from `models/contract/` rather than concretions, keep each class to a single responsibility, and prefer the simplest design that works — don't add abstractions for hypothetical future needs. When touching existing code that violates these principles, fix the violation rather than extending it.
 
 ## Commands
 
-All PHP/console commands run inside the `web` container; use the `Makefile` shortcuts (`make help` lists all of them) instead of typing `docker-compose exec web ...` by hand:
+All PHP/console commands run inside the `web` container; use the `Makefile` shortcuts (`make help` lists all of them) instead of typing `docker compose exec web ...` by hand:
 
 ```bash
 # First-time setup
@@ -46,7 +46,7 @@ make cs-fix               # auto-fix
 make stan
 ```
 
-The `Makefile` wraps `docker-compose exec -T web ...` (see `make sh` for an interactive shell into the container, which keeps a TTY). Adding a new recurring command should get a `Makefile` target rather than being typed out in full each time.
+The `Makefile` wraps `docker compose exec -T web ...` (see `make sh` for an interactive shell into the container, which keeps a TTY). Adding a new recurring command should get a `Makefile` target rather than being typed out in full each time.
 
 App is served at http://localhost:8084, phpMyAdmin at http://localhost:8085, MySQL exposed on host port 3307. DB credentials come from `.env` (read via `getenv()` in `config/db.php` / `config/test_db.php`).
 
@@ -83,8 +83,10 @@ Layered flow for every endpoint: **Controller → Form Request → Service → R
 - `PhotosCest` uploads with `$I->sendPost($url, ['title' => ...], ['file' => $path])` and generates image fixtures on the fly with Imagick; it asserts the stored file is WebP and correctly resized. Photo fixtures inserted directly need a `source` value (`'seed'`/`'photo'`).
 - `config/test.php` uses strict URL parsing and disables CSRF; test DB config is `config/test_db.php`.
 
-## CI & Static Analysis
+## CI/CD & Static Analysis
 
-`.github/workflows/ci.yml` runs on every push and pull request: `composer install`, then three gates — PHP CS Fixer (`--dry-run`), PHPStan, and the full Codeception suite against a MySQL 8 service. It runs natively on the runner (PHP 8.4 + Imagick via `shivammathur/setup-php`), not through Docker; DB/JWT/rate-limit config is passed as workflow `env:` (the same vars the app reads via `getenv()`), and only the test DB is migrated (`migrate-test/up`). Keep the CI steps in sync with the `Makefile` targets (`cs-check`, `stan`, `test`) — they must stay runnable both ways.
+**CI** — `.github/workflows/ci.yml` runs on every push and pull request: `composer install`, then three gates — PHP CS Fixer (`--dry-run`), PHPStan, and the full Codeception suite against a MySQL 8 service. It runs natively on the runner (PHP 8.4 + Imagick via `shivammathur/setup-php`), not through Docker; DB/JWT/rate-limit config is passed as workflow `env:` (the same vars the app reads via `getenv()`), and only the test DB is migrated (`migrate-test/up`). Keep the CI steps in sync with the `Makefile` targets (`cs-check`, `stan`, `test`) — they must stay runnable both ways.
+
+**CD** — `.github/workflows/cd.yml` is chained to CI via `workflow_run` (triggers only after the **CI** workflow completes on `master`) and both its jobs guard on `github.event.workflow_run.conclusion == 'success'`, so a red CI never deploys (and its badge stays neutral rather than red). It has two jobs: `build-image` builds the `prod` stage of the multi-stage `Dockerfile` (`target: prod` — `composer install --no-dev --no-scripts` + baked app code, on top of the shared `base` stage) with buildx + GHA layer cache, then smoke-tests it (`php --version` inside the image); `deploy` runs through a `production` GitHub Environment so it shows in the repo's Environments/Deployments tab, but the actual release is **simulated** (echoed steps) — this sample deliberately provisions no real server. The image is built with `push: false`/`load: true` (never pushed to a registry). The `prod` stage uses `--no-scripts` so Yii's `postInstall` (cookie-key generation) is skipped — `COOKIE_VALIDATION_KEY` comes from env at runtime instead — and only `yiisoft/yii2-composer` is in `allow-plugins`. Dev and prod share the `base` stage, so there is no runtime setup to keep in sync between compose and the image.
 
 PHPStan config is `phpstan.neon.dist` (level 5, scans `commands`/`components`/`config`/`controllers`/`models`). Two non-obvious settings make it green without false positives: `bootstrapFiles` + `scanFiles` both point at `vendor/yiisoft/yii2/Yii.php` so the global `Yii` class (a generic subclass of `BaseYii`) is both executed for its constants and reflected for its inherited static methods (`Yii::getAlias()` etc.); and `dynamicConstantNames` lists `YII_DEBUG`/`YII_ENV*` because `BaseYii` defines them as `false`/`'prod'` defaults, so without this PHPStan reports every `if (YII_DEBUG)` branch as dead code. PHPStan needs `--memory-limit=512M` (the web container's PHP caps at 128M). Fix real type errors rather than lowering the level or adding ignores.

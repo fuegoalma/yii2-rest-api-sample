@@ -1,0 +1,17 @@
+.git
+.github
+.idea
+.vscode
+vendor
+docs
+tests
+runtime/*
+!runtime/.gitkeep
+web/assets/*
+!web/assets/.gitkeep
+web/uploads/*
+!web/uploads/.gitkeep
+.env
+.php-cs-fixer.cache
+*.md
+!README.md
