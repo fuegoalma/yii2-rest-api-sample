@@ -1,8 +1,6 @@
 # Yii2 REST API
 
-**CI** &nbsp; [![CI](https://github.com/fuegoalma/yii2-rest-api-sample/actions/workflows/ci.yml/badge.svg)](https://github.com/fuegoalma/yii2-rest-api-sample/actions/workflows/ci.yml)
-
-**CD** &nbsp; [![CD](https://github.com/fuegoalma/yii2-rest-api-sample/actions/workflows/cd.yml/badge.svg)](https://github.com/fuegoalma/yii2-rest-api-sample/actions/workflows/cd.yml)
+[![CI](https://github.com/fuegoalma/yii2-rest-api-sample/actions/workflows/ci.yml/badge.svg)](https://github.com/fuegoalma/yii2-rest-api-sample/actions/workflows/ci.yml) [![CD](https://github.com/fuegoalma/yii2-rest-api-sample/actions/workflows/cd.yml/badge.svg)](https://github.com/fuegoalma/yii2-rest-api-sample/actions/workflows/cd.yml)
 
 A REST API built with Yii2 following SOLID, DRY, and KISS principles. Implements a service/repository architecture with a unified response format.
 
