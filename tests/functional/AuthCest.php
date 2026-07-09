@@ -2,6 +2,7 @@
 
 namespace tests\functional;
 
+use app\components\RateLimiter;
 use Firebase\JWT\JWT;
 use FunctionalTester;
 use PHPUnit\Framework\Assert;
@@ -101,6 +102,71 @@ class AuthCest extends BaseCest
 
         $I->seeResponseCodeIs(422);
         $I->seeResponseContainsJson(['success' => false]);
+    }
+
+    // ==================== RATE LIMITING ====================
+
+    /**
+     * @throws Exception
+     * @throws \yii\base\Exception
+     */
+    public function testLoginIsRateLimitedAfterTooManyAttempts(FunctionalTester $I): void
+    {
+        $this->createLoginUser();
+        $I->deleteHeader('Authorization');
+
+        $this->exhaustLoginAttempts($I, $this->maxLoginAttempts());
+
+        // even correct credentials are rejected once the limit is reached
+        $I->sendPost('/auth/login', [
+            'email'    => self::LOGIN_EMAIL,
+            'password' => self::LOGIN_PASSWORD,
+        ]);
+
+        $I->seeResponseCodeIs(429);
+        $I->seeResponseContainsJson(['success' => false, 'code' => 429]);
+        $I->seeHttpHeader('Retry-After');
+    }
+
+    /**
+     * @throws Exception
+     * @throws \yii\base\Exception
+     */
+    public function testSuccessfulLoginResetsRateLimitCounter(FunctionalTester $I): void
+    {
+        $this->createLoginUser();
+        $I->deleteHeader('Authorization');
+        $maxAttempts = $this->maxLoginAttempts();
+
+        $this->exhaustLoginAttempts($I, $maxAttempts - 1);
+
+        $I->sendPost('/auth/login', [
+            'email'    => self::LOGIN_EMAIL,
+            'password' => self::LOGIN_PASSWORD,
+        ]);
+        $I->seeResponseCodeIs(200);
+
+        // the successful login above reset the counter: a full set of attempts is available again
+        $this->exhaustLoginAttempts($I, $maxAttempts);
+    }
+
+    private function exhaustLoginAttempts(FunctionalTester $I, int $count): void
+    {
+        for ($i = 0; $i < $count; $i++) {
+            $I->sendPost('/auth/login', [
+                'email'    => self::LOGIN_EMAIL,
+                'password' => 'wrong-password',
+            ]);
+            $I->seeResponseCodeIs(401);
+        }
+    }
+
+    /**
+     * The limit the application is actually configured with (see config/di.php).
+     */
+    private function maxLoginAttempts(): int
+    {
+        return Yii::$container->get(RateLimiter::class)->maxAttempts;
     }
 
     // ==================== PROTECTED ENDPOINTS ====================

@@ -21,6 +21,11 @@ return [
     'language' => 'en-US',
     'components' => [
         'db' => $db,
+        // backs the login RateLimiter; kept apart from the dev app cache
+        'cache' => [
+            'class' => \yii\caching\FileCache::class,
+            'cachePath' => '@runtime/test-cache',
+        ],
         'mailer' => [
             'class' => \yii\symfonymailer\Mailer::class,
             'viewPath' => '@app/mail',

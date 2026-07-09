@@ -84,6 +84,18 @@ Validation: both fields required, `email` must be a valid address (max 255 chars
 
 Wrong credentials → `401`.
 
+**Rate limiting (brute-force protection):** login attempts are throttled per client IP — at most `LOGIN_RATE_LIMIT_ATTEMPTS` (default **5**) attempts per `LOGIN_RATE_LIMIT_WINDOW` seconds (default **60**, both configured via `.env`). Every attempt refreshes the window; a successful login resets the counter immediately. Once the limit is reached the endpoint responds with `429` and a `Retry-After` header:
+
+```json
+{
+  "success": false,
+  "data": {
+    "message": "Too many attempts. Please try again later."
+  },
+  "code": 429
+}
+```
+
 ### Using the token
 
 Send it on every subsequent request:
@@ -323,6 +335,7 @@ Deletes the record and the physical file (when `source = 'photo'`; seeded demo p
 | 404 | resource not found (`<id>` doesn't exist) |
 | 405 | unsupported method/path (e.g. `GET /photos` without an albumId) |
 | 422 | request body or model validation failure |
+| 429 | too many login attempts (rate limit, see `Retry-After` header) |
 | 500 | unexpected server error |
 
 ## CORS

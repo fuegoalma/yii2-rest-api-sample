@@ -2,6 +2,7 @@
 
 namespace app\controllers;
 
+use app\components\RateLimiter;
 use app\controllers\basic\ApiControllerTrait;
 use app\models\contract\service\AuthServiceInterface;
 use app\models\form\LoginForm;
@@ -23,7 +24,12 @@ class AuthController extends Controller
     public function behaviors(): array
     {
         // login stays public: it is the endpoint that issues the JWT
-        return $this->apiBehaviors(parent::behaviors(), requireAuth: false);
+        $behaviors = $this->apiBehaviors(parent::behaviors(), requireAuth: false);
+
+        // brute-force protection: login attempts are throttled per client IP
+        $behaviors['rateLimiter'] = RateLimiter::class;
+
+        return $behaviors;
     }
 
     public function actionLogin(): mixed

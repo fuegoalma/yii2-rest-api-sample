@@ -2,6 +2,7 @@
 
 use app\components\ImageProcessor;
 use app\components\JwtService;
+use app\components\RateLimiter;
 use app\controllers\AlbumsController;
 use app\controllers\AuthController;
 use app\controllers\PhotosController;
@@ -33,6 +34,12 @@ return [
         ImageProcessor::class => [
             'class' => ImageProcessor::class,
             'uploadPath' => $params['photo_upload_path'],
+        ],
+        // single source of rate-limiting config (brute-force protection on login)
+        RateLimiter::class => [
+            'class' => RateLimiter::class,
+            'maxAttempts' => (int) (getenv('LOGIN_RATE_LIMIT_ATTEMPTS') ?: 5),
+            'window' => (int) (getenv('LOGIN_RATE_LIMIT_WINDOW') ?: 60),
         ],
         UserService::class => [
             '__construct()' => ['repository' => Instance::of(UserRepository::class)],

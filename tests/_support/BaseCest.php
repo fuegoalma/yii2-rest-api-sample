@@ -27,6 +27,9 @@ abstract class BaseCest
         $db->createCommand('TRUNCATE TABLE user')->execute();
         $db->createCommand('SET FOREIGN_KEY_CHECKS=1')->execute();
 
+        // rate-limiter counters must not leak between tests
+        Yii::$app->cache->flush();
+
         $this->authenticate($I);
     }
 
