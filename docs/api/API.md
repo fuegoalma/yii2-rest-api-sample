@@ -5,7 +5,7 @@ REST API (Yii2) for managing users, albums and photos. Every response — succes
 - Base URL (local): `http://localhost:8084`
 - Request body format: `application/json` for all endpoints except photo upload, which uses `multipart/form-data`
 - Response format: always `application/json`
-- Authorization: `Authorization: Bearer <JWT>` — required on every endpoint except `POST /auth/login` and `OPTIONS` preflight requests
+- Authorization: `Authorization: Bearer <JWT>` — required on every endpoint except `POST /auth/login`, `GET /health`, and `OPTIONS` preflight requests
 
 ## Response envelope
 
@@ -324,11 +324,32 @@ Only `title` can change — the album and the stored file are immutable once upl
 
 Deletes the record and the physical file (when `source = 'photo'`; seeded demo photos with `source = 'seed'` share files under `web/default-images` and are not deleted). Success → `204`.
 
+## Health check
+
+### `GET /health`
+
+Public, unauthenticated, unthrottled — meant for load balancers / uptime monitoring. Checks that the database is reachable with a `SELECT 1`.
+
+**Healthy (200):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "status": "ok",
+    "checks": { "database": "ok" }
+  },
+  "code": 200
+}
+```
+
+**Unhealthy (503):** returned when the database query fails; `checks.database` becomes `"error"`.
+
 ## Status codes — summary
 
 | Code | When |
 |---|---|
-| 200 | successful GET / PUT / PATCH, `/auth/login` |
+| 200 | successful GET / PUT / PATCH, `/auth/login`, healthy `/health` |
 | 201 | successful POST (create) |
 | 204 | successful DELETE |
 | 401 | missing/invalid Bearer token, wrong login credentials |
@@ -337,6 +358,7 @@ Deletes the record and the physical file (when `source = 'photo'`; seeded demo p
 | 422 | request body or model validation failure |
 | 429 | too many login attempts (rate limit, see `Retry-After` header) |
 | 500 | unexpected server error |
+| 503 | `/health` reports the database is unreachable |
 
 ## CORS
 

@@ -41,6 +41,7 @@ return [
             'showScriptName' => false,
             'enableStrictParsing' => true,
             'rules' => [
+                'GET,OPTIONS health' => 'health/index',
                 'POST,OPTIONS auth/login' => 'auth/login',
                 'GET albums/<albumId:\d+>/photos' => 'photos/index',
                 'POST albums/<albumId:\d+>/photos' => 'photos/create',

@@ -5,6 +5,7 @@ use app\components\JwtService;
 use app\components\RateLimiter;
 use app\controllers\AlbumsController;
 use app\controllers\AuthController;
+use app\controllers\HealthController;
 use app\controllers\PhotosController;
 use app\controllers\UsersController;
 use app\models\repository\AlbumRepository;
@@ -12,6 +13,7 @@ use app\models\repository\PhotoRepository;
 use app\models\repository\UserRepository;
 use app\models\service\AlbumService;
 use app\models\service\AuthService;
+use app\models\service\HealthService;
 use app\models\service\PhotoService;
 use app\models\service\UserService;
 use yii\di\Instance;
@@ -60,6 +62,10 @@ return [
                 'jwt' => Instance::of(JwtService::class),
             ],
         ],
+        // 'db' is an app component, not a container definition, so it can't be
+        // referenced with Instance::of() (that only resolves container-managed
+        // classes) — build the service from the live app component instead
+        HealthService::class => static fn () => new HealthService(Yii::$app->db),
         // controllers get positional ($id, $module) args at creation time and the
         // container forbids mixing named and positional keys, so bind by position:
         // index 2 is the $service parameter
@@ -74,6 +80,9 @@ return [
         ],
         AuthController::class => [
             '__construct()' => [2 => Instance::of(AuthService::class)],
+        ],
+        HealthController::class => [
+            '__construct()' => [2 => Instance::of(HealthService::class)],
         ],
     ],
 ];

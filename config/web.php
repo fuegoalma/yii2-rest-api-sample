@@ -61,6 +61,7 @@ $config = [
             'showScriptName' => false,
             'rules' => [
                 // REST API routes
+                'GET,OPTIONS health' => 'health/index',
                 'POST,OPTIONS auth/login' => 'auth/login',
                 // photos are nested under their album for listing and creation
                 'GET albums/<albumId:\d+>/photos' => 'photos/index',
