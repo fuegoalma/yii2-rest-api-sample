@@ -3,6 +3,7 @@ services:
     build:
       context: .
       target: dev
+    image: yii-app:dev
     env_file:
       - .env
     ports:
@@ -10,6 +11,25 @@ services:
     volumes:
       - ./:/var/www/html
     working_dir: /var/www/html
+    networks:
+      - yii-network
+
+  # Runs scheduled console commands (see docker/cron/crontab). Reuses the web
+  # image (same `image:` name → built once) and the same code mount + env, but
+  # its entrypoint runs the cron daemon instead of Apache.
+  cron:
+    image: yii-app:dev
+    build:
+      context: .
+      target: dev
+    env_file:
+      - .env
+    volumes:
+      - ./:/var/www/html
+    working_dir: /var/www/html
+    entrypoint: ["sh", "/var/www/html/docker/cron/entrypoint.sh"]
+    depends_on:
+      - db
     networks:
       - yii-network
 

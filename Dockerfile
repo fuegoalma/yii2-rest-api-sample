@@ -12,9 +12,10 @@
 FROM php:8.5-apache AS base
 
 # System deps + PHP extensions (imagick for photo uploads, pdo_mysql/mysqli for
-# DB; unzip/git let Composer extract dist packages).
+# DB; unzip/git let Composer extract dist packages; cron runs scheduled console
+# commands via the dedicated `cron` compose service).
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends libmagickwand-dev unzip git \
+    && apt-get install -y --no-install-recommends libmagickwand-dev unzip git cron \
     && printf '\n' | pecl install imagick \
     && docker-php-ext-enable imagick \
     && docker-php-ext-install pdo pdo_mysql mysqli \

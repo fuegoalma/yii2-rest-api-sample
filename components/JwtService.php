@@ -10,7 +10,10 @@ use yii\base\InvalidConfigException;
 
 /**
  * Issues and validates stateless HS256 JWT access tokens.
- * The user id is carried in the `sub` claim.
+ * The user id is carried in the `sub` claim. Refresh tokens are deliberately
+ * NOT JWTs — they are opaque, stateful credentials (see RefreshTokenService)
+ * so that they can be revoked; only these short-lived access tokens are
+ * stateless, since they are checked on every request.
  */
 class JwtService extends Component
 {

@@ -49,9 +49,10 @@ DB_PASSWORD=your_password
 TEST_DB_NAME=your_database_test
 JWT_SECRET=your-random-secret-at-least-32-chars
 JWT_TTL=3600
+JWT_REFRESH_TTL=2592000
 ```
 
-`JWT_SECRET` signs the API access tokens (HS256) and must be at least 32 characters long — generate one with `openssl rand -hex 32`. `JWT_TTL` is the token lifetime in seconds.
+`JWT_SECRET` signs the API tokens (HS256) and must be at least 32 characters long — generate one with `openssl rand -hex 32`. `JWT_TTL` is the access-token lifetime in seconds; `JWT_REFRESH_TTL` is the refresh-token lifetime (default 30 days).
 
 ### 3. Run setup
 
@@ -149,6 +150,16 @@ Pass a count with `make seed count=20` (default is 10).
 ```bash
 make seed-clear
 ```
+
+#### Prune expired refresh tokens
+
+Refresh tokens are stored server-side; once they expire they're just dead rows. This is **automated** — a dedicated `cron` container (started with the stack) runs the prune daily at 03:30 (see `docker/cron/crontab`, the single place to declare scheduled jobs). You can also run it on demand:
+
+```bash
+make refresh-token-prune
+```
+
+It deletes only fully-expired tokens and keeps still-valid ones (which reuse detection still needs). Watch the scheduled runs with `docker compose logs cron`.
 
 ---
 
@@ -267,11 +278,25 @@ The project ships a two-stage GitHub Actions pipeline — the two badges at the 
 
 ## Authentication
 
-All resource endpoints require a JWT. Obtain one via the public login endpoint:
+All resource endpoints require a JWT. The auth endpoints below are public (and rate-limited per IP); the token-issuing ones return a pair — a short-lived **access token** (a stateless JWT) for the `Authorization` header and a long-lived **refresh token** (an opaque, server-stored credential) to obtain a new pair without re-entering credentials.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/auth/login` | Exchange `email` + `password` for a JWT |
+| POST | `/auth/register` | Create an account and receive a token pair (201) |
+| POST | `/auth/login` | Exchange `email` + `password` for a token pair |
+| POST | `/auth/refresh` | Exchange a valid `refresh_token` for a fresh token pair |
+| POST | `/auth/logout` | Revoke the refresh token's session — log out this device (204) |
+| POST | `/auth/logout-all` | Revoke every session of the token's owner — log out everywhere (204) |
+
+**Register** a new account (no token required — this is how you bootstrap the first user):
+
+```bash
+curl -X POST http://localhost:8084/auth/register \
+    -H 'Content-Type: application/json' \
+    -d '{"first_name": "John", "last_name": "Doe", "email": "user@example.com", "password": "secret123"}'
+```
+
+**Log in** with an existing account:
 
 ```bash
 curl -X POST http://localhost:8084/auth/login \
@@ -279,12 +304,13 @@ curl -X POST http://localhost:8084/auth/login \
     -d '{"email": "user@example.com", "password": "secret123"}'
 ```
 
-**Response:**
+Both return the same shape (register responds with `201`, login with `200`):
 ```json
 {
     "success": true,
     "data": {
         "access_token": "eyJ0eXAiOiJKV1Qi...",
+        "refresh_token": "eyJ0eXAiOiJKV1Qi...",
         "token_type": "Bearer",
         "expires_in": 3600
     },
@@ -292,13 +318,35 @@ curl -X POST http://localhost:8084/auth/login \
 }
 ```
 
-Send the token with every other request:
+Send the access token with every other request:
 
 ```bash
 curl http://localhost:8084/users -H 'Authorization: Bearer <access_token>'
 ```
 
-Requests without a valid (unexpired, correctly signed) token get a `401` response. Invalid credentials on login also return `401`; validation errors return `422`.
+Once the access token expires, **refresh** it. Refresh tokens **rotate**: each one is single-use and the response carries a new refresh token to replace it. Reusing an already-spent refresh token is treated as a leak — the whole session chain is revoked and you must log in again.
+
+```bash
+curl -X POST http://localhost:8084/auth/refresh \
+    -H 'Content-Type: application/json' \
+    -d '{"refresh_token": "<refresh_token>"}'
+```
+
+**Log out.** Because refresh tokens are stored server-side, they can be revoked. Log out just the current device, or everywhere at once (handy when you signed in on a shared machine):
+
+```bash
+# this device only
+curl -X POST http://localhost:8084/auth/logout \
+    -H 'Content-Type: application/json' \
+    -d '{"refresh_token": "<refresh_token>"}'
+
+# all devices of this user
+curl -X POST http://localhost:8084/auth/logout-all \
+    -H 'Content-Type: application/json' \
+    -d '{"refresh_token": "<refresh_token>"}'
+```
+
+Requests without a valid (unexpired, correctly signed) access token get a `401` — a refresh token is opaque and cannot be used as a bearer credential. Invalid credentials on login, and an invalid/expired/revoked refresh token, also return `401`; validation errors (e.g. a duplicate email on register) return `422`.
 
 ---
 

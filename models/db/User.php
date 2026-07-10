@@ -100,8 +100,9 @@ class User extends ActiveRecord implements IdentityInterface
     }
 
     /**
-     * The token is a stateless JWT: the user is resolved
-     * from its `sub` claim, nothing is stored in the DB.
+     * The token is a stateless JWT access token: the user is resolved from its
+     * `sub` claim, nothing is stored in the DB. Refresh tokens are opaque and
+     * never valid JWTs, so they can't authenticate here.
      */
     public static function findIdentityByAccessToken($token, $type = null): User|IdentityInterface|null
     {

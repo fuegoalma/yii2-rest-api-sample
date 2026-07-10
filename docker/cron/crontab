@@ -1,0 +1,12 @@
+# Scheduled console jobs, installed into /etc/cron.d/app-cron by the cron
+# service's entrypoint. This is the single place to declare *which* commands
+# run and *when*. Add a line per job.
+#
+# Fields: minute hour day-of-month month day-of-week user command
+# Each job sources /etc/container-env first (cron runs with a bare environment,
+# so the app's DB/JWT/... config is injected there at container start) and logs
+# to the container's stdout (/proc/1/fd/1) so `docker compose logs cron` shows it.
+#
+# ── Housekeeping ───────────────────────────────────────────────────────────
+# Delete fully-expired refresh tokens once a day at 03:30.
+30 3 * * * root . /etc/container-env; cd /var/www/html && /usr/local/bin/php yii refresh-token/prune >> /proc/1/fd/1 2>&1

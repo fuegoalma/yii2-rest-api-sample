@@ -57,6 +57,10 @@ $config = [
                 // REST API routes
                 'GET,OPTIONS health' => 'health/index',
                 'POST,OPTIONS auth/login' => 'auth/login',
+                'POST,OPTIONS auth/register' => 'auth/register',
+                'POST,OPTIONS auth/refresh' => 'auth/refresh',
+                'POST,OPTIONS auth/logout' => 'auth/logout',
+                'POST,OPTIONS auth/logout-all' => 'auth/logout-all',
                 // photos are nested under their album for listing and creation
                 'GET albums/<albumId:\d+>/photos' => 'photos/index',
                 'POST albums/<albumId:\d+>/photos' => 'photos/create',

@@ -10,11 +10,13 @@ use app\controllers\PhotosController;
 use app\controllers\UsersController;
 use app\models\repository\AlbumRepository;
 use app\models\repository\PhotoRepository;
+use app\models\repository\RefreshTokenRepository;
 use app\models\repository\UserRepository;
 use app\models\service\AlbumService;
 use app\models\service\AuthService;
 use app\models\service\HealthService;
 use app\models\service\PhotoService;
+use app\models\service\RefreshTokenService;
 use app\models\service\UserService;
 use yii\di\Instance;
 
@@ -56,9 +58,18 @@ return [
                 'imageProcessor' => Instance::of(ImageProcessor::class),
             ],
         ],
+        // refresh-token lifetime in seconds (single source, from env)
+        RefreshTokenService::class => [
+            '__construct()' => [
+                'repository' => Instance::of(RefreshTokenRepository::class),
+                'ttl' => (int) (getenv('JWT_REFRESH_TTL') ?: 2592000),
+            ],
+        ],
         AuthService::class => [
             '__construct()' => [
                 'repository' => Instance::of(UserRepository::class),
+                'userService' => Instance::of(UserService::class),
+                'refreshTokens' => Instance::of(RefreshTokenService::class),
                 'jwt' => Instance::of(JwtService::class),
             ],
         ],

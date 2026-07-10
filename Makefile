@@ -5,6 +5,7 @@ WEB := $(DC) exec -T web
         migrate migrate-main migrate-test \
         migration-create migration-update \
         seed seed-clear \
+        refresh-token-prune \
         test test-unit test-functional test-one build \
         cs-check cs-fix stan
 
@@ -23,6 +24,7 @@ help:
 	@echo "  migration-update table=<table>   Diff a table against migration history"
 	@echo "  seed [count=N]       Seed the DB (default count: 10)"
 	@echo "  seed-clear           Clear seeded data"
+	@echo "  refresh-token-prune  Delete expired refresh tokens (run on a cron)"
 	@echo "  test                 Run the full test suite"
 	@echo "  test-unit            Run unit tests only"
 	@echo "  test-functional      Run functional tests only"
@@ -49,7 +51,7 @@ restart:
 
 rebuild:
 	$(DC) build web
-	$(DC) up -d web
+	$(DC) up -d web cron
 
 logs:
 	$(DC) logs -f
@@ -76,6 +78,9 @@ seed:
 
 seed-clear:
 	$(WEB) php yii seeder/clear
+
+refresh-token-prune:
+	$(WEB) php yii refresh-token/prune
 
 test:
 	$(WEB) php vendor/bin/codecept run

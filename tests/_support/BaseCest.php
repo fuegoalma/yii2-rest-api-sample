@@ -22,6 +22,7 @@ abstract class BaseCest
     {
         $db = \Yii::$app->db;
         $db->createCommand('SET FOREIGN_KEY_CHECKS=0')->execute();
+        $db->createCommand('TRUNCATE TABLE refresh_token')->execute();
         $db->createCommand('TRUNCATE TABLE photo')->execute();
         $db->createCommand('TRUNCATE TABLE album')->execute();
         $db->createCommand('TRUNCATE TABLE user')->execute();
@@ -85,6 +86,16 @@ abstract class BaseCest
             ->one();
 
         return $row ?: null;
+    }
+
+    protected function seeInTable(string $table, array $condition): void
+    {
+        $exists = (new Query())
+            ->from($table)
+            ->where($condition)
+            ->exists();
+
+        Assert::assertTrue($exists);
     }
 
     protected function dontSeeInTable(string $table, array $condition): void
