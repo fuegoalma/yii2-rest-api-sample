@@ -19,6 +19,8 @@ use yii\web\IdentityInterface;
  * @property null|string $auth_key
  * @property null|string $access_token
  * @property string $password_hash
+ * @property string $created_at
+ * @property string $updated_at
  *
  * @property Album[] $albums
  */
@@ -52,6 +54,8 @@ class User extends ActiveRecord implements IdentityInterface
             'auth_key' => 'Auth Key',
             'access_token' => 'Access Token',
             'password_hash' => 'Password Hash',
+            'created_at' => 'Created At',
+            'updated_at' => 'Updated At',
         ];
     }
 

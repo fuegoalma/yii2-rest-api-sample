@@ -14,6 +14,7 @@ use yii\db\ActiveRecord;
  * @property string $title
  * @property string $file_name
  * @property string $source
+ * @property string $created_at
  *
  * @property string|null $url
  * @property Album $album
@@ -55,6 +56,7 @@ class Photo extends ActiveRecord
             'title' => 'Title',
             'file_name' => 'File Name',
             'source' => 'Source',
+            'created_at' => 'Created At',
             'url' => 'Url',
         ];
     }

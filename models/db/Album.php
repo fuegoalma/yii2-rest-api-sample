@@ -11,6 +11,8 @@ use yii\db\ActiveRecord;
  * @property int $id
  * @property int $user_id
  * @property string $title
+ * @property string $created_at
+ * @property string $updated_at
  *
  * @property Photo[] $photos
  * @property User $user
@@ -44,6 +46,8 @@ class Album extends ActiveRecord
             'id' => 'ID',
             'user_id' => 'User ID',
             'title' => 'Title',
+            'created_at' => 'Created At',
+            'updated_at' => 'Updated At',
         ];
     }
 
