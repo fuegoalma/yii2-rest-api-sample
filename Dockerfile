@@ -9,7 +9,7 @@
 #          in, no volumes. Built by the CD pipeline (`target: prod`).
 
 # ---- base: shared runtime -------------------------------------------------
-FROM php:8.4-apache AS base
+FROM php:8.5-apache AS base
 
 # System deps + PHP extensions (imagick for photo uploads, pdo_mysql/mysqli for
 # DB; unzip/git let Composer extract dist packages).

@@ -71,7 +71,7 @@ The whole environment is defined by a single **multi-stage** [`Dockerfile`](Dock
 
 | Stage | Used by | What it contains |
 |-------|---------|------------------|
-| `base` | — | Shared runtime: PHP 8.4 + Apache, Imagick, `pdo_mysql`/`mysqli`, Composer |
+| `base` | — | Shared runtime: PHP 8.5 + Apache, Imagick, `pdo_mysql`/`mysqli`, Composer |
 | `dev`  | `docker-compose.yml` (`target: dev`) | Your code and `vendor/` are bind-mounted from the host, so edits are live and `make` commands run against your local files |
 | `prod` | CD pipeline (`target: prod`) | Self-contained image: production dependencies (`--no-dev`) and app code baked in, no volumes |
 
