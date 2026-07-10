@@ -3,6 +3,7 @@
 namespace app\models\repository\basic;
 
 use app\models\contract\repository\ApiRepositoryInterface;
+use app\models\dto\SearchCriteria;
 use yii\data\ActiveDataProvider;
 use yii\db\ActiveRecord;
 use yii\db\Exception;
@@ -25,16 +26,28 @@ abstract class BaseRepository implements ApiRepositoryInterface
         return [];
     }
 
-    public function getAllDP(array $params = []): ActiveDataProvider
+    public function getAllDP(?SearchCriteria $criteria = null): ActiveDataProvider
     {
+        $criteria ??= new SearchCriteria();
         $query = $this->modelClass()::find();
-        if (!empty($params)) {
-            $query->andWhere($params);
+
+        if ($criteria->scope !== []) {
+            $query->andWhere($criteria->scope);
         }
+        foreach ($criteria->filters as $condition) {
+            // andFilterWhere drops empty operands, so absent filters are ignored
+            $query->andFilterWhere($condition);
+        }
+        if ($criteria->orderBy !== []) {
+            $query->orderBy($criteria->orderBy);
+        }
+
         return new ActiveDataProvider([
             'query' => $query,
+            // sorting is resolved by the SearchForm, not from request params
+            'sort' => false,
             'pagination' => [
-                'pageSize' => static::PAGE_SIZE,
+                'pageSize' => $criteria->pageSize ?? static::PAGE_SIZE,
                 // Don't clamp an out-of-range page back to the last page —
                 // return an empty result set instead (proper REST behavior).
                 'validatePage' => false,

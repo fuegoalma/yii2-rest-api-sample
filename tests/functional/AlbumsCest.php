@@ -60,6 +60,70 @@ class AlbumsCest extends BaseCest
         $I->dontSeeResponseContainsJson(['photos' => []]);
     }
 
+    /**
+     * @throws Exception
+     */
+    public function testIndexFiltersByTitle(FunctionalTester $I): void
+    {
+        $userId = $this->insertUser();
+        $this->insertRecord('album', ['user_id' => $userId, 'title' => 'Holiday']);
+        $this->insertRecord('album', ['user_id' => $userId, 'title' => 'Work']);
+
+        $I->sendGet('/albums?title=Holi');
+        $I->seeResponseCodeIs(200);
+        $I->seeResponseContainsJson([
+            'data' => [
+                'items'      => [['title' => 'Holiday']],
+                'pagination' => ['total' => 1],
+            ],
+        ]);
+        $I->dontSeeResponseContainsJson(['title' => 'Work']);
+    }
+
+    /**
+     * @throws Exception
+     */
+    public function testIndexFiltersByUserId(FunctionalTester $I): void
+    {
+        $userOne = $this->insertUser(['email' => 'one@example.com']);
+        $userTwo = $this->insertUser(['email' => 'two@example.com']);
+        $this->insertRecord('album', ['user_id' => $userOne, 'title' => 'Mine']);
+        $this->insertRecord('album', ['user_id' => $userTwo, 'title' => 'Theirs']);
+
+        $I->sendGet('/albums?user_id=' . $userOne);
+        $I->seeResponseCodeIs(200);
+        $I->seeResponseContainsJson([
+            'data' => [
+                'items'      => [['title' => 'Mine']],
+                'pagination' => ['total' => 1],
+            ],
+        ]);
+        $I->dontSeeResponseContainsJson(['title' => 'Theirs']);
+    }
+
+    /**
+     * @throws Exception
+     */
+    public function testIndexSortsByTitleDescending(FunctionalTester $I): void
+    {
+        $userId = $this->insertUser();
+        $this->insertRecord('album', ['user_id' => $userId, 'title' => 'Apple']);
+        $this->insertRecord('album', ['user_id' => $userId, 'title' => 'Zebra']);
+
+        $I->sendGet('/albums?sort=-title');
+        $I->seeResponseCodeIs(200);
+
+        $response = json_decode($I->grabResponse(), true);
+        Assert::assertSame('Zebra', $response['data']['items'][0]['title']);
+    }
+
+    public function testIndexRejectsUnknownSortField(FunctionalTester $I): void
+    {
+        $I->sendGet('/albums?sort=secret');
+        $I->seeResponseCodeIs(422);
+        $I->seeResponseContainsJson(['success' => false]);
+    }
+
     // ==================== VIEW ====================
 
     /**
@@ -116,15 +180,14 @@ class AlbumsCest extends BaseCest
     // ==================== CREATE ====================
 
     /**
+     * The album is owned by the authenticated user, no user_id in the body.
+     *
      * @throws Exception
      */
-    public function testCreateReturnsCreatedAlbum(FunctionalTester $I): void
+    public function testCreateAssignsAlbumToAuthenticatedUser(FunctionalTester $I): void
     {
-        $userId = $this->insertUser();
-
         $I->sendPost('/albums', [
-            'user_id' => $userId,
-            'title'   => 'New Album',
+            'title' => 'New Album',
         ]);
 
         $I->seeResponseCodeIs(201);
@@ -134,44 +197,35 @@ class AlbumsCest extends BaseCest
                 'title' => 'New Album',
             ],
         ]);
-    }
 
-    public function testCreateFailsWithInvalidUserId(FunctionalTester $I): void
-    {
-        $I->sendPost('/albums', [
-            'user_id' => 99999,
-            'title'   => 'Bad Album',
-        ]);
-
-        $I->seeResponseCodeIs(422);
-        $I->seeResponseContainsJson([
-            'success' => false,
-        ]);
+        $row = $this->grabFromTable('album', ['title' => 'New Album']);
+        Assert::assertSame($this->authUserId, (int) $row['user_id']);
     }
 
     /**
+     * A client-supplied user_id must be ignored — ownership always comes
+     * from the authenticated user, never from the request body.
+     *
      * @throws Exception
      */
-    public function testCreateFailsWithMissingTitle(FunctionalTester $I): void
+    public function testCreateIgnoresClientSuppliedUserId(FunctionalTester $I): void
     {
-        $userId = $this->insertUser();
+        $otherUserId = $this->insertUser(['email' => 'other@example.com']);
 
         $I->sendPost('/albums', [
-            'user_id' => $userId,
+            'title'   => 'Sneaky Album',
+            'user_id' => $otherUserId,
         ]);
 
-        $I->seeResponseCodeIs(422);
-        $I->seeResponseContainsJson([
-            'success' => false,
-        ]);
+        $I->seeResponseCodeIs(201);
+
+        $row = $this->grabFromTable('album', ['title' => 'Sneaky Album']);
+        Assert::assertSame($this->authUserId, (int) $row['user_id']);
     }
 
-    public function testCreateFailsWithNonIntegerUserId(FunctionalTester $I): void
+    public function testCreateFailsWithMissingTitle(FunctionalTester $I): void
     {
-        $I->sendPost('/albums', [
-            'user_id' => 'not-a-number',
-            'title'   => 'Bad Album',
-        ]);
+        $I->sendPost('/albums', []);
 
         $I->seeResponseCodeIs(422);
         $I->seeResponseContainsJson([
@@ -207,6 +261,33 @@ class AlbumsCest extends BaseCest
 
         $row = $this->grabFromTable('album', ['id' => $albumId]);
         Assert::assertSame($userId, (int) $row['user_id']);
+    }
+
+    /**
+     * The owner is immutable: a user_id in the update body is ignored.
+     *
+     * @throws Exception
+     */
+    public function testUpdateCannotChangeOwner(FunctionalTester $I): void
+    {
+        $ownerId = $this->insertUser(['email' => 'owner@example.com']);
+        $otherId = $this->insertUser(['email' => 'other@example.com']);
+
+        $albumId = $this->insertRecord('album', [
+            'user_id' => $ownerId,
+            'title'   => 'Original',
+        ]);
+
+        $I->sendPut('/albums/' . $albumId, [
+            'title'   => 'Renamed',
+            'user_id' => $otherId,
+        ]);
+
+        $I->seeResponseCodeIs(200);
+
+        $row = $this->grabFromTable('album', ['id' => $albumId]);
+        Assert::assertSame($ownerId, (int) $row['user_id']); // owner unchanged
+        Assert::assertSame('Renamed', $row['title']);
     }
 
     /**

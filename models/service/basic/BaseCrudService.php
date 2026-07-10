@@ -4,6 +4,7 @@ namespace app\models\service\basic;
 
 use app\models\contract\repository\ApiRepositoryInterface;
 use app\models\contract\service\ApiServiceInterface;
+use app\models\dto\SearchCriteria;
 use yii\data\ActiveDataProvider;
 use yii\db\ActiveRecord;
 use yii\db\Exception;
@@ -22,9 +23,9 @@ abstract readonly class BaseCrudService implements ApiServiceInterface
      */
     abstract protected function modelClass(): string;
 
-    public function getAll(array $params = []): ActiveDataProvider
+    public function getAll(?SearchCriteria $criteria = null): ActiveDataProvider
     {
-        return $this->repository->getAllDP($params);
+        return $this->repository->getAllDP($criteria);
     }
 
     /**

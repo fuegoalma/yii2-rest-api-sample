@@ -4,6 +4,7 @@ namespace tests\unit;
 
 use app\components\ImageProcessor;
 use app\models\db\Photo;
+use app\models\dto\SearchCriteria;
 use app\models\repository\AlbumRepository;
 use app\models\repository\PhotoRepository;
 use app\models\service\PhotoService;
@@ -51,7 +52,9 @@ class PhotoServiceTest extends Unit
         $this->photoRepository
             ->expects($this->once())
             ->method('getAllDP')
-            ->with(['album_id' => 1])
+            ->with($this->callback(
+                fn (SearchCriteria $criteria) => $criteria->scope === ['album_id' => 1]
+            ))
             ->willReturn($dataProvider);
 
         $this->assertSame($dataProvider, $this->service->getByAlbum(1));

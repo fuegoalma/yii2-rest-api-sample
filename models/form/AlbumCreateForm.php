@@ -8,7 +8,7 @@ class AlbumCreateForm extends AlbumForm
     {
         return [
             ...parent::rules(),
-            [['user_id', 'title'], 'required'],
+            [['title'], 'required'],
         ];
     }
 }

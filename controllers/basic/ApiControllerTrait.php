@@ -64,12 +64,13 @@ trait ApiControllerTrait
     }
 
     /**
-     * Loads the request body into the form request; a validation
-     * failure turns the response into a 422.
+     * Loads request data into the form request; a validation failure turns
+     * the response into a 422. Defaults to the request body, but index
+     * endpoints pass the query params for their search forms.
      */
-    protected function validateRequest(ApiForm $form): bool
+    protected function validateRequest(ApiForm $form, ?array $data = null): bool
     {
-        $form->load(Yii::$app->request->bodyParams);
+        $form->load($data ?? Yii::$app->request->bodyParams);
         if (!$form->validate()) {
             Yii::$app->response->statusCode = 422;
             return false;

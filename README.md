@@ -377,4 +377,28 @@ All endpoints return a unified JSON response:
 }
 ```
 
-Use the `?page=N` query parameter to navigate pages.
+### List query parameters
+
+The list endpoints (`GET /users`, `GET /albums`, `GET /albums/{albumId}/photos`) accept optional query parameters for pagination, sorting and filtering:
+
+| Parameter | Description |
+|-----------|-------------|
+| `page` | Page number to return (default `1`). |
+| `per_page` | Items per page, `1`–`100` (default `20`). |
+| `sort` | Comma-separated attribute list; prefix an attribute with `-` for descending order (e.g. `sort=-created_at,title`). |
+| *filters* | One parameter per filterable attribute (see below). |
+
+Sortable / filterable attributes per resource:
+
+| Resource | Sortable | Filterable |
+|----------|----------|------------|
+| Users | `id`, `first_name`, `last_name`, `email`, `created_at`, `updated_at` | `first_name`, `last_name`, `email` (partial match) |
+| Albums | `id`, `user_id`, `title`, `created_at`, `updated_at` | `title` (partial match), `user_id` (exact) |
+| Photos | `id`, `title`, `created_at` | `title` (partial match) |
+
+An unknown `sort` attribute or an out-of-range `per_page` returns `422`. Example:
+
+```bash
+curl "http://localhost:8084/users?first_name=jo&sort=-created_at&per_page=50&page=2" \
+  -H "Authorization: Bearer <token>"
+```

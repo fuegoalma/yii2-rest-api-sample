@@ -6,6 +6,7 @@ use app\components\ImageProcessor;
 use app\models\contract\repository\ApiRepositoryInterface;
 use app\models\contract\service\PhotoServiceInterface;
 use app\models\db\Photo;
+use app\models\dto\SearchCriteria;
 use app\models\repository\AlbumRepository;
 use app\models\service\basic\BaseCrudService;
 use yii\base\Exception as BaseException;
@@ -32,11 +33,13 @@ readonly class PhotoService extends BaseCrudService implements PhotoServiceInter
     /**
      * @throws NotFoundHttpException when the album does not exist
      */
-    public function getByAlbum(int $albumId): ActiveDataProvider
+    public function getByAlbum(int $albumId, ?SearchCriteria $criteria = null): ActiveDataProvider
     {
         $this->requireAlbum($albumId);
 
-        return $this->repository->getAllDP(['album_id' => $albumId]);
+        $criteria = ($criteria ?? new SearchCriteria())->withScope(['album_id' => $albumId]);
+
+        return $this->repository->getAllDP($criteria);
     }
 
     /**

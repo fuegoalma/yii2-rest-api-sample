@@ -75,6 +75,75 @@ class UsersCest extends BaseCest
         ]);
     }
 
+    /**
+     * @throws Exception
+     */
+    public function testIndexFiltersByPartialName(FunctionalTester $I): void
+    {
+        $this->insertUser(); // John Doe; the 'Auth' user from _before must not match
+
+        $I->sendGet('/users?first_name=ohn');
+        $I->seeResponseCodeIs(200);
+        $I->seeResponseContainsJson([
+            'data' => [
+                'items'      => [['first_name' => 'John']],
+                'pagination' => ['total' => 1],
+            ],
+        ]);
+    }
+
+    /**
+     * @throws Exception
+     */
+    public function testIndexSortsByFieldDescending(FunctionalTester $I): void
+    {
+        $this->insertUser(['first_name' => 'Aaron', 'email' => 'aaron@example.com']);
+        $this->insertUser(['first_name' => 'Zoe', 'email' => 'zoe@example.com']);
+
+        $I->sendGet('/users?sort=-first_name');
+        $I->seeResponseCodeIs(200);
+
+        $response = json_decode($I->grabResponse(), true);
+        Assert::assertSame('Zoe', $response['data']['items'][0]['first_name']);
+    }
+
+    /**
+     * @throws Exception
+     */
+    public function testIndexRespectsPerPage(FunctionalTester $I): void
+    {
+        // two extra users + the 'Auth' user from _before = 3 total
+        $this->insertUser(['email' => 'a@example.com']);
+        $this->insertUser(['email' => 'b@example.com']);
+
+        $I->sendGet('/users?per_page=2');
+        $I->seeResponseCodeIs(200);
+        $I->seeResponseContainsJson([
+            'data' => [
+                'pagination' => [
+                    'total'     => 3,
+                    'per_page'  => 2,
+                    'last_page' => 2,
+                    'to'        => 2,
+                ],
+            ],
+        ]);
+    }
+
+    public function testIndexRejectsUnknownSortField(FunctionalTester $I): void
+    {
+        $I->sendGet('/users?sort=password_hash');
+        $I->seeResponseCodeIs(422);
+        $I->seeResponseContainsJson(['success' => false]);
+    }
+
+    public function testIndexRejectsTooLargePerPage(FunctionalTester $I): void
+    {
+        $I->sendGet('/users?per_page=9999');
+        $I->seeResponseCodeIs(422);
+        $I->seeResponseContainsJson(['success' => false]);
+    }
+
     // ==================== VIEW ====================
 
     /**

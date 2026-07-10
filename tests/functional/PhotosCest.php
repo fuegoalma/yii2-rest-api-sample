@@ -87,6 +87,56 @@ class PhotosCest extends BaseCest
         $I->seeResponseCodeIs(401);
     }
 
+    /**
+     * @throws Exception
+     */
+    public function testIndexFiltersPhotosByTitle(FunctionalTester $I): void
+    {
+        $albumId = $this->insertAlbum();
+        $this->insertPhoto($albumId, ['title' => 'Sunset']);
+        $this->insertPhoto($albumId, ['title' => 'Sunrise']);
+
+        $I->sendGet('/albums/' . $albumId . '/photos?title=Sunset');
+        $I->seeResponseCodeIs(200);
+        $I->seeResponseContainsJson([
+            'data' => [
+                'items'      => [['title' => 'Sunset']],
+                'pagination' => ['total' => 1],
+            ],
+        ]);
+        $I->dontSeeResponseContainsJson(['title' => 'Sunrise']);
+    }
+
+    /**
+     * @throws Exception
+     */
+    public function testIndexSortsPhotosByTitleDescending(FunctionalTester $I): void
+    {
+        $albumId = $this->insertAlbum();
+        $this->insertPhoto($albumId, ['title' => 'Alpha']);
+        $this->insertPhoto($albumId, ['title' => 'Omega']);
+
+        $I->sendGet('/albums/' . $albumId . '/photos?sort=-title');
+        $I->seeResponseCodeIs(200);
+
+        $response = json_decode($I->grabResponse(), true);
+        Assert::assertSame('Omega', $response['data']['items'][0]['title']);
+    }
+
+    /**
+     * album_id is deliberately not client-sortable (it is the forced scope).
+     *
+     * @throws Exception
+     */
+    public function testIndexRejectsUnknownSortField(FunctionalTester $I): void
+    {
+        $albumId = $this->insertAlbum();
+
+        $I->sendGet('/albums/' . $albumId . '/photos?sort=album_id');
+        $I->seeResponseCodeIs(422);
+        $I->seeResponseContainsJson(['success' => false]);
+    }
+
     public function testFlatPhotoListingIsNotAllowed(FunctionalTester $I): void
     {
         // there is no way to list photos without an album:
