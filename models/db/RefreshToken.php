@@ -45,12 +45,6 @@ class RefreshToken extends ActiveRecord
         return strtotime($this->expires_at) <= time();
     }
 
-    /** A token that can still be exchanged: neither revoked nor expired. */
-    public function isActive(): bool
-    {
-        return !$this->isRevoked() && !$this->isExpired();
-    }
-
     public function getUser(): ActiveQuery
     {
         return $this->hasOne(User::class, ['id' => 'user_id']);
