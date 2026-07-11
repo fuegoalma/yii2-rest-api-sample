@@ -25,4 +25,11 @@ interface AlbumServiceInterface extends ApiServiceInterface
      * Lifts the soft-delete flag and clears the stored reason.
      */
     public function restore(int $id): ActiveRecord;
+
+    /**
+     * Permanently removes every album owned by the user (photos and on-disk
+     * files included), soft-deleted ones as well. Used when the owning account
+     * is deleted.
+     */
+    public function deleteByUser(int $userId): void;
 }

@@ -57,9 +57,7 @@ return [
         UserService::class => [
             '__construct()' => [
                 'repository' => Instance::of(UserRepository::class),
-                'albumRepository' => Instance::of(AlbumRepository::class),
-                'photoRepository' => Instance::of(PhotoRepository::class),
-                'imageProcessor' => Instance::of(ImageProcessor::class),
+                'albumService' => Instance::of(AlbumService::class),
             ],
         ],
         AlbumService::class => [

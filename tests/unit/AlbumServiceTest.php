@@ -129,9 +129,8 @@ class AlbumServiceTest extends Unit
 
         $this->repositoryMock
             ->expects($this->once())
-            ->method('delete')
-            ->with($album)
-            ->willReturn(true);
+            ->method('deleteByIds')
+            ->with([1]);
 
         // permanent deletion must not leave the uploaded files behind
         $this->imageProcessorMock
@@ -140,6 +139,58 @@ class AlbumServiceTest extends Unit
             ->with('1');
 
         $this->service->delete(1);
+    }
+
+    /**
+     * @throws \Throwable
+     */
+    public function testDeleteByUserWipesEveryOwnedAlbumPhotosAndFiles(): void
+    {
+        // soft-deleted albums are included — findIdsByUser returns them all
+        $this->repositoryMock
+            ->expects($this->once())
+            ->method('findIdsByUser')
+            ->with(7)
+            ->willReturn([10, 20]);
+
+        $this->photoRepositoryMock
+            ->expects($this->once())
+            ->method('deleteByAlbumIds')
+            ->with([10, 20]);
+
+        $this->repositoryMock
+            ->expects($this->once())
+            ->method('deleteByIds')
+            ->with([10, 20]);
+
+        $this->imageProcessorMock
+            ->expects($this->exactly(2))
+            ->method('deleteDir')
+            ->willReturnCallback(function (string $subDir): void {
+                $this->assertContains($subDir, ['10', '20']);
+            });
+
+        $this->service->deleteByUser(7);
+    }
+
+    /**
+     * A user with no albums must not trigger any teardown work.
+     *
+     * @throws \Throwable
+     */
+    public function testDeleteByUserWithNoAlbumsIsNoOp(): void
+    {
+        $this->repositoryMock
+            ->expects($this->once())
+            ->method('findIdsByUser')
+            ->with(7)
+            ->willReturn([]);
+
+        $this->photoRepositoryMock->expects($this->never())->method('deleteByAlbumIds');
+        $this->repositoryMock->expects($this->never())->method('deleteByIds');
+        $this->imageProcessorMock->expects($this->never())->method('deleteDir');
+
+        $this->service->deleteByUser(7);
     }
 
     /**
@@ -156,7 +207,7 @@ class AlbumServiceTest extends Unit
 
         $this->repositoryMock
             ->expects($this->never())
-            ->method('delete');
+            ->method('deleteByIds');
 
         $this->expectException(NotFoundHttpException::class);
         $this->service->delete(99999);

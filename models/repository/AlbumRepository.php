@@ -47,10 +47,14 @@ class AlbumRepository extends BaseRepository
     }
 
     /**
-     * Batch-deletes every album owned by the user.
+     * Batch-deletes the given album rows.
      */
-    public function deleteByUser(int $userId): int
+    public function deleteByIds(array $ids): int
     {
-        return $this->deleteInBatches(['user_id' => $userId]);
+        if ($ids === []) {
+            return 0;
+        }
+
+        return $this->deleteInBatches(['id' => $ids]);
     }
 }
