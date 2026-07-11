@@ -30,4 +30,27 @@ class AlbumRepository extends BaseRepository
     {
         return Album::findAll(['title' => $titles]);
     }
+
+    /**
+     * Ids of every album owned by the user — soft-deleted ones included (the
+     * `albums` relation hides those, but a full account wipe must take them
+     * too). Used to scope photo/file cleanup before the albums are deleted.
+     *
+     * @return int[]
+     */
+    public function findIdsByUser(int $userId): array
+    {
+        return array_map(
+            'intval',
+            Album::find()->select('id')->where(['user_id' => $userId])->column()
+        );
+    }
+
+    /**
+     * Batch-deletes every album owned by the user.
+     */
+    public function deleteByUser(int $userId): int
+    {
+        return $this->deleteInBatches(['user_id' => $userId]);
+    }
 }

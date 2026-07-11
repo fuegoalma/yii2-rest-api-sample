@@ -7,6 +7,7 @@ use app\models\contract\repository\ApiRepositoryInterface;
 use app\models\contract\service\AlbumServiceInterface;
 use app\models\db\Album;
 use app\models\dto\SearchCriteria;
+use app\models\repository\PhotoRepository;
 use app\models\service\basic\BaseCrudService;
 use yii\data\ActiveDataProvider;
 use yii\db\ActiveRecord;
@@ -16,6 +17,7 @@ readonly class AlbumService extends BaseCrudService implements AlbumServiceInter
 {
     public function __construct(
         ApiRepositoryInterface $repository,
+        private PhotoRepository $photoRepository,
         private ImageProcessor $imageProcessor,
     ) {
         parent::__construct($repository);
@@ -35,9 +37,11 @@ readonly class AlbumService extends BaseCrudService implements AlbumServiceInter
     }
 
     /**
-     * Permanent deletion. The photo rows go with the album via the FK
-     * cascade; the album's upload directory is removed so the files don't
-     * outlive the records (seeded demo images live elsewhere and are shared).
+     * Permanent deletion. Photos are removed first in batches (so the FK
+     * cascade never has to delete a large photo set in a single statement),
+     * then the album row, then the album's upload directory — files last, once
+     * the rows are gone, so nothing points at deleted files. Seeded demo images
+     * live elsewhere and are shared, so removing the album directory is safe.
      *
      * @throws NotFoundHttpException
      * @throws \Throwable
@@ -47,6 +51,7 @@ readonly class AlbumService extends BaseCrudService implements AlbumServiceInter
         /** @var Album $album */
         $album = $this->findOrFail($id);
 
+        $this->photoRepository->deleteByAlbumIds([$album->id]);
         $this->repository->delete($album);
         $this->imageProcessor->deleteDir((string) $album->id);
     }

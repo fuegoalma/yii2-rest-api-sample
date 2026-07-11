@@ -2,6 +2,9 @@
 
 namespace tests\unit;
 
+use app\components\ImageProcessor;
+use app\models\repository\AlbumRepository;
+use app\models\repository\PhotoRepository;
 use app\models\repository\UserRepository;
 use app\models\db\User;
 use app\models\service\UserService;
@@ -14,6 +17,9 @@ class UserServiceTest extends Unit
 {
     private UserService $service;
     private UserRepository $repositoryMock;
+    private AlbumRepository $albumRepositoryMock;
+    private PhotoRepository $photoRepositoryMock;
+    private ImageProcessor $imageProcessorMock;
 
     /**
      * @throws Exception
@@ -22,7 +28,15 @@ class UserServiceTest extends Unit
     {
         parent::setUp();
         $this->repositoryMock = $this->createMock(UserRepository::class);
-        $this->service = new UserService($this->repositoryMock);
+        $this->albumRepositoryMock = $this->createMock(AlbumRepository::class);
+        $this->photoRepositoryMock = $this->createMock(PhotoRepository::class);
+        $this->imageProcessorMock = $this->createMock(ImageProcessor::class);
+        $this->service = new UserService(
+            $this->repositoryMock,
+            $this->albumRepositoryMock,
+            $this->photoRepositoryMock,
+            $this->imageProcessorMock,
+        );
     }
 
     // ==================== findOrFail ====================
@@ -180,7 +194,7 @@ class UserServiceTest extends Unit
      * @throws StaleObjectException
      * @throws NotFoundHttpException
      */
-    public function testDeleteCallsRepositoryDelete(): void
+    public function testDeleteCascadesOwnedAlbumsPhotosAndFiles(): void
     {
         $user = new User();
         $user->id = 1;
@@ -191,11 +205,36 @@ class UserServiceTest extends Unit
             ->with(1)
             ->willReturn($user);
 
+        // photos and files are cleaned up per the user's albums
+        $this->albumRepositoryMock
+            ->expects($this->once())
+            ->method('findIdsByUser')
+            ->with(1)
+            ->willReturn([10, 20]);
+
+        $this->photoRepositoryMock
+            ->expects($this->once())
+            ->method('deleteByAlbumIds')
+            ->with([10, 20]);
+
+        $this->albumRepositoryMock
+            ->expects($this->once())
+            ->method('deleteByUser')
+            ->with(1);
+
         $this->repositoryMock
             ->expects($this->once())
             ->method('delete')
             ->with($user)
             ->willReturn(true);
+
+        // the on-disk upload directory of every album is removed
+        $this->imageProcessorMock
+            ->expects($this->exactly(2))
+            ->method('deleteDir')
+            ->willReturnCallback(function (string $subDir): void {
+                $this->assertContains($subDir, ['10', '20']);
+            });
 
         $this->service->delete(1);
     }

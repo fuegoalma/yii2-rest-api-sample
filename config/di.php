@@ -55,11 +55,17 @@ return [
         // permission checks for the current user; concrete repositories autowire
         AccessControlInterface::class => AccessControlService::class,
         UserService::class => [
-            '__construct()' => ['repository' => Instance::of(UserRepository::class)],
+            '__construct()' => [
+                'repository' => Instance::of(UserRepository::class),
+                'albumRepository' => Instance::of(AlbumRepository::class),
+                'photoRepository' => Instance::of(PhotoRepository::class),
+                'imageProcessor' => Instance::of(ImageProcessor::class),
+            ],
         ],
         AlbumService::class => [
             '__construct()' => [
                 'repository' => Instance::of(AlbumRepository::class),
+                'photoRepository' => Instance::of(PhotoRepository::class),
                 'imageProcessor' => Instance::of(ImageProcessor::class),
             ],
         ],

@@ -773,6 +773,61 @@ class UsersCest extends BaseCest
         $this->dontSeeInTable('user', ['id' => $userId]);
     }
 
+    /**
+     * Deleting a user must take everything they own with them: their albums
+     * (soft-deleted ones included), the photos in those albums, and the upload
+     * directories on disk.
+     *
+     * @throws Exception
+     */
+    public function testDeleteCascadesAlbumsPhotosAndFiles(FunctionalTester $I): void
+    {
+        $userId = $this->insertUser([
+            'first_name' => 'Owner',
+            'last_name'  => 'ToWipe',
+            'email'      => 'owner.wipe@example.com',
+        ]);
+
+        $liveAlbumId = $this->insertRecord('album', ['user_id' => $userId, 'title' => 'Live']);
+        $softAlbumId = $this->insertRecord('album', [
+            'user_id'    => $userId,
+            'title'      => 'Soft',
+            'is_deleted' => 1,
+        ]);
+
+        foreach ([$liveAlbumId, $softAlbumId] as $albumId) {
+            $this->insertRecord('photo', [
+                'album_id'  => $albumId,
+                'title'     => 'Photo ' . $albumId,
+                'file_name' => 'file.webp',
+                'source'    => 'photo',
+            ]);
+            $this->createAlbumFile($albumId, 'file.webp');
+        }
+
+        $I->sendDelete('/users/' . $userId);
+        $I->seeResponseCodeIs(204);
+
+        $this->dontSeeInTable('user', ['id' => $userId]);
+        $this->dontSeeInTable('album', ['user_id' => $userId]);
+        $this->dontSeeInTable('photo', ['album_id' => [$liveAlbumId, $softAlbumId]]);
+
+        Assert::assertDirectoryDoesNotExist($this->albumDir($liveAlbumId));
+        Assert::assertDirectoryDoesNotExist($this->albumDir($softAlbumId));
+    }
+
+    private function albumDir(int $albumId): string
+    {
+        return Yii::getAlias('@runtime/uploads/albums/' . $albumId);
+    }
+
+    private function createAlbumFile(int $albumId, string $fileName): void
+    {
+        $dir = $this->albumDir($albumId);
+        \yii\helpers\FileHelper::createDirectory($dir);
+        file_put_contents($dir . '/' . $fileName, 'x');
+    }
+
     public function testDeleteReturnsNotFoundForInvalidId(FunctionalTester $I): void
     {
         $I->sendDelete('/users/99999');

@@ -4,6 +4,7 @@ namespace tests\unit;
 
 use app\components\ImageProcessor;
 use app\models\repository\AlbumRepository;
+use app\models\repository\PhotoRepository;
 use app\models\db\Album;
 use app\models\dto\SearchCriteria;
 use app\models\service\AlbumService;
@@ -17,6 +18,7 @@ class AlbumServiceTest extends Unit
 {
     private AlbumService $service;
     private AlbumRepository $repositoryMock;
+    private PhotoRepository $photoRepositoryMock;
     private ImageProcessor $imageProcessorMock;
 
     /**
@@ -26,8 +28,13 @@ class AlbumServiceTest extends Unit
     {
         parent::setUp();
         $this->repositoryMock = $this->createMock(AlbumRepository::class);
+        $this->photoRepositoryMock = $this->createMock(PhotoRepository::class);
         $this->imageProcessorMock = $this->createMock(ImageProcessor::class);
-        $this->service = new AlbumService($this->repositoryMock, $this->imageProcessorMock);
+        $this->service = new AlbumService(
+            $this->repositoryMock,
+            $this->photoRepositoryMock,
+            $this->imageProcessorMock,
+        );
     }
 
     // ==================== findOrFail ====================
@@ -103,7 +110,7 @@ class AlbumServiceTest extends Unit
      * @throws StaleObjectException
      * @throws NotFoundHttpException
      */
-    public function testDeleteCallsRepositoryDeleteAndRemovesUploads(): void
+    public function testDeleteRemovesPhotosAlbumAndUploads(): void
     {
         $album = new Album();
         $album->id = 1;
@@ -113,6 +120,12 @@ class AlbumServiceTest extends Unit
             ->method('findById')
             ->with(1)
             ->willReturn($album);
+
+        // photos are batch-deleted before the album, not left to the FK cascade
+        $this->photoRepositoryMock
+            ->expects($this->once())
+            ->method('deleteByAlbumIds')
+            ->with([1]);
 
         $this->repositoryMock
             ->expects($this->once())

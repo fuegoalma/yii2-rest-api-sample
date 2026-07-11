@@ -5,7 +5,9 @@ namespace tests\functional;
 use app\components\PhotoUrlBuilder;
 use FunctionalTester;
 use PHPUnit\Framework\Assert;
+use Yii;
 use yii\db\Exception;
+use yii\helpers\FileHelper;
 
 class AlbumsCest extends BaseCest
 {
@@ -494,6 +496,40 @@ class AlbumsCest extends BaseCest
         $row = $this->grabFromTable('album', ['id' => $albumId]);
         Assert::assertSame(1, (int) $row['is_deleted']);
         Assert::assertSame('spam', $row['delete_reason']);
+    }
+
+    /**
+     * Pseudo-deletion must never cascade: the photos and their on-disk files
+     * have to survive so a later restore brings the album back intact.
+     *
+     * @throws Exception
+     */
+    public function testSoftDeleteKeepsPhotosAndFiles(FunctionalTester $I): void
+    {
+        $albumId = $this->insertRecord('album', [
+            'user_id' => $this->insertUser(['email' => 'owner@example.com']),
+            'title'   => 'Keep My Photos',
+        ]);
+        $photoId = $this->insertRecord('photo', [
+            'album_id'  => $albumId,
+            'title'     => 'Kept',
+            'file_name' => 'file.webp',
+            'source'    => 'photo',
+        ]);
+
+        $dir = Yii::getAlias('@runtime/uploads/albums/' . $albumId);
+        FileHelper::createDirectory($dir);
+        file_put_contents($dir . '/file.webp', 'x');
+
+        $this->actingAsUserWithRole($I, 'moderator');
+
+        $I->sendDelete('/albums/' . $albumId, ['reason' => 'spam']);
+        $I->seeResponseCodeIs(204);
+
+        // album flagged, but nothing underneath it was touched
+        $this->seeInTable('album', ['id' => $albumId, 'is_deleted' => 1]);
+        $this->seeInTable('photo', ['id' => $photoId]);
+        Assert::assertFileExists($dir . '/file.webp');
     }
 
     /**

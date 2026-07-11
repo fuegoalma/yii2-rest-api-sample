@@ -14,6 +14,12 @@ abstract class BaseRepository implements ApiRepositoryInterface
     protected const PAGE_SIZE = 20;
 
     /**
+     * Chunk size for {@see deleteInBatches()}. Kept deliberately small so each
+     * delete statement is short and releases its locks quickly.
+     */
+    protected const DELETE_BATCH_SIZE = 500;
+
+    /**
      * @return class-string<ActiveRecord>
      */
     abstract protected function modelClass(): string;
@@ -78,6 +84,41 @@ abstract class BaseRepository implements ApiRepositoryInterface
     public function delete(ActiveRecord $model): bool
     {
         return (bool) $model->delete();
+    }
+
+    /**
+     * Deletes every row matching $condition in fixed-size chunks. Each chunk
+     * selects up to $batchSize primary keys and removes them with the model's
+     * own {@see ActiveRecord::deleteAll()} — one short, self-committing DELETE
+     * per batch, so locks are taken and released per chunk instead of being
+     * held for a single table-wide delete. That is what keeps a large table
+     * responsive during bulk removal. The trade-off is that the whole operation
+     * is not atomic; callers must be able to tolerate a partial delete (i.e.
+     * safely retry).
+     *
+     * @param array|string $condition a non-empty query-builder WHERE condition
+     * @return int total number of rows deleted
+     */
+    protected function deleteInBatches(array|string $condition, int $batchSize = self::DELETE_BATCH_SIZE): int
+    {
+        $modelClass = $this->modelClass();
+        $total = 0;
+
+        while (true) {
+            $ids = $modelClass::find()
+                ->select('id')
+                ->where($condition)
+                ->limit($batchSize)
+                ->column();
+
+            if ($ids === []) {
+                break;
+            }
+
+            $total += $modelClass::deleteAll(['id' => $ids]);
+        }
+
+        return $total;
     }
 
     /**
