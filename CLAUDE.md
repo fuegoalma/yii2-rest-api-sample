@@ -6,6 +6,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Yii2 (basic template) REST API for users, albums, and photos. PHP 8.5, MySQL 8, everything runs inside Docker (Compose **v2** — invoke it as `docker compose`, with a space, not the legacy `docker-compose`) — all PHP/console commands must be executed through `docker compose exec web` (use the `Makefile` shortcuts below, e.g. `make test` instead of typing the full command). The environment is defined by a single multi-stage `Dockerfile` (`base` → `dev` → `prod`); the **Imagick** extension (used for photo uploads) plus `pdo_mysql`/`mysqli`/`pcntl` (the queue worker's graceful shutdown) and Composer are baked into the `base` stage. `docker-compose.yml` builds the `dev` stage (`target: dev`) and bind-mounts the project directory, so `composer install` and the code live on the host and container startup is instant; the CD pipeline builds the self-contained `prod` stage. Keep the `Dockerfile`'s `base` stage as the single source of truth for the runtime — don't reintroduce runtime extension installs in compose. Alongside `web` there is a **`cron`** service that reuses the same image (shared `image: yii-app:dev` name → built once) but runs the cron daemon instead of Apache: its entrypoint (`docker/cron/entrypoint.sh`) snapshots the container env into `/etc/container-env` (cron jobs run with a bare environment) and installs the versioned schedule `docker/cron/crontab` into `/etc/cron.d/app-cron`. That crontab is the single place to declare scheduled console commands — currently a daily `refresh-token/prune`; each line sources the env and logs to the container stdout (`docker compose logs cron`). There is also a **`worker`** service (same shared image) whose entrypoint is the long-running queue worker `yii queue/listen` instead of Apache/cron, with `restart: unless-stopped` — see **Background jobs (queue)**. `make rebuild` builds the image and (re)starts `web`, `cron` and `worker`.
 
+## Codebase Navigation (CodeGraph)
+
+This repo has a [CodeGraph](https://github.com/colbymchenry/codegraph) index (`.codegraph/`, local-only, gitignored). **Prefer it over `grep`/`find`/reading whole files** when the question is "where is X" / "who calls X" / "what does X touch" — it answers directly from the index instead of spending tokens scanning file contents:
+
+- `codegraph query "<name>"` — find a symbol (class/method/interface/file) by name.
+- `codegraph explore "<question>"` — relevant symbols' source + call paths for an area, in one shot (e.g. `codegraph explore "how are refresh tokens rotated"`).
+- `codegraph node <name>` — one symbol's source plus its callers/callees.
+- `codegraph callers <symbol>` / `codegraph callees <symbol>` — who calls a method / what it calls.
+- `codegraph impact <symbol>` — what else would be affected by changing a symbol (use before refactoring a shared class like `BaseCrudService`, `ApiController`, or a contract in `models/contract/`).
+- `codegraph affected <files...>` — which test files cover a set of changed source files.
+
+Run `codegraph sync` after a batch of edits (or `codegraph status` to check if the index is stale) so later lookups reflect the current code. Still use `Read`/`Edit` for the actual file content once you know where to look — CodeGraph replaces the *searching*, not the reading.
+
 **All code MUST follow SOLID, DRY, and KISS.** Non-negotiable for every change: no duplicated logic (extract shared code into base classes/traits/helpers, including tests), depend on interfaces from `models/contract/` rather than concretions, keep each class to a single responsibility, and prefer the simplest design that works — don't add abstractions for hypothetical future needs. When touching existing code that violates these principles, fix the violation rather than extending it.
 
 ## Commands

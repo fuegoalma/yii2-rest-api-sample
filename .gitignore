@@ -38,6 +38,15 @@ tests/_support/_generated
 #env
 .env
 
+# third-party AI-agent skills installed locally (caveman, etc.) — not project code.
+# The installer scatters the same files across four locations; ignore all of
+# them but leave .claude/ itself un-ignored in case legitimate project-level
+# Claude Code config (settings.json, commands/) is added there later.
+.agents/
+.claude/skills/
+agent/
+skills-lock.json
+
 # Yii runtime files
 /runtime/*
 !/runtime/.gitkeep

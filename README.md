@@ -277,6 +277,35 @@ make stan
 
 ---
 
+## AI-Assisted Development (CodeGraph)
+
+The repo is indexed with [CodeGraph](https://github.com/colbymchenry/codegraph) — a local knowledge graph of symbols, calls and dependencies — so AI coding assistants (e.g. Claude Code) can look up "where is X" / "who calls X" / "what breaks if I change X" directly from the index instead of grepping or reading whole files. **It's required tooling for this repo**: `CLAUDE.md` instructs every AI assistant to prefer it over `grep`/`find`/reading whole files for "where is X" style questions, so install it before doing any AI-assisted work here. The index lives in `.codegraph/` (local to each machine, gitignored) and is rebuilt with:
+
+```bash
+codegraph init      # first-time index for a fresh checkout
+codegraph sync       # refresh after a batch of local changes
+codegraph status     # check whether the index is stale
+```
+
+This is a local dev-tooling aid, not part of the running application — nothing under `.codegraph/` is deployed or required to run the app.
+
+#### Installing CodeGraph
+
+```bash
+# macOS/Linux — self-contained binary, no Node.js required
+curl -fsSL https://raw.githubusercontent.com/colbymchenry/codegraph/main/install.sh | sh
+
+# Windows (PowerShell)
+irm https://raw.githubusercontent.com/colbymchenry/codegraph/main/install.ps1 | iex
+
+# npm (any platform with Node.js)
+npm i -g @colbymchenry/codegraph
+```
+
+Verify with `codegraph --version`, then run `codegraph init` from the project root to build the initial index.
+
+---
+
 ## Continuous Integration & Delivery
 
 The project ships a two-stage GitHub Actions pipeline — the two badges at the top of this README reflect the latest runs on the default branch:
