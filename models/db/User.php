@@ -3,6 +3,7 @@
 namespace app\models\db;
 
 use app\components\JwtService;
+use app\models\contract\OwnableInterface;
 use Yii;
 use yii\base\Exception;
 use yii\db\ActiveQuery;
@@ -24,11 +25,17 @@ use yii\web\IdentityInterface;
  *
  * @property Album[] $albums
  */
-class User extends ActiveRecord implements IdentityInterface
+class User extends ActiveRecord implements IdentityInterface, OwnableInterface
 {
     public static function tableName(): string
     {
         return 'user';
+    }
+
+    /** a user "owns" their own account — this is what allows editing one's own profile */
+    public function getOwnerId(): int
+    {
+        return (int) $this->id;
     }
 
     public function rules(): array
@@ -123,8 +130,13 @@ class User extends ActiveRecord implements IdentityInterface
         return $this->auth_key;
     }
 
+    /**
+     * Soft-deleted albums are pending review and hidden everywhere,
+     * so the relation exposes only the live ones.
+     */
     public function getAlbums(): ActiveQuery
     {
-        return $this->hasMany(Album::class, ['user_id' => 'id']);
+        return $this->hasMany(Album::class, ['user_id' => 'id'])
+            ->andWhere(['is_deleted' => 0]);
     }
 }

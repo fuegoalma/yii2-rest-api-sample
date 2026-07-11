@@ -50,6 +50,10 @@ return [
         'request' => [
             'cookieValidationKey' => 'test',
             'enableCsrfValidation' => false,
+            // mirror production so JSON request bodies are parsed into bodyParams
+            'parsers' => [
+                'application/json' => 'yii\web\JsonParser',
+            ],
         ],
     ],
     'params' => $params,

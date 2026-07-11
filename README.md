@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/fuegoalma/yii2-rest-api-sample/actions/workflows/ci.yml/badge.svg)](https://github.com/fuegoalma/yii2-rest-api-sample/actions/workflows/ci.yml) [![CD](https://github.com/fuegoalma/yii2-rest-api-sample/actions/workflows/cd.yml/badge.svg)](https://github.com/fuegoalma/yii2-rest-api-sample/actions/workflows/cd.yml)
 
-A REST API built with Yii2 following SOLID, DRY, and KISS principles. Implements a service/repository architecture with a unified response format.
+A REST API built with Yii2 following SOLID, DRY, and KISS principles. Implements a service/repository architecture with a unified response format, JWT authentication, and a flat, role-based access control (**RBAC**) layer.
 
 The project ships a full **CI/CD** pipeline on [GitHub Actions](.github/workflows/):
 
@@ -318,10 +318,10 @@ Both return the same shape (register responds with `201`, login with `200`):
 }
 ```
 
-Send the access token with every other request:
+Send the access token with every other request (`/users/me` works for any authenticated user; most other endpoints are gated by [role](#authorization-rbac)):
 
 ```bash
-curl http://localhost:8084/users -H 'Authorization: Bearer <access_token>'
+curl http://localhost:8084/users/me -H 'Authorization: Bearer <access_token>'
 ```
 
 Once the access token expires, **refresh** it. Refresh tokens **rotate**: each one is single-use and the response carries a new refresh token to replace it. Reusing an already-spent refresh token is treated as a leak — the whole session chain is revoked and you must log in again.
@@ -350,29 +350,101 @@ Requests without a valid (unexpired, correctly signed) access token get a `401` 
 
 ---
 
+## Authorization (RBAC)
+
+Authentication proves *who* you are; authorization decides *what* you may do. Access control here is **flat** — there is no role hierarchy or inheritance. A **role** is just a named set of permissions, a user may hold **several** roles, and their effective permissions are the **union** of all of them. A caller lacking a permission gets a `403`.
+
+**A freshly registered account has no roles — it is a "base user".** Registration and admin-created accounts assign no role. Base abilities are granted implicitly to *every* authenticated user by **ownership**, not by a role: anyone can create albums, and view/update/delete **their own** albums and photos and edit **their own** profile. A role is therefore an *upgrade* stacked on top of the base — it only ever adds power, never removes it (an admin keeps every base ability over their own content).
+
+### Roles
+
+Three roles are seeded (they cannot be deleted or renamed, but a super admin can re-compose their permissions):
+
+| Role | What it adds on top of the base user |
+|------|--------------------------------------|
+| `moderator` | See all users; manage **any** album but delete only via **soft-delete** (pending admin review); full access to **any** photo, including permanent deletion |
+| `admin` | Full user CRUD; permanently delete or restore **any** album; list roles and **assign** them to users |
+| `super_admin` | Everything, including composing custom roles and viewing the permission catalog |
+
+Permissions are code-checked and therefore defined **only in migrations** (there is no create/update/delete for them) — the `GET /permissions` catalog exists so a super admin can compose new roles from it.
+
+### Appointing the first super admin
+
+Every role-management action needs an existing super admin, so the very first one is appointed from the console (idempotent):
+
+```bash
+make rbac-assign role=super_admin email=user@example.com
+```
+
+### Two safety rules
+
+- **Anti-escalation** — an admin (who can *assign* roles but not *manage* them) can hand out unprivileged roles but can never grant or revoke a role carrying `role.manage`/`role.assign`. So an admin cannot mint or demote another admin/super admin — only a super admin can.
+- **Last-role-manager invariant** — no operation (deleting a role, re-composing it, changing assignments, deleting a user) may leave the system with **zero** users able to manage roles. Such an attempt returns `409` (e.g. the last super admin trying to strip their own role).
+
+---
+
 ## API Endpoints
 
-All endpoints below require the `Authorization: Bearer <token>` header.
+All endpoints below require the `Authorization: Bearer <token>` header. The **Who can access** column summarises the RBAC gate — "base user" means any authenticated caller (see [Authorization](#authorization-rbac)).
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/users` | List all users |
-| GET | `/users/{id}` | Get user with albums |
-| POST | `/users` | Create a user |
-| PUT | `/users/{id}` | Update a user |
-| DELETE | `/users/{id}` | Delete a user |
-| GET | `/albums` | List all albums |
-| GET | `/albums/{id}` | Get album with photos and user info |
-| POST | `/albums` | Create an album |
-| PUT | `/albums/{id}` | Update an album |
-| DELETE | `/albums/{id}` | Delete an album |
-| GET | `/albums/{albumId}/photos` | List the photos of an album |
-| POST | `/albums/{albumId}/photos` | Upload a photo to an album (`multipart/form-data`) |
-| GET | `/photos/{id}` | Get a single photo |
-| PUT | `/photos/{id}` | Update a photo (title only) |
-| DELETE | `/photos/{id}` | Delete a photo (removes its file) |
+### The current user
+
+| Method | Endpoint | Description | Who can access |
+|--------|----------|-------------|----------------|
+| GET | `/users/me` | The authenticated user's profile + their role names | Base user |
+| GET | `/users/me/permissions` | The caller's roles + the union of their permissions (so a client can build its UI) | Base user |
+
+### Users
+
+| Method | Endpoint | Description | Who can access |
+|--------|----------|-------------|----------------|
+| GET | `/users` | List all users | `moderator`+ |
+| GET | `/users/{id}` | Get user with albums | `moderator`+ |
+| POST | `/users` | Create a user (assigned no role) | `admin`+ |
+| PUT | `/users/{id}` | Update a user | Owner (self) or `admin`+ |
+| DELETE | `/users/{id}` | Delete a user | `admin`+ |
+| GET | `/users/{id}/roles` | List a user's roles | `admin`+ |
+| PUT | `/users/{id}/roles` | Replace a user's role set (`{"roles": [...]}`, empty array revokes all) | `admin`+ |
+
+### Albums
+
+| Method | Endpoint | Description | Who can access |
+|--------|----------|-------------|----------------|
+| GET | `/albums/my` | List **the caller's own** albums | Base user |
+| GET | `/albums` | List all albums (the admin/moderator view) | `moderator`+ |
+| GET | `/albums/{id}` | Get album with photos and user info | Owner or `moderator`+ |
+| POST | `/albums` | Create an album (owned by the caller) | Base user |
+| PUT | `/albums/{id}` | Update an album | Owner or `moderator`+ |
+| DELETE | `/albums/{id}` | Delete an album — see below | Owner, `moderator` or `admin`+ |
+| POST | `/albums/{id}/restore` | Restore a soft-deleted album | `admin`+ |
+
+### Photos
+
+| Method | Endpoint | Description | Who can access |
+|--------|----------|-------------|----------------|
+| GET | `/albums/{albumId}/photos` | List the photos of an album | Album owner or `moderator`+ |
+| POST | `/albums/{albumId}/photos` | Upload a photo to an album (`multipart/form-data`) | Album owner or `moderator`+ |
+| GET | `/photos/{id}` | Get a single photo | Album owner or `moderator`+ |
+| PUT | `/photos/{id}` | Update a photo (title only) | Album owner or `moderator`+ |
+| DELETE | `/photos/{id}` | Delete a photo (removes its file, permanent) | Album owner or `moderator`+ |
+
+### Roles & permissions
+
+| Method | Endpoint | Description | Who can access |
+|--------|----------|-------------|----------------|
+| GET | `/roles` | List roles (name + description) | `admin`+ |
+| GET | `/roles/{id}` | Get a role including its permissions | `super_admin` |
+| POST | `/roles` | Compose a custom role from catalog permissions | `super_admin` |
+| PUT | `/roles/{id}` | Update a role's description/permission set | `super_admin` |
+| DELETE | `/roles/{id}` | Delete a custom role | `super_admin` |
+| GET | `/permissions` | The permission catalog (to compose roles from) | `super_admin` |
 
 Photos are always scoped to an album — there is no flat `GET /photos` listing. Uploads take `title` + `file` as `multipart/form-data`; the image (`jpg, jpeg, png, webp, gif, avif`) is converted to WebP (quality 80), resized to fit 500×500 preserving aspect ratio, and stored under `web/uploads/albums/{albumId}/`.
+
+**Deleting an album** (`DELETE /albums/{id}`) is one endpoint with two outcomes decided by the caller's permissions:
+
+- **Permanent** for whoever may delete it outright — its **owner**, or an **admin** (`album.delete.any`). The album, its photos and their files are removed.
+- **Soft** (pending review) for a **moderator**: the album is flagged (with an optional `{"reason": "..."}` body) instead of removed, and the request is idempotent. Soft-deleted albums are hidden from every listing by default and become a `404` for their owner until an admin restores them (`POST /albums/{id}/restore`). To review the queue, an admin lists them with `?is_deleted=1`.
 
 ```bash
 curl -X POST http://localhost:8084/albums/1/photos \
@@ -427,7 +499,7 @@ All endpoints return a unified JSON response:
 
 ### List query parameters
 
-The list endpoints (`GET /users`, `GET /albums`, `GET /albums/{albumId}/photos`) accept optional query parameters for pagination, sorting and filtering:
+The list endpoints (`GET /users`, `GET /albums`, `GET /albums/my`, `GET /albums/{albumId}/photos`, `GET /roles`) accept optional query parameters for pagination, sorting and filtering:
 
 | Parameter | Description |
 |-----------|-------------|
@@ -441,8 +513,9 @@ Sortable / filterable attributes per resource:
 | Resource | Sortable | Filterable |
 |----------|----------|------------|
 | Users | `id`, `first_name`, `last_name`, `email`, `created_at`, `updated_at` | `first_name`, `last_name`, `email` (partial match) |
-| Albums | `id`, `user_id`, `title`, `created_at`, `updated_at` | `title` (partial match), `user_id` (exact) |
+| Albums | `id`, `user_id`, `title`, `created_at`, `updated_at` | `title` (partial match), `user_id` (exact), `is_deleted` (exact — the review queue on `GET /albums`) |
 | Photos | `id`, `title`, `created_at` | `title` (partial match) |
+| Roles | `id`, `name` | `name` (partial match) |
 
 An unknown `sort` attribute or an out-of-range `per_page` returns `422`. Example:
 

@@ -348,6 +348,166 @@ class PhotosCest extends BaseCest
         Assert::assertFileDoesNotExist($dir . '/gone.webp');
     }
 
+    // ==================== ACCESS (RBAC) ====================
+
+    /**
+     * @throws Exception
+     */
+    public function testViewForeignPhotoForbiddenForBaseUser(FunctionalTester $I): void
+    {
+        $photoId = $this->insertPhoto($this->insertAlbum());
+        $this->actingAsUserWithRole($I, null);
+
+        $I->sendGet('/photos/' . $photoId);
+        $I->seeResponseCodeIs(403);
+    }
+
+    /**
+     * A base user fully manages photos in their own albums.
+     *
+     * @throws Exception
+     */
+    public function testOwnerManagesOwnPhoto(FunctionalTester $I): void
+    {
+        $userId = $this->actingAsUserWithRole($I, null);
+        $albumId = $this->insertAlbum($userId);
+        $photoId = $this->insertPhoto($albumId, ['title' => 'Mine']);
+
+        $I->sendGet('/albums/' . $albumId . '/photos');
+        $I->seeResponseCodeIs(200);
+
+        $I->sendGet('/photos/' . $photoId);
+        $I->seeResponseCodeIs(200);
+
+        $I->sendPut('/photos/' . $photoId, ['title' => 'Renamed']);
+        $I->seeResponseCodeIs(200);
+
+        $I->sendDelete('/photos/' . $photoId);
+        $I->seeResponseCodeIs(204);
+        $this->dontSeeInTable('photo', ['id' => $photoId]);
+    }
+
+    /**
+     * @throws Exception
+     */
+    public function testNestedIndexForbiddenForStrangerBaseUser(FunctionalTester $I): void
+    {
+        $albumId = $this->insertAlbum();
+        $this->actingAsUserWithRole($I, null);
+
+        $I->sendGet('/albums/' . $albumId . '/photos');
+        $I->seeResponseCodeIs(403);
+    }
+
+    /**
+     * @throws Exception
+     */
+    public function testUploadIntoForeignAlbumForbiddenForBaseUser(FunctionalTester $I): void
+    {
+        $albumId = $this->insertAlbum();
+        $this->actingAsUserWithRole($I, null);
+        $file = $this->createImageFixture(300, 300);
+
+        $I->sendPost('/albums/' . $albumId . '/photos', ['title' => 'Sneaky'], ['file' => $file]);
+        $I->seeResponseCodeIs(403);
+    }
+
+    /**
+     * @throws Exception
+     */
+    public function testUploadIntoOwnAlbumAllowedForBaseUser(FunctionalTester $I): void
+    {
+        $userId = $this->actingAsUserWithRole($I, null);
+        $albumId = $this->insertAlbum($userId);
+        $file = $this->createImageFixture(300, 300);
+
+        $I->sendPost('/albums/' . $albumId . '/photos', ['title' => 'Own upload'], ['file' => $file]);
+        $I->seeResponseCodeIs(201);
+    }
+
+    /**
+     * @throws Exception
+     */
+    public function testUpdateForeignPhotoForbiddenForBaseUser(FunctionalTester $I): void
+    {
+        $photoId = $this->insertPhoto($this->insertAlbum(), ['title' => 'Untouchable']);
+        $this->actingAsUserWithRole($I, null);
+
+        $I->sendPut('/photos/' . $photoId, ['title' => 'Hacked']);
+        $I->seeResponseCodeIs(403);
+        $this->seeInTable('photo', ['id' => $photoId, 'title' => 'Untouchable']);
+    }
+
+    /**
+     * @throws Exception
+     */
+    public function testModeratorDeletesForeignPhotoPermanently(FunctionalTester $I): void
+    {
+        $photoId = $this->insertPhoto($this->insertAlbum());
+        $this->actingAsUserWithRole($I, 'moderator');
+
+        $I->sendDelete('/photos/' . $photoId);
+        $I->seeResponseCodeIs(204);
+        $this->dontSeeInTable('photo', ['id' => $photoId]);
+    }
+
+    /**
+     * A custom role composed of a single permission: it can delete anyone's
+     * photo but cannot even see it — deletion must not require viewing.
+     *
+     * @throws Exception
+     */
+    public function testCustomRoleDeletesPhotosWithoutSeeingThem(FunctionalTester $I): void
+    {
+        $photoId = $this->insertPhoto($this->insertAlbum());
+        $this->insertRole('photo_reaper', ['photo.delete.any']);
+        $this->actingAsUserWithRole($I, 'photo_reaper');
+
+        $I->sendGet('/photos/' . $photoId);
+        $I->seeResponseCodeIs(403);
+
+        $I->sendDelete('/photos/' . $photoId);
+        $I->seeResponseCodeIs(204);
+        $this->dontSeeInTable('photo', ['id' => $photoId]);
+    }
+
+    /**
+     * Photos of a soft-deleted album do not exist for its owner...
+     *
+     * @throws Exception
+     */
+    public function testPhotosOfSoftDeletedAlbumHiddenFromOwner(FunctionalTester $I): void
+    {
+        $userId = $this->actingAsUserWithRole($I, null);
+        $albumId = $this->insertAlbum($userId, ['is_deleted' => 1]);
+        $photoId = $this->insertPhoto($albumId);
+
+        $I->sendGet('/albums/' . $albumId . '/photos');
+        $I->seeResponseCodeIs(404);
+
+        $I->sendGet('/photos/' . $photoId);
+        $I->seeResponseCodeIs(404);
+    }
+
+    /**
+     * ...but stay visible to the review audience.
+     *
+     * @throws Exception
+     */
+    public function testPhotosOfSoftDeletedAlbumVisibleToModerator(FunctionalTester $I): void
+    {
+        $albumId = $this->insertAlbum(null, ['is_deleted' => 1]);
+        $photoId = $this->insertPhoto($albumId, ['title' => 'Evidence']);
+        $this->actingAsUserWithRole($I, 'moderator');
+
+        $I->sendGet('/albums/' . $albumId . '/photos');
+        $I->seeResponseCodeIs(200);
+
+        $I->sendGet('/photos/' . $photoId);
+        $I->seeResponseCodeIs(200);
+        $I->seeResponseContainsJson(['data' => ['title' => 'Evidence']]);
+    }
+
     // ==================== helpers ====================
 
     private function uploadRoot(): string
@@ -358,13 +518,13 @@ class PhotosCest extends BaseCest
     /**
      * @throws Exception
      */
-    private function insertAlbum(): int
+    private function insertAlbum(?int $ownerId = null, array $overrides = []): int
     {
-        $userId = $this->insertUser(['email' => 'owner+' . uniqid() . '@example.com']);
-        return $this->insertRecord('album', [
-            'user_id' => $userId,
+        $ownerId ??= $this->insertUser(['email' => 'owner+' . uniqid() . '@example.com']);
+        return $this->insertRecord('album', array_merge([
+            'user_id' => $ownerId,
             'title'   => 'Album ' . uniqid(),
-        ]);
+        ], $overrides));
     }
 
     /**

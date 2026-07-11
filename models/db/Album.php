@@ -2,6 +2,7 @@
 
 namespace app\models\db;
 
+use app\models\contract\OwnableInterface;
 use yii\db\ActiveQuery;
 use yii\db\ActiveRecord;
 
@@ -11,17 +12,24 @@ use yii\db\ActiveRecord;
  * @property int $id
  * @property int $user_id
  * @property string $title
+ * @property int $is_deleted
+ * @property null|string $delete_reason
  * @property string $created_at
  * @property string $updated_at
  *
  * @property Photo[] $photos
  * @property User $user
  */
-class Album extends ActiveRecord
+class Album extends ActiveRecord implements OwnableInterface
 {
     public static function tableName(): string
     {
         return 'album';
+    }
+
+    public function getOwnerId(): int
+    {
+        return (int) $this->user_id;
     }
 
     public function rules(): array
@@ -30,6 +38,8 @@ class Album extends ActiveRecord
             [['user_id', 'title'], 'required'],
             [['user_id'], 'integer'],
             [['title'], 'string', 'max' => 255],
+            [['is_deleted'], 'boolean'],
+            [['delete_reason'], 'string', 'max' => 255],
             [
                 ['user_id'],
                 'exist',
@@ -46,6 +56,8 @@ class Album extends ActiveRecord
             'id' => 'ID',
             'user_id' => 'User ID',
             'title' => 'Title',
+            'is_deleted' => 'Is Deleted',
+            'delete_reason' => 'Delete Reason',
             'created_at' => 'Created At',
             'updated_at' => 'Updated At',
         ];
@@ -56,6 +68,8 @@ class Album extends ActiveRecord
         return [
             'id',
             'title',
+            'is_deleted' => fn () => (bool) $this->is_deleted,
+            'delete_reason',
         ];
     }
 

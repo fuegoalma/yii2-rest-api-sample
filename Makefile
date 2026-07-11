@@ -5,7 +5,7 @@ WEB := $(DC) exec -T web
         migrate migrate-main migrate-test \
         migration-create migration-update \
         seed seed-clear \
-        refresh-token-prune \
+        refresh-token-prune rbac-assign \
         test test-unit test-functional test-one build \
         cs-check cs-fix stan
 
@@ -25,6 +25,7 @@ help:
 	@echo "  seed [count=N]       Seed the DB (default count: 10)"
 	@echo "  seed-clear           Clear seeded data"
 	@echo "  refresh-token-prune  Delete expired refresh tokens (run on a cron)"
+	@echo "  rbac-assign role=<name> email=<email>   Assign a role to a user (bootstrap the first super_admin)"
 	@echo "  test                 Run the full test suite"
 	@echo "  test-unit            Run unit tests only"
 	@echo "  test-functional      Run functional tests only"
@@ -81,6 +82,9 @@ seed-clear:
 
 refresh-token-prune:
 	$(WEB) php yii refresh-token/prune
+
+rbac-assign:
+	$(WEB) php yii rbac/assign "$(role)" "$(email)"
 
 test:
 	$(WEB) php vendor/bin/codecept run

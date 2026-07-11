@@ -14,12 +14,29 @@ return [
     'POST,OPTIONS auth/refresh' => 'auth/refresh',
     'POST,OPTIONS auth/logout' => 'auth/logout',
     'POST,OPTIONS auth/logout-all' => 'auth/logout-all',
+    // the current user: profile, and the caller's roles + permissions for the client UI
+    'GET users/me' => 'users/me',
+    'OPTIONS users/me' => 'users/options',
+    'GET users/me/permissions' => 'users/me-permissions',
+    'OPTIONS users/me/permissions' => 'users/options',
+    // role assignments are a child resource of users
+    'GET users/<id:\d+>/roles' => 'users/roles',
+    'PUT users/<id:\d+>/roles' => 'users/set-roles',
+    'OPTIONS users/<id:\d+>/roles' => 'users/options',
+    // the caller's own albums ("my albums" page)
+    'GET albums/my' => 'albums/my',
+    'OPTIONS albums/my' => 'albums/options',
+    // lifting a pseudo-deletion after review
+    'POST albums/<id:\d+>/restore' => 'albums/restore',
+    'OPTIONS albums/<id:\d+>/restore' => 'albums/options',
     // photos are nested under their album for listing and creation
     'GET albums/<albumId:\d+>/photos' => 'photos/index',
     'POST albums/<albumId:\d+>/photos' => 'photos/create',
     'OPTIONS albums/<albumId:\d+>/photos' => 'photos/options',
+    // the permission catalog is read-only (permissions live in migrations)
+    'GET,OPTIONS permissions' => 'permissions/index',
     ['class' => 'yii\rest\UrlRule',
-        'controller' => ['users', 'albums'],
+        'controller' => ['users', 'albums', 'roles'],
         'pluralize' => false,
     ],
     // photos/<id> for view/update/delete only — no flat collection

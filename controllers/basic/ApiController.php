@@ -2,11 +2,13 @@
 
 namespace app\controllers\basic;
 
+use app\models\contract\service\AccessControlInterface;
 use app\models\contract\service\ApiServiceInterface;
 use app\models\dto\SearchCriteria;
 use app\models\form\basic\ApiForm;
 use app\models\form\basic\SearchForm;
 use yii\data\ActiveDataProvider;
+use yii\db\ActiveRecord;
 use yii\rest\ActiveController;
 use Yii;
 
@@ -18,6 +20,7 @@ abstract class ApiController extends ActiveController
         $id,
         $module,
         protected readonly ApiServiceInterface $service,
+        protected readonly AccessControlInterface $access,
         $config = []
     ) {
         parent::__construct($id, $module, $config);
@@ -44,6 +47,8 @@ abstract class ApiController extends ActiveController
 
     public function actionIndex(): ActiveDataProvider|array
     {
+        $this->requireCollectionAccess('index');
+
         return $this->handleIndex(
             $this->searchForm(),
             fn (SearchCriteria $criteria) => $this->service->getAll($criteria)
@@ -53,11 +58,15 @@ abstract class ApiController extends ActiveController
     public function actionView(int $id): array
     {
         $model = $this->service->findOrFail($id);
+        $this->requireMemberAccess('view', $model);
+
         return $model->toArray([], $model->extraFields());
     }
 
     public function actionCreate(): mixed
     {
+        $this->requireCollectionAccess('create');
+
         return $this->handleWrite(
             $this->createForm(),
             fn (array $data) => $this->service->create($data),
@@ -67,6 +76,8 @@ abstract class ApiController extends ActiveController
 
     public function actionUpdate(int $id): mixed
     {
+        $this->requireMemberAccess('update', $this->service->findOrFail($id));
+
         return $this->handleWrite(
             $this->updateForm($id),
             fn (array $data) => $this->service->update($id, $data),
@@ -74,11 +85,20 @@ abstract class ApiController extends ActiveController
         );
     }
 
-    public function actionDelete(int $id): void
+    public function actionDelete(int $id): mixed
     {
+        $this->requireMemberAccess('delete', $this->service->findOrFail($id));
+
         $this->service->delete($id);
         Yii::$app->response->statusCode = 204;
+        return null;
     }
+
+    /**
+     * Prefix of this resource's permission names, e.g. 'album' →
+     * `album.view.any` / `album.index.any`.
+     */
+    abstract protected function accessResource(): string;
 
     abstract protected function createForm(): ApiForm;
 
@@ -89,6 +109,36 @@ abstract class ApiController extends ActiveController
      *                that must exclude it (e.g. unique checks)
      */
     abstract protected function updateForm(int $id): ApiForm;
+
+    /**
+     * Permission gate for the collection actions (index/create). Resources
+     * whose permissions don't follow the `<resource>.<action>[.any]` naming
+     * override this (and {@see requireMemberAccess}).
+     */
+    protected function requireCollectionAccess(string $action): void
+    {
+        $suffix = $action === 'index' ? '.index.any' : '.create';
+        $this->access->requirePermission($this->accessResource() . $suffix);
+    }
+
+    /**
+     * Permission gate for the member actions (view/update/delete): the model
+     * must be visible to the caller, and either an `.any` permission or
+     * ownership must allow the ability.
+     */
+    protected function requireMemberAccess(string $action, ActiveRecord $model): void
+    {
+        $this->assertVisible($model);
+        $this->access->requireOn($this->accessResource() . '.' . $action, $model);
+    }
+
+    /**
+     * Resource-specific visibility hook, e.g. a soft-deleted album is a 404
+     * for callers who may not review it. Default: everything is visible.
+     */
+    protected function assertVisible(ActiveRecord $model): void
+    {
+    }
 
     /**
      * Shared index-action flow: validate the search form against the query

@@ -12,6 +12,7 @@ class AlbumSearchForm extends SearchForm
 {
     public $user_id;
     public $title;
+    public $is_deleted;
 
     public function rules(): array
     {
@@ -19,6 +20,7 @@ class AlbumSearchForm extends SearchForm
             ...parent::rules(),
             [['user_id'], 'integer'],
             [['title'], 'string', 'max' => 255],
+            [['is_deleted'], 'boolean'],
         ];
     }
 
@@ -34,6 +36,6 @@ class AlbumSearchForm extends SearchForm
 
     protected function exactAttributes(): array
     {
-        return ['user_id'];
+        return ['user_id', 'is_deleted'];
     }
 }

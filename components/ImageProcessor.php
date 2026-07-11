@@ -96,6 +96,18 @@ class ImageProcessor extends Component
         }
     }
 
+    /**
+     * Removes a whole storage subdirectory (e.g. all of an album's uploads
+     * when the album is permanently deleted); a missing directory is not
+     * an error.
+     *
+     * @throws \yii\base\ErrorException
+     */
+    public function deleteDir(string $subDir): void
+    {
+        FileHelper::removeDirectory($this->directory($subDir));
+    }
+
     private function directory(string $subDir): string
     {
         return $this->resolvedPath . '/' . basename($subDir);

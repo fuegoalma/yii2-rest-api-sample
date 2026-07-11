@@ -538,6 +538,223 @@ class UsersCest extends BaseCest
         ]);
     }
 
+    // ==================== ME ====================
+
+    public function testMeReturnsCurrentUserWithRoles(FunctionalTester $I): void
+    {
+        $I->sendGet('/users/me');
+        $I->seeResponseCodeIs(200);
+        $I->seeResponseContainsJson([
+            'success' => true,
+            'data'    => [
+                'id'    => $this->authUserId,
+                'email' => self::AUTH_USER_EMAIL,
+                'roles' => ['super_admin'],
+            ],
+        ]);
+    }
+
+    /**
+     * @throws Exception
+     */
+    public function testMeForBaseUserHasNoRoles(FunctionalTester $I): void
+    {
+        $userId = $this->actingAsUserWithRole($I, null);
+
+        $I->sendGet('/users/me');
+        $I->seeResponseCodeIs(200);
+        $I->seeResponseContainsJson([
+            'data' => ['id' => $userId, 'roles' => []],
+        ]);
+    }
+
+    public function testMeRequiresAuthentication(FunctionalTester $I): void
+    {
+        $I->deleteHeader('Authorization');
+
+        $I->sendGet('/users/me');
+        $I->seeResponseCodeIs(401);
+    }
+
+    /**
+     * @throws Exception
+     */
+    public function testMePermissionsReturnsRoleGrantedPermissions(FunctionalTester $I): void
+    {
+        $this->actingAsUserWithRole($I, 'moderator');
+
+        $I->sendGet('/users/me/permissions');
+        $I->seeResponseCodeIs(200);
+        $I->seeResponseContainsJson(['data' => ['roles' => ['moderator']]]);
+
+        $response = json_decode($I->grabResponse(), true);
+        Assert::assertContains('album.soft-delete.any', $response['data']['permissions']);
+        Assert::assertNotContains('role.manage', $response['data']['permissions']);
+    }
+
+    /**
+     * A base user (no roles) has no role-granted permissions — everything
+     * they can do with their own records is implicit.
+     *
+     * @throws Exception
+     */
+    public function testMePermissionsForBaseUserIsEmpty(FunctionalTester $I): void
+    {
+        $this->actingAsUserWithRole($I, null);
+
+        $I->sendGet('/users/me/permissions');
+        $I->seeResponseCodeIs(200);
+        $I->seeResponseContainsJson([
+            'data' => ['roles' => [], 'permissions' => []],
+        ]);
+    }
+
+    /**
+     * The union over several roles is returned.
+     *
+     * @throws Exception
+     */
+    public function testMePermissionsMergesMultipleRoles(FunctionalTester $I): void
+    {
+        $this->insertRole('reporter', ['permission.index']);
+        $userId = $this->actingAsUserWithRole($I, 'moderator');
+        $this->assignRole($userId, 'reporter');
+
+        $I->sendGet('/users/me/permissions');
+        $I->seeResponseCodeIs(200);
+
+        $response = json_decode($I->grabResponse(), true);
+        Assert::assertSame(['moderator', 'reporter'], $response['data']['roles']);
+        Assert::assertContains('permission.index', $response['data']['permissions']);
+        Assert::assertContains('album.soft-delete.any', $response['data']['permissions']);
+    }
+
+    // ==================== ACCESS (RBAC) ====================
+
+    /**
+     * @throws Exception
+     */
+    public function testIndexForbiddenForBaseUser(FunctionalTester $I): void
+    {
+        $this->actingAsUserWithRole($I, null);
+
+        $I->sendGet('/users');
+        $I->seeResponseCodeIs(403);
+        $I->seeResponseContainsJson(['success' => false]);
+    }
+
+    /**
+     * @throws Exception
+     */
+    public function testIndexAllowedForModerator(FunctionalTester $I): void
+    {
+        $this->actingAsUserWithRole($I, 'moderator');
+
+        $I->sendGet('/users');
+        $I->seeResponseCodeIs(200);
+    }
+
+    /**
+     * @throws Exception
+     */
+    public function testViewForbiddenForBaseUser(FunctionalTester $I): void
+    {
+        $this->actingAsUserWithRole($I, null);
+
+        $I->sendGet('/users/' . $this->authUserId);
+        $I->seeResponseCodeIs(403);
+    }
+
+    /**
+     * @throws Exception
+     */
+    public function testCreateForbiddenForModerator(FunctionalTester $I): void
+    {
+        $this->actingAsUserWithRole($I, 'moderator');
+
+        $I->sendPost('/users', [
+            'first_name' => 'New',
+            'last_name'  => 'User',
+            'email'      => 'new.user@example.com',
+            'password'   => 'secret123',
+        ]);
+        $I->seeResponseCodeIs(403);
+    }
+
+    /**
+     * @throws Exception
+     */
+    public function testUpdateSelfAllowedForBaseUser(FunctionalTester $I): void
+    {
+        $userId = $this->actingAsUserWithRole($I, null);
+
+        $I->sendPut('/users/' . $userId, ['first_name' => 'Renamed']);
+        $I->seeResponseCodeIs(200);
+        $I->seeResponseContainsJson(['data' => ['first_name' => 'Renamed']]);
+    }
+
+    /**
+     * @throws Exception
+     */
+    public function testUpdateOtherUserForbiddenForBaseUser(FunctionalTester $I): void
+    {
+        $otherId = $this->insertUser(['email' => 'victim@example.com']);
+        $this->actingAsUserWithRole($I, null);
+
+        $I->sendPut('/users/' . $otherId, ['first_name' => 'Hacked']);
+        $I->seeResponseCodeIs(403);
+    }
+
+    /**
+     * @throws Exception
+     */
+    public function testDeleteForbiddenForModerator(FunctionalTester $I): void
+    {
+        $targetId = $this->insertUser(['email' => 'target@example.com']);
+        $this->actingAsUserWithRole($I, 'moderator');
+
+        $I->sendDelete('/users/' . $targetId);
+        $I->seeResponseCodeIs(403);
+        $this->seeInTable('user', ['id' => $targetId]);
+    }
+
+    /**
+     * An admin must never be able to take over or remove a role manager's
+     * account.
+     *
+     * @throws Exception
+     */
+    public function testAdminCannotUpdateSuperAdmin(FunctionalTester $I): void
+    {
+        $this->actingAsUserWithRole($I, 'admin');
+
+        $I->sendPut('/users/' . $this->authUserId, ['password' => 'takeover1']);
+        $I->seeResponseCodeIs(403);
+    }
+
+    /**
+     * @throws Exception
+     */
+    public function testAdminCannotDeleteSuperAdmin(FunctionalTester $I): void
+    {
+        $this->actingAsUserWithRole($I, 'admin');
+
+        $I->sendDelete('/users/' . $this->authUserId);
+        $I->seeResponseCodeIs(403);
+        $this->seeInTable('user', ['id' => $this->authUserId]);
+    }
+
+    /**
+     * Deleting the only account that can manage roles is blocked, even for
+     * that account itself.
+     */
+    public function testDeleteLastSuperAdminReturnsConflict(FunctionalTester $I): void
+    {
+        $I->sendDelete('/users/' . $this->authUserId);
+        $I->seeResponseCodeIs(409);
+        $this->seeInTable('user', ['id' => $this->authUserId]);
+    }
+
     // ==================== DELETE ====================
 
     /**

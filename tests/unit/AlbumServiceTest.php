@@ -2,11 +2,14 @@
 
 namespace tests\unit;
 
+use app\components\ImageProcessor;
 use app\models\repository\AlbumRepository;
 use app\models\db\Album;
+use app\models\dto\SearchCriteria;
 use app\models\service\AlbumService;
 use Codeception\Test\Unit;
 use PHPUnit\Framework\MockObject\Exception;
+use yii\data\ActiveDataProvider;
 use yii\db\StaleObjectException;
 use yii\web\NotFoundHttpException;
 
@@ -14,6 +17,7 @@ class AlbumServiceTest extends Unit
 {
     private AlbumService $service;
     private AlbumRepository $repositoryMock;
+    private ImageProcessor $imageProcessorMock;
 
     /**
      * @throws Exception
@@ -22,7 +26,8 @@ class AlbumServiceTest extends Unit
     {
         parent::setUp();
         $this->repositoryMock = $this->createMock(AlbumRepository::class);
-        $this->service = new AlbumService($this->repositoryMock);
+        $this->imageProcessorMock = $this->createMock(ImageProcessor::class);
+        $this->service = new AlbumService($this->repositoryMock, $this->imageProcessorMock);
     }
 
     // ==================== findOrFail ====================
@@ -98,7 +103,7 @@ class AlbumServiceTest extends Unit
      * @throws StaleObjectException
      * @throws NotFoundHttpException
      */
-    public function testDeleteCallsRepositoryDelete(): void
+    public function testDeleteCallsRepositoryDeleteAndRemovesUploads(): void
     {
         $album = new Album();
         $album->id = 1;
@@ -114,6 +119,12 @@ class AlbumServiceTest extends Unit
             ->method('delete')
             ->with($album)
             ->willReturn(true);
+
+        // permanent deletion must not leave the uploaded files behind
+        $this->imageProcessorMock
+            ->expects($this->once())
+            ->method('deleteDir')
+            ->with('1');
 
         $this->service->delete(1);
     }
@@ -136,5 +147,91 @@ class AlbumServiceTest extends Unit
 
         $this->expectException(NotFoundHttpException::class);
         $this->service->delete(99999);
+    }
+
+    // ==================== softDelete / restore ====================
+
+    /**
+     * @throws NotFoundHttpException
+     * @throws \yii\db\Exception
+     */
+    public function testSoftDeleteFlagsAlbumWithReason(): void
+    {
+        $album = new Album();
+        $album->id = 1;
+        $album->is_deleted = 0;
+
+        $this->repositoryMock->method('findById')->with(1)->willReturn($album);
+        $this->repositoryMock
+            ->expects($this->once())
+            ->method('save')
+            ->with($album)
+            ->willReturn(true);
+
+        $this->service->softDelete(1, 'spam');
+
+        $this->assertSame(1, $album->is_deleted);
+        $this->assertSame('spam', $album->delete_reason);
+    }
+
+    /**
+     * @throws NotFoundHttpException
+     * @throws \yii\db\Exception
+     */
+    public function testSoftDeleteIsIdempotent(): void
+    {
+        $album = new Album();
+        $album->id = 1;
+        $album->is_deleted = 1;
+        $album->delete_reason = 'original';
+
+        $this->repositoryMock->method('findById')->with(1)->willReturn($album);
+        $this->repositoryMock
+            ->expects($this->never())
+            ->method('save');
+
+        $this->service->softDelete(1, 'second attempt');
+
+        $this->assertSame('original', $album->delete_reason);
+    }
+
+    /**
+     * @throws NotFoundHttpException
+     * @throws \yii\db\Exception
+     */
+    public function testRestoreClearsFlagAndReason(): void
+    {
+        $album = new Album();
+        $album->id = 1;
+        $album->is_deleted = 1;
+        $album->delete_reason = 'mistake';
+
+        $this->repositoryMock->method('findById')->with(1)->willReturn($album);
+        $this->repositoryMock
+            ->expects($this->once())
+            ->method('save')
+            ->with($album)
+            ->willReturn(true);
+
+        $result = $this->service->restore(1);
+
+        $this->assertSame(0, $album->is_deleted);
+        $this->assertNull($album->delete_reason);
+        $this->assertSame($album, $result);
+    }
+
+    // ==================== getByUser ====================
+
+    public function testGetByUserScopesToOwnerAndAliveAlbums(): void
+    {
+        $this->repositoryMock
+            ->expects($this->once())
+            ->method('getAllDP')
+            ->with($this->callback(
+                fn (SearchCriteria $criteria) => $criteria->scope === ['user_id' => 7, 'is_deleted' => 0]
+            ))
+            ->willReturn(new ActiveDataProvider());
+
+        $this->service->getByUser(7);
     }
 }

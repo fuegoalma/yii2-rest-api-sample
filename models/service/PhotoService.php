@@ -5,6 +5,7 @@ namespace app\models\service;
 use app\components\ImageProcessor;
 use app\models\contract\repository\ApiRepositoryInterface;
 use app\models\contract\service\PhotoServiceInterface;
+use app\models\db\Album;
 use app\models\db\Photo;
 use app\models\dto\SearchCriteria;
 use app\models\repository\AlbumRepository;
@@ -33,9 +34,24 @@ readonly class PhotoService extends BaseCrudService implements PhotoServiceInter
     /**
      * @throws NotFoundHttpException when the album does not exist
      */
+    public function findAlbumOrFail(int $albumId): Album
+    {
+        /** @var ?Album $album */
+        $album = $this->albumRepository->findById($albumId);
+
+        if ($album === null) {
+            throw new NotFoundHttpException('Album not found');
+        }
+
+        return $album;
+    }
+
+    /**
+     * @throws NotFoundHttpException when the album does not exist
+     */
     public function getByAlbum(int $albumId, ?SearchCriteria $criteria = null): ActiveDataProvider
     {
-        $this->requireAlbum($albumId);
+        $this->findAlbumOrFail($albumId);
 
         $criteria = ($criteria ?? new SearchCriteria())->withScope(['album_id' => $albumId]);
 
@@ -48,7 +64,7 @@ readonly class PhotoService extends BaseCrudService implements PhotoServiceInter
      */
     public function createInAlbum(int $albumId, string $title, UploadedFile $file): ActiveRecord
     {
-        $this->requireAlbum($albumId);
+        $this->findAlbumOrFail($albumId);
 
         $photo = new Photo();
         $photo->album_id = $albumId;
@@ -85,15 +101,5 @@ readonly class PhotoService extends BaseCrudService implements PhotoServiceInter
 
         $this->repository->delete($photo);
         $this->imageProcessor->delete((string) $photo->album_id, $photo->file_name);
-    }
-
-    /**
-     * @throws NotFoundHttpException when the album does not exist
-     */
-    private function requireAlbum(int $albumId): void
-    {
-        if ($this->albumRepository->findById($albumId) === null) {
-            throw new NotFoundHttpException('Album not found');
-        }
     }
 }

@@ -58,7 +58,9 @@ class AuthCest extends BaseCest
         $I->seeResponseCodeIs(200);
 
         $I->amBearerAuthenticated($this->grabToken($I));
-        $I->sendGet('/users');
+        // /users/me is the endpoint any authenticated user may hit, regardless
+        // of roles — the point here is that the token authenticates
+        $I->sendGet('/users/me');
         $I->seeResponseCodeIs(200);
         $I->seeResponseContainsJson(['success' => true]);
     }
@@ -143,7 +145,9 @@ class AuthCest extends BaseCest
 
         // the access token returned on registration grants immediate access
         $I->amBearerAuthenticated($this->grabToken($I));
-        $I->sendGet('/users');
+        // /users/me is the endpoint any authenticated user may hit, regardless
+        // of roles — the point here is that the token authenticates
+        $I->sendGet('/users/me');
         $I->seeResponseCodeIs(200);
         $I->seeResponseContainsJson(['success' => true]);
     }
@@ -191,7 +195,9 @@ class AuthCest extends BaseCest
 
         // the freshly minted access token works against protected endpoints
         $I->amBearerAuthenticated($this->grabToken($I));
-        $I->sendGet('/users');
+        // /users/me is the endpoint any authenticated user may hit, regardless
+        // of roles — the point here is that the token authenticates
+        $I->sendGet('/users/me');
         $I->seeResponseCodeIs(200);
     }
 

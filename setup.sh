@@ -40,3 +40,9 @@ echo "🔄 Running migrations for test database..."
 docker compose exec web php yii migrate-test/up --interactive=0
 
 echo "✅ Databases ready!"
+
+# The RBAC permission catalog and the three system roles (moderator/admin/
+# super_admin) are seeded by the migrations above. A fresh account has no role
+# (a base user); appoint the first super admin once you have registered one:
+echo "👑 To appoint the first super admin, register a user and then run:"
+echo "     make rbac-assign role=super_admin email=<their-email>"

@@ -2,6 +2,7 @@
 
 namespace app\controllers;
 
+use app\controllers\basic\AlbumVisibilityTrait;
 use app\controllers\basic\ApiController;
 use app\models\contract\service\PhotoServiceInterface;
 use app\models\db\Photo;
@@ -12,10 +13,13 @@ use app\models\form\PhotoCreateForm;
 use app\models\form\PhotoSearchForm;
 use app\models\form\PhotoUpdateForm;
 use yii\data\ActiveDataProvider;
+use yii\db\ActiveRecord;
 use yii\web\UploadedFile;
 
 class PhotosController extends ApiController
 {
+    use AlbumVisibilityTrait;
+
     public $modelClass = Photo::class;
 
     /**
@@ -24,6 +28,10 @@ class PhotosController extends ApiController
      */
     public function actionIndex(int $albumId = 0): ActiveDataProvider|array
     {
+        $album = $this->photoService()->findAlbumOrFail($albumId);
+        $this->requireVisibleAlbum($album);
+        $this->access->requireOn('photo.view', $album);
+
         return $this->handleIndex(
             $this->searchForm(),
             fn (SearchCriteria $criteria) => $this->photoService()->getByAlbum($albumId, $criteria)
@@ -32,6 +40,10 @@ class PhotosController extends ApiController
 
     public function actionCreate(int $albumId = 0): mixed
     {
+        $album = $this->photoService()->findAlbumOrFail($albumId);
+        $this->requireVisibleAlbum($album);
+        $this->access->requireOn('photo.create', $album);
+
         $form = new PhotoCreateForm();
         $form->file = UploadedFile::getInstanceByName('file');
 
@@ -40,6 +52,21 @@ class PhotosController extends ApiController
             fn () => $this->photoService()->createInAlbum($albumId, (string) $form->title, $form->file),
             201
         );
+    }
+
+    protected function accessResource(): string
+    {
+        return 'photo';
+    }
+
+    /**
+     * A photo is only as visible as its album: photos of a soft-deleted
+     * album are a 404 outside the review audience.
+     */
+    protected function assertVisible(ActiveRecord $model): void
+    {
+        /** @var Photo $model */
+        $this->requireVisibleAlbum($model->album);
     }
 
     protected function createForm(): ApiForm

@@ -3,6 +3,7 @@
 namespace app\models\db;
 
 use app\components\PhotoUrlBuilder;
+use app\models\contract\OwnableInterface;
 use yii\db\ActiveQuery;
 use yii\db\ActiveRecord;
 
@@ -19,7 +20,7 @@ use yii\db\ActiveRecord;
  * @property string|null $url
  * @property Album $album
  */
-class Photo extends ActiveRecord
+class Photo extends ActiveRecord implements OwnableInterface
 {
     /** demo images bundled with the app, served from `default-images` */
     public const string SOURCE_SEED = 'seed';
@@ -68,6 +69,15 @@ class Photo extends ActiveRecord
             'title',
             'url'
         ];
+    }
+
+    /**
+     * A photo belongs to whoever owns its album; the album FK is NOT NULL
+     * with ON DELETE CASCADE, so the relation is always present.
+     */
+    public function getOwnerId(): int
+    {
+        return (int) $this->album->user_id;
     }
 
     public function getUrl(): ?string
