@@ -52,7 +52,7 @@ restart:
 
 rebuild:
 	$(DC) build web
-	$(DC) up -d web cron
+	$(DC) up -d web cron worker
 
 logs:
 	$(DC) logs -f

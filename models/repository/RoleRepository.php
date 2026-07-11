@@ -2,6 +2,7 @@
 
 namespace app\models\repository;
 
+use app\models\db\Permission;
 use app\models\db\Role;
 use app\models\repository\basic\BaseRepository;
 use yii\db\Exception;
@@ -151,6 +152,29 @@ class RoleRepository extends BaseRepository
             ->innerJoin('role_permission rp', 'rp.role_id = ur.role_id')
             ->where(['ur.user_id' => $userId, 'rp.permission_name' => $permissionName])
             ->exists();
+    }
+
+    /**
+     * Acquires a write lock (SELECT ... FOR UPDATE) on the `user_role` rows that
+     * currently grant `role.manage`. Two concurrent RBAC mutations could each
+     * read "there is still a manager", pass the invariant check and then both
+     * remove the last one; taking this lock first forces them to serialize, so
+     * the second re-reads the state the first committed. Must be called inside a
+     * transaction — the lock is held until it ends.
+     *
+     * @throws Exception
+     */
+    public function lockManageHolders(): void
+    {
+        $sql = (new Query())
+            ->select('ur.user_id')
+            ->from('user_role ur')
+            ->innerJoin('role_permission rp', 'rp.role_id = ur.role_id')
+            ->where(['rp.permission_name' => Permission::ROLE_MANAGE])
+            ->createCommand()
+            ->getRawSql();
+
+        Yii::$app->db->createCommand($sql . ' FOR UPDATE')->execute();
     }
 
     /**

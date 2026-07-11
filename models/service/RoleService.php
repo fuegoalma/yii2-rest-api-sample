@@ -4,6 +4,7 @@ namespace app\models\service;
 
 use app\models\contract\service\AccessControlInterface;
 use app\models\contract\service\RoleServiceInterface;
+use app\models\contract\service\TransactionRunnerInterface;
 use app\models\db\Permission;
 use app\models\db\Role;
 use app\models\repository\RoleRepository;
@@ -32,6 +33,7 @@ readonly class RoleService extends BaseCrudService implements RoleServiceInterfa
     public function __construct(
         private RoleRepository $roles,
         private AccessControlInterface $access,
+        private TransactionRunnerInterface $tx,
     ) {
         parent::__construct($roles);
     }
@@ -48,11 +50,14 @@ readonly class RoleService extends BaseCrudService implements RoleServiceInterfa
     {
         [$data, $permissions] = $this->extractPermissions($data);
 
-        /** @var Role $role */
-        $role = parent::create($data);
-        $this->syncPermissionsIfValid($role, $permissions);
+        // role row + its permission links are one atomic change
+        return $this->tx->run(function () use ($data, $permissions): ActiveRecord {
+            /** @var Role $role */
+            $role = parent::create($data);
+            $this->syncPermissionsIfValid($role, $permissions);
 
-        return $role;
+            return $role;
+        });
     }
 
     /**
@@ -73,15 +78,18 @@ readonly class RoleService extends BaseCrudService implements RoleServiceInterfa
 
         [$data, $permissions] = $this->extractPermissions($data);
 
-        if ($permissions !== null && !in_array(Permission::ROLE_MANAGE, $permissions, true)) {
-            $this->assertNotLastManageSource(excludeRoleId: $role->id);
-        }
+        return $this->tx->run(function () use ($id, $data, $permissions): ActiveRecord {
+            if ($permissions !== null && !in_array(Permission::ROLE_MANAGE, $permissions, true)) {
+                $this->roles->lockManageHolders();
+                $this->assertNotLastManageSource(excludeRoleId: $id);
+            }
 
-        /** @var Role $role */
-        $role = parent::update($id, $data);
-        $this->syncPermissionsIfValid($role, $permissions);
+            /** @var Role $role */
+            $role = parent::update($id, $data);
+            $this->syncPermissionsIfValid($role, $permissions);
 
-        return $role;
+            return $role;
+        });
     }
 
     /**
@@ -98,10 +106,13 @@ readonly class RoleService extends BaseCrudService implements RoleServiceInterfa
             throw new ConflictHttpException('A system role cannot be deleted.');
         }
 
-        $this->assertNotLastManageSource(excludeRoleId: $role->id);
+        $this->tx->run(function () use ($role): void {
+            $this->roles->lockManageHolders();
+            $this->assertNotLastManageSource(excludeRoleId: (int) $role->id);
 
-        // the FK cascades clean up role_permission and user_role rows
-        $this->repository->delete($role);
+            // the FK cascades clean up role_permission and user_role rows
+            $this->repository->delete($role);
+        });
     }
 
     public function getUserRoles(int $userId): array
@@ -123,21 +134,24 @@ readonly class RoleService extends BaseCrudService implements RoleServiceInterfa
             array_diff($newIds, $currentIds)
         );
 
-        if (!$this->access->can(Permission::ROLE_MANAGE)
-            && $this->roles->anyGrants($changedIds, self::PRIVILEGED_PERMISSIONS)
-        ) {
-            throw new ForbiddenHttpException('Only a role manager can grant or revoke privileged roles.');
-        }
+        return $this->tx->run(function () use ($userId, $newRoles, $newIds, $currentIds, $changedIds): array {
+            if (!$this->access->can(Permission::ROLE_MANAGE)
+                && $this->roles->anyGrants($changedIds, self::PRIVILEGED_PERMISSIONS)
+            ) {
+                throw new ForbiddenHttpException('Only a role manager can grant or revoke privileged roles.');
+            }
 
-        if ($this->roles->anyGrants($currentIds, [Permission::ROLE_MANAGE])
-            && !$this->roles->anyGrants($newIds, [Permission::ROLE_MANAGE])
-        ) {
-            $this->assertNotLastManageSource(excludeUserId: $userId);
-        }
+            if ($this->roles->anyGrants($currentIds, [Permission::ROLE_MANAGE])
+                && !$this->roles->anyGrants($newIds, [Permission::ROLE_MANAGE])
+            ) {
+                $this->roles->lockManageHolders();
+                $this->assertNotLastManageSource(excludeUserId: $userId);
+            }
 
-        $this->roles->setUserRoles($userId, $newIds);
+            $this->roles->setUserRoles($userId, $newIds);
 
-        return $newRoles;
+            return $newRoles;
+        });
     }
 
     public function assertUserManageable(int $userId): void

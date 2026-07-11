@@ -4,6 +4,7 @@ namespace app\models\service;
 
 use app\models\contract\repository\ApiRepositoryInterface;
 use app\models\contract\service\AlbumServiceInterface;
+use app\models\contract\service\TransactionRunnerInterface;
 use app\models\db\User;
 use app\models\service\basic\BaseCrudService;
 use yii\base\Exception;
@@ -15,6 +16,7 @@ readonly class UserService extends BaseCrudService
     public function __construct(
         ApiRepositoryInterface $repository,
         private AlbumServiceInterface $albumService,
+        private TransactionRunnerInterface $tx,
     ) {
         parent::__construct($repository);
     }
@@ -38,8 +40,11 @@ readonly class UserService extends BaseCrudService
     {
         $user = $this->findOrFail($id);
 
-        $this->albumService->deleteByUser($id);
-        $this->repository->delete($user);
+        // albums (their photos + files) and the account go together or not at all
+        $this->tx->run(function () use ($id, $user): void {
+            $this->albumService->deleteByUser($id);
+            $this->repository->delete($user);
+        });
     }
 
     /**

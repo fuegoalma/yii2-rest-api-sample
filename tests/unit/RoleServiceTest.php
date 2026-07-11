@@ -3,6 +3,7 @@
 namespace tests\unit;
 
 use app\models\contract\service\AccessControlInterface;
+use app\models\contract\service\TransactionRunnerInterface;
 use app\models\db\Permission;
 use app\models\db\Role;
 use app\models\repository\RoleRepository;
@@ -26,7 +27,22 @@ class RoleServiceTest extends Unit
         parent::setUp();
         $this->rolesMock = $this->createMock(RoleRepository::class);
         $this->accessMock = $this->createMock(AccessControlInterface::class);
-        $this->service = new RoleService($this->rolesMock, $this->accessMock);
+        $this->service = new RoleService($this->rolesMock, $this->accessMock, $this->immediateTx());
+    }
+
+    /**
+     * A transaction runner that just executes the operation, so the service's
+     * logic can be unit-tested without a database. Production wraps it in a real
+     * DB transaction ({@see \app\components\DbTransactionRunner}).
+     */
+    private function immediateTx(): TransactionRunnerInterface
+    {
+        return new class () implements TransactionRunnerInterface {
+            public function run(callable $operation): mixed
+            {
+                return $operation();
+            }
+        };
     }
 
     // ==================== create ====================
@@ -172,6 +188,27 @@ class RoleServiceTest extends Unit
             ->method('delete')
             ->with($role)
             ->willReturn(true);
+
+        $this->service->delete(5);
+    }
+
+    /**
+     * The last-manager invariant is evaluated behind a row lock, so concurrent
+     * mutations can't each pass the check and together remove the last manager.
+     *
+     * @throws \Throwable
+     */
+    public function testDeleteLocksManageHoldersBeforeCheckingInvariant(): void
+    {
+        $role = new Role();
+        $role->id = 5;
+        $role->name = 'custom';
+        $role->is_system = 0;
+
+        $this->rolesMock->method('findById')->with(5)->willReturn($role);
+        $this->rolesMock->method('countPermissionHolders')->willReturn(1);
+        $this->rolesMock->expects($this->once())->method('lockManageHolders');
+        $this->rolesMock->method('delete')->willReturn(true);
 
         $this->service->delete(5);
     }

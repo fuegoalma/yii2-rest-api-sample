@@ -1,7 +1,9 @@
 <?php
 
+use app\components\DbTransactionRunner;
 use app\components\ImageProcessor;
 use app\components\JwtService;
+use app\components\queue\DbQueue;
 use app\components\RateLimiter;
 use app\controllers\AlbumsController;
 use app\controllers\AuthController;
@@ -10,7 +12,9 @@ use app\controllers\PermissionsController;
 use app\controllers\PhotosController;
 use app\controllers\RolesController;
 use app\controllers\UsersController;
+use app\models\contract\queue\QueueInterface;
 use app\models\contract\service\AccessControlInterface;
+use app\models\contract\service\TransactionRunnerInterface;
 use app\models\repository\AlbumRepository;
 use app\models\repository\PhotoRepository;
 use app\models\repository\RefreshTokenRepository;
@@ -25,6 +29,9 @@ use app\models\service\PhotoService;
 use app\models\service\RefreshTokenService;
 use app\models\service\RoleService;
 use app\models\service\UserService;
+use League\Flysystem\Filesystem;
+use League\Flysystem\FilesystemOperator;
+use League\Flysystem\Local\LocalFilesystemAdapter;
 use yii\di\Instance;
 
 $params = require __DIR__ . '/params.php';
@@ -42,9 +49,15 @@ return [
             'secret' => getenv('JWT_SECRET') ?: '',
             'ttl' => (int) (getenv('JWT_TTL') ?: 3600),
         ],
+        // Photo storage behind Flysystem: local disk by default. To move uploads
+        // to S3, swap this one binding for an AwsS3V3Adapter (see README) — no
+        // application code changes, since everything depends on FilesystemOperator.
+        FilesystemOperator::class => static fn (): FilesystemOperator => new Filesystem(
+            new LocalFilesystemAdapter(Yii::getAlias($params['photo_upload_path']))
+        ),
         ImageProcessor::class => [
             'class' => ImageProcessor::class,
-            'uploadPath' => $params['photo_upload_path'],
+            '__construct()' => ['filesystem' => Instance::of(FilesystemOperator::class)],
         ],
         // single source of rate-limiting config (brute-force protection on login)
         RateLimiter::class => [
@@ -54,23 +67,31 @@ return [
         ],
         // permission checks for the current user; concrete repositories autowire
         AccessControlInterface::class => AccessControlService::class,
+        // atomic multi-row operations (RBAC mutations, user teardown) run through this
+        TransactionRunnerInterface::class => DbTransactionRunner::class,
+        // background jobs are deferred to the DB queue, drained by the long-running
+        // `worker` service (`yii queue/listen`). Tests override this with SyncQueue
+        // (config/test.php) so they don't depend on a running worker.
+        QueueInterface::class => DbQueue::class,
         UserService::class => [
             '__construct()' => [
                 'repository' => Instance::of(UserRepository::class),
                 'albumService' => Instance::of(AlbumService::class),
+                'tx' => Instance::of(TransactionRunnerInterface::class),
             ],
         ],
         AlbumService::class => [
             '__construct()' => [
                 'repository' => Instance::of(AlbumRepository::class),
                 'photoRepository' => Instance::of(PhotoRepository::class),
-                'imageProcessor' => Instance::of(ImageProcessor::class),
+                'queue' => Instance::of(QueueInterface::class),
             ],
         ],
         RoleService::class => [
             '__construct()' => [
                 'roles' => Instance::of(RoleRepository::class),
                 'access' => Instance::of(AccessControlInterface::class),
+                'tx' => Instance::of(TransactionRunnerInterface::class),
             ],
         ],
         PhotoService::class => [

@@ -29,6 +29,8 @@ $config = [
         '@npm'   => '@vendor/npm-asset',
         '@tests' => '@app/tests',
         '@web' => '@app/web',
+        // the queue worker resolves photo storage (Flysystem) in the console context
+        '@webroot' => '@app/web',
     ],
     'components' => [
         'urlManager' => [

@@ -3,6 +3,7 @@
 namespace tests\unit;
 
 use app\models\contract\service\AlbumServiceInterface;
+use app\models\contract\service\TransactionRunnerInterface;
 use app\models\repository\UserRepository;
 use app\models\db\User;
 use app\models\service\UserService;
@@ -25,7 +26,21 @@ class UserServiceTest extends Unit
         parent::setUp();
         $this->repositoryMock = $this->createMock(UserRepository::class);
         $this->albumServiceMock = $this->createMock(AlbumServiceInterface::class);
-        $this->service = new UserService($this->repositoryMock, $this->albumServiceMock);
+        $this->service = new UserService($this->repositoryMock, $this->albumServiceMock, $this->immediateTx());
+    }
+
+    /**
+     * Runs the operation without a real transaction, so the service is
+     * unit-testable without a database (production uses a DB transaction).
+     */
+    private function immediateTx(): TransactionRunnerInterface
+    {
+        return new class () implements TransactionRunnerInterface {
+            public function run(callable $operation): mixed
+            {
+                return $operation();
+            }
+        };
     }
 
     // ==================== findOrFail ====================

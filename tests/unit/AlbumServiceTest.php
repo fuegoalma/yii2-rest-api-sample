@@ -2,11 +2,12 @@
 
 namespace tests\unit;
 
-use app\components\ImageProcessor;
+use app\models\contract\queue\QueueInterface;
 use app\models\repository\AlbumRepository;
 use app\models\repository\PhotoRepository;
 use app\models\db\Album;
 use app\models\dto\SearchCriteria;
+use app\models\jobs\DeleteAlbumDirectoryJob;
 use app\models\service\AlbumService;
 use Codeception\Test\Unit;
 use PHPUnit\Framework\MockObject\Exception;
@@ -19,7 +20,7 @@ class AlbumServiceTest extends Unit
     private AlbumService $service;
     private AlbumRepository $repositoryMock;
     private PhotoRepository $photoRepositoryMock;
-    private ImageProcessor $imageProcessorMock;
+    private QueueInterface $queueMock;
 
     /**
      * @throws Exception
@@ -29,11 +30,11 @@ class AlbumServiceTest extends Unit
         parent::setUp();
         $this->repositoryMock = $this->createMock(AlbumRepository::class);
         $this->photoRepositoryMock = $this->createMock(PhotoRepository::class);
-        $this->imageProcessorMock = $this->createMock(ImageProcessor::class);
+        $this->queueMock = $this->createMock(QueueInterface::class);
         $this->service = new AlbumService(
             $this->repositoryMock,
             $this->photoRepositoryMock,
-            $this->imageProcessorMock,
+            $this->queueMock,
         );
     }
 
@@ -132,11 +133,13 @@ class AlbumServiceTest extends Unit
             ->method('deleteByIds')
             ->with([1]);
 
-        // permanent deletion must not leave the uploaded files behind
-        $this->imageProcessorMock
+        // the file cleanup is deferred to the queue, one job per album
+        $this->queueMock
             ->expects($this->once())
-            ->method('deleteDir')
-            ->with('1');
+            ->method('push')
+            ->with($this->callback(
+                fn (DeleteAlbumDirectoryJob $job) => $job->subDir === '1'
+            ));
 
         $this->service->delete(1);
     }
@@ -163,11 +166,11 @@ class AlbumServiceTest extends Unit
             ->method('deleteByIds')
             ->with([10, 20]);
 
-        $this->imageProcessorMock
+        $this->queueMock
             ->expects($this->exactly(2))
-            ->method('deleteDir')
-            ->willReturnCallback(function (string $subDir): void {
-                $this->assertContains($subDir, ['10', '20']);
+            ->method('push')
+            ->willReturnCallback(function (DeleteAlbumDirectoryJob $job): void {
+                $this->assertContains($job->subDir, ['10', '20']);
             });
 
         $this->service->deleteByUser(7);
@@ -188,7 +191,7 @@ class AlbumServiceTest extends Unit
 
         $this->photoRepositoryMock->expects($this->never())->method('deleteByAlbumIds');
         $this->repositoryMock->expects($this->never())->method('deleteByIds');
-        $this->imageProcessorMock->expects($this->never())->method('deleteDir');
+        $this->queueMock->expects($this->never())->method('push');
 
         $this->service->deleteByUser(7);
     }

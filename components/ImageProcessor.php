@@ -4,46 +4,39 @@ namespace app\components;
 
 use Imagick;
 use ImagickException;
+use League\Flysystem\FilesystemException;
+use League\Flysystem\FilesystemOperator;
 use yii\base\Component;
 use yii\base\Exception;
-use yii\base\InvalidConfigException;
-use yii\helpers\FileHelper;
 use yii\web\UploadedFile;
 use Yii;
 
 /**
- * Stores uploaded images as resized, compressed WebP files on disk.
+ * Stores uploaded images as resized, compressed WebP files.
  *
  * Every image is scaled to fit within {@see $maxWidth}x{@see $maxHeight}
  * (aspect ratio preserved, never upscaled) and re-encoded to WebP at
- * {@see $quality}. Files are stored under {@see $uploadPath}/<subDir>,
- * which is configured once via DI.
+ * {@see $quality}. Where the bytes actually live (local disk, S3, ...) is not
+ * this class's concern: it delegates all persistence to the injected
+ * {@see FilesystemOperator} (Flysystem), so switching to S3 is a DI change with
+ * no edit here. Files are keyed `<subDir>/<fileName>`.
  */
 class ImageProcessor extends Component
 {
-    /** base filesystem directory (a Yii alias is accepted) for stored files */
-    public string $uploadPath = '';
     public int $quality = 80;
     public int $maxWidth = 500;
     public int $maxHeight = 500;
 
-    private string $resolvedPath = '';
-
-    /**
-     * @throws InvalidConfigException
-     */
-    public function init(): void
-    {
-        parent::init();
-        if ($this->uploadPath === '') {
-            throw new InvalidConfigException('ImageProcessor::$uploadPath must be configured.');
-        }
-        $this->resolvedPath = Yii::getAlias($this->uploadPath);
+    public function __construct(
+        private readonly FilesystemOperator $filesystem,
+        array $config = []
+    ) {
+        parent::__construct($config);
     }
 
     /**
      * Converts the uploaded image to a resized WebP file stored under
-     * <uploadPath>/<subDir> and returns the generated file name.
+     * <subDir> and returns the generated file name.
      *
      * @throws Exception when the file is not a decodable image or cannot be written
      */
@@ -68,31 +61,37 @@ class ImageProcessor extends Component
             ) {
                 $image->thumbnailImage($this->maxWidth, $this->maxHeight, true);
             }
+
+            $blob = $image->getImageBlob();
         } catch (ImagickException $e) {
             throw new Exception('The uploaded file is not a valid image.', 0, $e);
+        } finally {
+            if (isset($image)) {
+                $image->clear();
+            }
         }
 
-        $directory = $this->directory($subDir);
-        FileHelper::createDirectory($directory);
         $fileName = Yii::$app->security->generateRandomString(40) . '.webp';
 
-        if (!$image->writeImage($directory . '/' . $fileName)) {
-            $image->clear();
-            throw new Exception('The image could not be saved.');
+        try {
+            $this->filesystem->write($this->key($subDir, $fileName), $blob);
+        } catch (FilesystemException $e) {
+            throw new Exception('The image could not be saved.', 0, $e);
         }
-        $image->clear();
 
         return $fileName;
     }
 
     /**
      * Removes a stored file; a missing file is not an error.
+     *
+     * @throws FilesystemException
      */
     public function delete(string $subDir, string $fileName): void
     {
-        $path = $this->directory($subDir) . '/' . basename($fileName);
-        if (is_file($path)) {
-            unlink($path);
+        $key = $this->key($subDir, $fileName);
+        if ($this->filesystem->fileExists($key)) {
+            $this->filesystem->delete($key);
         }
     }
 
@@ -101,15 +100,15 @@ class ImageProcessor extends Component
      * when the album is permanently deleted); a missing directory is not
      * an error.
      *
-     * @throws \yii\base\ErrorException
+     * @throws FilesystemException
      */
     public function deleteDir(string $subDir): void
     {
-        FileHelper::removeDirectory($this->directory($subDir));
+        $this->filesystem->deleteDirectory(basename($subDir));
     }
 
-    private function directory(string $subDir): string
+    private function key(string $subDir, string $fileName): string
     {
-        return $this->resolvedPath . '/' . basename($subDir);
+        return basename($subDir) . '/' . basename($fileName);
     }
 }

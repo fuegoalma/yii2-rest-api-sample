@@ -3,9 +3,17 @@
 $params = require __DIR__ . '/params.php';
 $db = require __DIR__ . '/test_db.php';
 
-// keep uploaded test images out of the web root
+// keep uploaded test images out of the web root: point the Flysystem storage
+// at @runtime instead of @webroot (production uses the local/S3 binding in di.php)
 $container = require __DIR__ . '/di.php';
-$container['definitions'][\app\components\ImageProcessor::class]['uploadPath'] = '@runtime/uploads/albums';
+$container['definitions'][\League\Flysystem\FilesystemOperator::class] =
+    static fn (): \League\Flysystem\FilesystemOperator => new \League\Flysystem\Filesystem(
+        new \League\Flysystem\Local\LocalFilesystemAdapter(Yii::getAlias('@runtime/uploads/albums'))
+    );
+
+// run background jobs inline in tests, so they don't depend on a running worker
+$container['definitions'][\app\models\contract\queue\QueueInterface::class] =
+    \app\components\queue\SyncQueue::class;
 
 /**
  * Application configuration shared by all test types

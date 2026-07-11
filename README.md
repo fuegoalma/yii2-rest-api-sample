@@ -80,9 +80,11 @@ The whole environment is defined by a single **multi-stage** [`Dockerfile`](Dock
 
 | Stage | Used by | What it contains |
 |-------|---------|------------------|
-| `base` | — | Shared runtime: PHP 8.5 + Apache, Imagick, `pdo_mysql`/`mysqli`, Composer |
+| `base` | — | Shared runtime: PHP 8.5 + Apache, Imagick, `pdo_mysql`/`mysqli`, `pcntl` (worker signals), Composer |
 | `dev`  | `docker-compose.yml` (`target: dev`) | Your code and `vendor/` are bind-mounted from the host, so edits are live and `make` commands run against your local files |
 | `prod` | CD pipeline (`target: prod`) | Self-contained image: production dependencies (`--no-dev`) and app code baked in, no volumes |
+
+The Compose stack runs the `web` app plus three supporting services that all reuse the same image: `db` (MySQL), `cron` (scheduled console jobs), and `worker` (a long-running process that drains the background-job queue — see [Background Jobs](#background-jobs)).
 
 Local development uses the `dev` stage through Docker Compose. Handy lifecycle shortcuts (see `make help` for the full list):
 
@@ -92,6 +94,39 @@ make down      # stop and remove the stack
 make sh        # open a shell inside the web container
 make rebuild   # rebuild the web image via Buildx (after editing the Dockerfile)
 ```
+
+---
+
+## File Storage
+
+Photo storage is abstracted behind [Flysystem](https://flysystem.thephpleague.com/) (`League\Flysystem\FilesystemOperator`). The application never touches the filesystem directly: [`ImageProcessor`](components/ImageProcessor.php) transforms the upload (Imagick → resized WebP) and hands the bytes to the injected filesystem, so **where** files live is a single DI decision in [`config/di.php`](config/di.php):
+
+```php
+// local disk (default)
+FilesystemOperator::class => static fn () => new Filesystem(
+    new LocalFilesystemAdapter(Yii::getAlias($params['photo_upload_path']))
+),
+
+// move everything to S3 — no application code changes:
+// FilesystemOperator::class => static fn () => new Filesystem(
+//     new AwsS3V3Adapter(new S3Client([...]), 'my-bucket')
+// ),
+```
+
+The `league/flysystem-aws-s3-v3` adapter is already installed, so switching to (or adding a CDN in front of) object storage is config-only. Tests point the same binding at `@runtime` (see [`config/test.php`](config/test.php)) so uploads never hit the web root.
+
+---
+
+## Background Jobs
+
+Slow, retriable side-effects are pushed onto a queue instead of blocking the request. Everything depends on the small [`QueueInterface`](models/contract/queue/QueueInterface.php) / [`JobInterface`](models/contract/queue/JobInterface.php) seam, with two drivers:
+
+- **`DbQueue`** (default) — persists jobs to the `queue_job` table; the long-running **`worker`** service (`yii queue/listen`) drains them continuously, sleeping only when idle and shutting down gracefully on `SIGTERM` (`docker stop`). `yii queue/run` drains once (handy for CI/manual runs).
+- **`SyncQueue`** — runs jobs in-process; bound in tests so they don't depend on a running worker.
+
+The first use case is permanently deleting an album: the rows go in a transaction, and each album's on-disk directory cleanup is enqueued (`DeleteAlbumDirectoryJob`) rather than done inline, so a large delete never blocks the response and a failure is retried by the worker instead of aborting the teardown.
+
+> **Why a hand-rolled queue?** The idiomatic choice is `yiisoft/yii2-queue`, but its current release caps `symfony/process` at `^7` while this project runs `^8` (PHP 8.5), so it can't be installed here. On a mainstream stack yii2-queue (Redis/DB/AMQP driver) would back the same `QueueInterface` with no call-site changes.
 
 ---
 
@@ -269,10 +304,11 @@ The project ships a two-stage GitHub Actions pipeline — the two badges at the 
 ├── controllers/       # API controllers
 ├── migrations/        # Database migrations
 ├── models/
-│   ├── contract/      # Interfaces (repository & service contracts)
+│   ├── contract/      # Interfaces (repository, service & queue contracts)
 │   ├── db/            # ActiveRecord models
 │   ├── dto/           # Data Transfer Objects
 │   ├── form/          # Form requests (validation of incoming request data)
+│   ├── jobs/          # Background-queue jobs
 │   ├── repository/    # Repository layer (database access)
 │   └── service/       # Service layer (business logic)
 ├── tests/
@@ -390,6 +426,8 @@ make rbac-assign role=super_admin email=user@example.com
 
 - **Anti-escalation** — an admin (who can *assign* roles but not *manage* them) can hand out unprivileged roles but can never grant or revoke a role carrying `role.manage`/`role.assign`. So an admin cannot mint or demote another admin/super admin — only a super admin can.
 - **Last-role-manager invariant** — no operation (deleting a role, re-composing it, changing assignments, deleting a user) may leave the system with **zero** users able to manage roles. Such an attempt returns `409` (e.g. the last super admin trying to strip their own role).
+
+These mutations are **atomic and concurrency-safe**: each runs inside a DB transaction (injected via `TransactionRunnerInterface`) and takes a `SELECT ... FOR UPDATE` lock on the current role-managers before checking the invariant, so two concurrent requests can't each pass the check and *together* remove the last manager. User deletion (account + all its albums, photos and files) is wrapped in the same way.
 
 ---
 

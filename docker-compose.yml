@@ -33,6 +33,27 @@ services:
     networks:
       - yii-network
 
+  # Long-running background worker: continuously processes queued jobs
+  # (QueueController::actionListen → DbQueue). Reuses the web image (same
+  # `image:` name → built once) + code mount + env; its entrypoint is the
+  # worker loop instead of Apache, and it restarts so it stays up.
+  worker:
+    image: yii-app:dev
+    build:
+      context: .
+      target: dev
+    env_file:
+      - .env
+    volumes:
+      - ./:/var/www/html
+    working_dir: /var/www/html
+    entrypoint: ["php", "yii", "queue/listen"]
+    restart: unless-stopped
+    depends_on:
+      - db
+    networks:
+      - yii-network
+
   db:
     image: mysql:8.0
     env_file:
