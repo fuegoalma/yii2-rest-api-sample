@@ -4,6 +4,7 @@ namespace app\models\form;
 
 use app\models\db\Permission;
 use app\models\form\basic\ApiForm;
+use app\models\form\basic\ValidatesKnownNames;
 
 /**
  * Shared rules for role request data. A role is composed exclusively from
@@ -13,6 +14,8 @@ use app\models\form\basic\ApiForm;
  */
 abstract class RoleForm extends ApiForm
 {
+    use ValidatesKnownNames;
+
     public $name;
     public $description;
     public $permissions;
@@ -40,10 +43,7 @@ abstract class RoleForm extends ApiForm
             return;
         }
 
-        $names = array_unique(array_map('strval', $this->permissions));
-        $known = (int) Permission::find()->where(['name' => $names])->count();
-
-        if ($known !== count($names)) {
+        if ($this->knownNames(Permission::class, $this->permissions) === null) {
             $this->addError($attribute, 'Unknown permission name(s).');
         }
     }

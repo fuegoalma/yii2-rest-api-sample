@@ -4,6 +4,7 @@ namespace app\models\form;
 
 use app\models\db\Role;
 use app\models\form\basic\ApiForm;
+use app\models\form\basic\ValidatesKnownNames;
 
 /**
  * Body of `PUT /users/<id>/roles`: the full replacement role set. An empty
@@ -12,6 +13,8 @@ use app\models\form\basic\ApiForm;
  */
 class RoleAssignForm extends ApiForm
 {
+    use ValidatesKnownNames;
+
     public $roles;
 
     public function rules(): array
@@ -33,9 +36,9 @@ class RoleAssignForm extends ApiForm
             return;
         }
 
-        $names = array_unique(array_map('strval', $this->roles));
+        $names = $this->knownNames(Role::class, $this->roles);
 
-        if ((int) Role::find()->where(['name' => $names])->count() !== count($names)) {
+        if ($names === null) {
             $this->addError($attribute, 'Unknown role name(s).');
             return;
         }
