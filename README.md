@@ -64,6 +64,14 @@ make setup
 
 > The **first** `make setup` builds the Docker image (Imagick + PHP extensions are baked in via Buildx), so it takes a minute. Every subsequent `make up` starts instantly — the image is already built. If you later change the [`Dockerfile`](Dockerfile), rebuild the image with `make rebuild`.
 
+Once it finishes, the stack is live:
+
+| Service | URL |
+|---------|-----|
+| REST API | http://localhost:8084 |
+| **Interactive API docs (Swagger UI)** | **http://localhost:8084/docs** |
+| phpMyAdmin | http://localhost:8085 |
+
 ---
 
 ## Docker Environment
@@ -255,7 +263,9 @@ The project ships a two-stage GitHub Actions pipeline — the two badges at the 
 │   ├── db.php         # Main database config (reads from .env)
 │   ├── test_db.php    # Test database config (reads from .env)
 │   ├── web.php        # Web application config
-│   └── console.php    # Console application config
+│   ├── console.php    # Console application config
+│   ├── url_rules.php  # Shared REST route table (used by web + test)
+│   └── openapi.yaml   # OpenAPI 3.0 spec — source of truth for the API docs (/docs)
 ├── controllers/       # API controllers
 ├── migrations/        # Database migrations
 ├── models/
@@ -384,6 +394,8 @@ make rbac-assign role=super_admin email=user@example.com
 ---
 
 ## API Endpoints
+
+> **Interactive docs:** a full OpenAPI 3.0 specification is served with **Swagger UI at [`/docs`](http://localhost:8084/docs)** (raw spec at [`/docs/openapi.yaml`](http://localhost:8084/docs/openapi.yaml)). The spec lives in [`config/openapi.yaml`](config/openapi.yaml) — the single source of truth for request/response shapes and RBAC gates. The tables below are a quick reference.
 
 All endpoints below require the `Authorization: Bearer <token>` header. The **Who can access** column summarises the RBAC gate — "base user" means any authenticated caller (see [Authorization](#authorization-rbac)).
 

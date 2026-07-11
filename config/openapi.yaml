@@ -1,0 +1,1233 @@
+openapi: 3.0.3
+
+info:
+  title: Photos REST API
+  version: 1.0.0
+  description: |
+    Yii2 REST API for **users, albums and photos** with JWT authentication,
+    a two-token model (stateless access token + stateful, revocable refresh
+    token) and flat RBAC.
+
+    ## Response envelope
+    Every response — success or error — is wrapped the same way:
+    `{ "success": bool, "data": ..., "code": int }`. List endpoints put the
+    rows under `data.items` alongside a `data.pagination` block.
+
+    ## Authentication
+    All resource endpoints require `Authorization: Bearer <access_token>`.
+    The public endpoints are the auth endpoints (`/auth/*`) and `/health`.
+    Obtain a token pair from `POST /auth/login` or `POST /auth/register`.
+
+    ## Authorization (RBAC)
+    Access is flat: a role is a named set of permissions, a user may hold
+    several, and effective permissions are their union. A freshly registered
+    account has **no roles** ("base user") and may only act on records it
+    owns. Endpoint descriptions state the permission each action requires; a
+    caller lacking it gets a `403`.
+  license:
+    name: BSD-3-Clause
+
+servers:
+  - url: http://localhost:8084
+    description: Local Docker environment
+
+tags:
+  - name: Auth
+    description: Login, registration, token refresh and logout (public, rate-limited per IP).
+  - name: Health
+    description: Liveness probe for load balancers / uptime monitoring (public).
+  - name: Users
+    description: User accounts, the current-user endpoints, and role assignment.
+  - name: Albums
+    description: Albums owned by users, including soft-delete / restore review flow.
+  - name: Photos
+    description: Photos, a nested resource of albums (no flat collection).
+  - name: Roles
+    description: Role composition from catalog permissions (super-admin only for mutations).
+  - name: Permissions
+    description: Read-only permission catalog for the role-composition UI.
+
+security:
+  - bearerAuth: []
+
+paths:
+  # ---------------------------------------------------------------- Auth
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Log in with email and password
+      description: Returns a fresh access + refresh token pair and starts a new token family (session). Wrong credentials → 401.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Authenticated — token pair issued.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponseEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Self-register and log in
+      description: Creates an account (assigned **no** role) and logs it straight in, returning a token pair. Duplicate email or a missing field → 422.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: Account created and logged in — token pair issued.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponseEnvelope'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Exchange a refresh token for a fresh pair
+      description: |
+        Refresh tokens are single-use and **rotate**: this revokes the presented
+        token and issues a new pair in the same family. Presenting an already-spent
+        token is treated as a leak and revokes the whole family. Unknown / expired /
+        revoked token → 401.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshTokenRequest'
+      responses:
+        '200':
+          description: A fresh token pair in the same family.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponseEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Log out this device
+      description: Revokes the presented token's **family** (one session/device). Best-effort and idempotent — an unknown token still returns 204.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshTokenRequest'
+      responses:
+        '204':
+          description: Session revoked (or already gone).
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /auth/logout-all:
+    post:
+      tags: [Auth]
+      summary: Log out all devices
+      description: Revokes **every** family of the token's owner. Idempotent → 204.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshTokenRequest'
+      responses:
+        '204':
+          description: All the owner's sessions revoked.
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  # ---------------------------------------------------------------- Health
+  /health:
+    get:
+      tags: [Health]
+      summary: Health check
+      description: Public, unauthenticated, unthrottled. Runs `SELECT 1` against the database.
+      security: []
+      responses:
+        '200':
+          description: Service healthy.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthEnvelope'
+        '503':
+          description: Database unreachable (`checks.database` is `"error"`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthEnvelope'
+
+  # ---------------------------------------------------------------- Current user
+  /users/me:
+    get:
+      tags: [Users]
+      summary: The authenticated user's profile
+      description: Available to every authenticated user (never gated). Returns the profile, the user's albums and their role names.
+      responses:
+        '200':
+          description: Current user.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/Me'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /users/me/permissions:
+    get:
+      tags: [Users]
+      summary: The caller's roles and effective permissions
+      description: For a client to build its UI from — role names plus the union of their role-granted permission names. Never gated.
+      responses:
+        '200':
+          description: Roles and permissions of the caller.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/MePermissions'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ---------------------------------------------------------------- Users
+  /users:
+    get:
+      tags: [Users]
+      summary: List users
+      description: 'Requires `user.index.any` (moderator+). Supports `?expand=albums`.'
+      parameters:
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/perPage'
+        - name: sort
+          in: query
+          description: 'Comma-separated, `-` prefix = descending. Allowed: `id`, `first_name`, `last_name`, `email`, `created_at`, `updated_at`.'
+          schema: { type: string, example: -created_at,last_name }
+        - { name: first_name, in: query, schema: { type: string }, description: Partial match. }
+        - { name: last_name, in: query, schema: { type: string }, description: Partial match. }
+        - { name: email, in: query, schema: { type: string }, description: Partial match. }
+        - $ref: '#/components/parameters/expand'
+      responses:
+        '200':
+          description: A page of users.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          items:
+                            type: array
+                            items: { $ref: '#/components/schemas/User' }
+                          pagination: { $ref: '#/components/schemas/Pagination' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    post:
+      tags: [Users]
+      summary: Create a user
+      description: Requires `user.create` (admin+). The account is created with **no** role. Password is hashed server-side.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UserCreateRequest' }
+      responses:
+        '201':
+          description: User created.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - properties: { data: { $ref: '#/components/schemas/User' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /users/{id}:
+    parameters:
+      - $ref: '#/components/parameters/idPath'
+    get:
+      tags: [Users]
+      summary: Get a user
+      description: Requires `user.view.any` (moderator+) — ownership does **not** grant it. Always includes the user's albums.
+      responses:
+        '200':
+          description: The user with albums.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - properties: { data: { $ref: '#/components/schemas/UserWithAlbums' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Users]
+      summary: Update a user (partial)
+      description: Requires ownership (own profile) or `user.update.any` (admin+). All fields optional. An admin cannot take over a role-manager's account (409).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UserUpdateRequest' }
+      responses:
+        '200':
+          description: Updated user.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - properties: { data: { $ref: '#/components/schemas/User' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    patch:
+      tags: [Users]
+      summary: Update a user (partial, alias of PUT)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UserUpdateRequest' }
+      responses:
+        '200':
+          description: Updated user.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - properties: { data: { $ref: '#/components/schemas/User' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    delete:
+      tags: [Users]
+      summary: Delete a user
+      description: Requires `user.delete.any` (admin+). Blocked by the last-role-manager invariant (409).
+      responses:
+        '204':
+          description: User deleted.
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /users/{id}/roles:
+    parameters:
+      - $ref: '#/components/parameters/idPath'
+    get:
+      tags: [Users]
+      summary: List a user's roles
+      description: Requires `role.assign` (admin+).
+      responses:
+        '200':
+          description: The user's roles.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Role' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Users]
+      summary: Replace a user's role set
+      description: |
+        Requires `role.assign` (admin+). Full replacement — an empty array revokes
+        every role (back to a base user). Anti-escalation and the last-role-manager
+        invariant are enforced (403 / 409). Unknown role name → 422.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RoleAssignRequest' }
+      responses:
+        '200':
+          description: The user's new role set.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Role' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  # ---------------------------------------------------------------- Albums
+  /albums/my:
+    get:
+      tags: [Albums]
+      summary: The caller's own albums
+      description: Available to every authenticated user. Soft-deleted albums are excluded.
+      parameters:
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/perPage'
+        - $ref: '#/components/parameters/albumSort'
+        - { name: title, in: query, schema: { type: string }, description: Partial match. }
+        - $ref: '#/components/parameters/expand'
+      responses:
+        '200':
+          description: A page of the caller's albums.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AlbumListEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /albums:
+    get:
+      tags: [Albums]
+      summary: List all albums (review view)
+      description: 'Requires `album.index.any` (moderator+). Soft-deleted albums are hidden unless requested via `?is_deleted=1` (the review queue). Supports `?expand=photos`.'
+      parameters:
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/perPage'
+        - $ref: '#/components/parameters/albumSort'
+        - { name: title, in: query, schema: { type: string }, description: Partial match. }
+        - { name: user_id, in: query, schema: { type: integer }, description: Exact match on owner. }
+        - name: is_deleted
+          in: query
+          description: 'Exact match. Omit to see only live albums; `1` surfaces the soft-deleted review queue.'
+          schema: { type: boolean }
+        - $ref: '#/components/parameters/expand'
+      responses:
+        '200':
+          description: A page of albums.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AlbumListEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    post:
+      tags: [Albums]
+      summary: Create an album
+      description: A base ability of every authenticated user. The owner is forced to the caller — `user_id` cannot be set from the body.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AlbumCreateRequest' }
+      responses:
+        '201':
+          description: Album created.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - properties: { data: { $ref: '#/components/schemas/Album' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /albums/{id}:
+    parameters:
+      - $ref: '#/components/parameters/idPath'
+    get:
+      tags: [Albums]
+      summary: Get an album with its photos and owner
+      description: Requires ownership or `album.view.any` (moderator+). Returns a richer shape including the owner's name and the album's photos.
+      responses:
+        '200':
+          description: The album with photos.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - properties: { data: { $ref: '#/components/schemas/AlbumView' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Albums]
+      summary: Update an album (partial)
+      description: Requires ownership or `album.update.any` (moderator+). Only the title is editable.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AlbumUpdateRequest' }
+      responses:
+        '200':
+          description: Updated album.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - properties: { data: { $ref: '#/components/schemas/Album' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    patch:
+      tags: [Albums]
+      summary: Update an album (partial, alias of PUT)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AlbumUpdateRequest' }
+      responses:
+        '200':
+          description: Updated album.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - properties: { data: { $ref: '#/components/schemas/Album' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    delete:
+      tags: [Albums]
+      summary: Delete an album (permanent or soft)
+      description: |
+        One route, outcome decided by permission:
+        - **Permanent** for the owner or a holder of `album.delete.any` (admin+) — the album, its photos and their files are removed.
+        - **Soft** (flag + optional reason, idempotent) for holders of `album.soft-delete.any` (moderator) only. The optional JSON body carries the review reason.
+
+        Permanent wins if a role has both.
+      requestBody:
+        required: false
+        description: Only consulted for a soft delete.
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AlbumSoftDeleteRequest' }
+      responses:
+        '204':
+          description: Album deleted (permanently or soft-flagged).
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /albums/{id}/restore:
+    parameters:
+      - $ref: '#/components/parameters/idPath'
+    post:
+      tags: [Albums]
+      summary: Restore a soft-deleted album
+      description: Requires `album.restore` (admin+). Lifts the pseudo-deletion after review.
+      responses:
+        '200':
+          description: The restored album.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - properties: { data: { $ref: '#/components/schemas/Album' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ---------------------------------------------------------------- Photos
+  /albums/{albumId}/photos:
+    parameters:
+      - name: albumId
+        in: path
+        required: true
+        schema: { type: integer, minimum: 1 }
+    get:
+      tags: [Photos]
+      summary: List an album's photos
+      description: Requires ownership of the album or `photo.view.any` (moderator+). A missing album → 404.
+      parameters:
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/perPage'
+        - name: sort
+          in: query
+          description: 'Comma-separated, `-` prefix = descending. Allowed: `id`, `title`, `created_at`.'
+          schema: { type: string }
+        - { name: title, in: query, schema: { type: string }, description: Partial match. }
+      responses:
+        '200':
+          description: A page of photos.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          items:
+                            type: array
+                            items: { $ref: '#/components/schemas/Photo' }
+                          pagination: { $ref: '#/components/schemas/Pagination' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    post:
+      tags: [Photos]
+      summary: Upload a photo into an album
+      description: |
+        Requires ownership of the album or `photo.create.any` (moderator+).
+        The **only** `multipart/form-data` endpoint. Allowed extensions:
+        `jpg, jpeg, png, webp, gif, avif`. Every upload is converted to WebP
+        quality 80, scaled to fit 500×500 preserving aspect ratio (never
+        upscaled). A non-image passing the extension check → 422.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [title, file]
+              properties:
+                title:
+                  type: string
+                  maxLength: 255
+                file:
+                  type: string
+                  format: binary
+                  description: 'The image file (jpg, jpeg, png, webp, gif, avif).'
+      responses:
+        '201':
+          description: Photo uploaded and stored as WebP.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - properties: { data: { $ref: '#/components/schemas/Photo' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /photos/{id}:
+    parameters:
+      - $ref: '#/components/parameters/idPath'
+    get:
+      tags: [Photos]
+      summary: Get a photo
+      description: Requires ownership (via the album) or `photo.view.any` (moderator+).
+      responses:
+        '200':
+          description: The photo.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - properties: { data: { $ref: '#/components/schemas/Photo' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Photos]
+      summary: Update a photo (title only)
+      description: Requires ownership or `photo.update.any` (moderator+). The album and the stored file are immutable — only the title can change.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PhotoUpdateRequest' }
+      responses:
+        '200':
+          description: Updated photo.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - properties: { data: { $ref: '#/components/schemas/Photo' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    patch:
+      tags: [Photos]
+      summary: Update a photo (title only, alias of PUT)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PhotoUpdateRequest' }
+      responses:
+        '200':
+          description: Updated photo.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - properties: { data: { $ref: '#/components/schemas/Photo' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    delete:
+      tags: [Photos]
+      summary: Delete a photo
+      description: Requires ownership or `photo.delete.any` (moderator+). Removes the record and, for uploaded photos, the physical file.
+      responses:
+        '204':
+          description: Photo deleted.
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ---------------------------------------------------------------- Roles
+  /roles:
+    get:
+      tags: [Roles]
+      summary: List roles
+      description: Requires `role.index` (admin+). Returns name + description (no permission sets).
+      parameters:
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/perPage'
+        - name: sort
+          in: query
+          description: 'Comma-separated, `-` prefix = descending. Allowed: `id`, `name`.'
+          schema: { type: string }
+        - { name: name, in: query, schema: { type: string }, description: Partial match. }
+      responses:
+        '200':
+          description: A page of roles.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          items:
+                            type: array
+                            items: { $ref: '#/components/schemas/Role' }
+                          pagination: { $ref: '#/components/schemas/Pagination' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    post:
+      tags: [Roles]
+      summary: Compose a custom role
+      description: Requires `role.manage` (super-admin). Built from catalog permissions; an unknown permission name → 422, a duplicate role name → 422.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RoleCreateRequest' }
+      responses:
+        '201':
+          description: Role created.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - properties: { data: { $ref: '#/components/schemas/Role' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /roles/{id}:
+    parameters:
+      - $ref: '#/components/parameters/idPath'
+    get:
+      tags: [Roles]
+      summary: Get a role with its permissions
+      description: Requires `role.view` (super-admin). Includes the role's permission set.
+      responses:
+        '200':
+          description: The role with permissions.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - properties: { data: { $ref: '#/components/schemas/RoleWithPermissions' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Roles]
+      summary: Re-compose a role (partial)
+      description: |
+        Requires `role.manage` (super-admin). A system role can be re-composed but
+        not renamed (422). Blocked by the last-role-manager invariant (409).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RoleUpdateRequest' }
+      responses:
+        '200':
+          description: Updated role.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - properties: { data: { $ref: '#/components/schemas/Role' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    patch:
+      tags: [Roles]
+      summary: Re-compose a role (partial, alias of PUT)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RoleUpdateRequest' }
+      responses:
+        '200':
+          description: Updated role.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - properties: { data: { $ref: '#/components/schemas/Role' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    delete:
+      tags: [Roles]
+      summary: Delete a custom role
+      description: Requires `role.manage` (super-admin). A system role cannot be deleted (409). Blocked by the last-role-manager invariant (409).
+      responses:
+        '204':
+          description: Role deleted.
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  # ---------------------------------------------------------------- Permissions
+  /permissions:
+    get:
+      tags: [Permissions]
+      summary: List the permission catalog
+      description: Requires `permission.index` (super-admin). Read-only — permissions are managed by migrations.
+      responses:
+        '200':
+          description: The whole catalog, ordered by name.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Permission' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: 'A stateless HS256 access-token JWT from `/auth/login`, `/auth/register` or `/auth/refresh`.'
+
+  parameters:
+    idPath:
+      name: id
+      in: path
+      required: true
+      schema: { type: integer, minimum: 1 }
+    page:
+      name: page
+      in: query
+      description: Page number (default 1). Out-of-range pages return an empty set.
+      schema: { type: integer, minimum: 1, default: 1 }
+    perPage:
+      name: per_page
+      in: query
+      description: Items per page, 1–100 (default 20).
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+    expand:
+      name: expand
+      in: query
+      description: 'Comma-separated related resources to embed (e.g. `albums` on users, `photos` on albums).'
+      schema: { type: string }
+    albumSort:
+      name: sort
+      in: query
+      description: 'Comma-separated, `-` prefix = descending. Allowed: `id`, `user_id`, `title`, `created_at`, `updated_at`.'
+      schema: { type: string }
+
+  responses:
+    Unauthorized:
+      description: Missing / invalid access token, or bad credentials.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    Forbidden:
+      description: Authenticated but lacking the required permission.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    NotFound:
+      description: Resource not found (or not visible to the caller).
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    Conflict:
+      description: The operation would violate a safety invariant (e.g. the last role manager).
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    ValidationError:
+      description: Request body or query validation failed. `data.error` maps each field to its messages.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ValidationErrorEnvelope' }
+    TooManyRequests:
+      description: Rate limit exceeded (see the `Retry-After` header).
+      headers:
+        Retry-After:
+          description: Seconds to wait before retrying.
+          schema: { type: integer }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+
+  schemas:
+    # -- Envelope building blocks ------------------------------------
+    SuccessEnvelope:
+      type: object
+      description: The unified success envelope. Concrete responses refine `data`.
+      required: [success, data, code]
+      properties:
+        success: { type: boolean, example: true }
+        data: {}
+        code: { type: integer, example: 200 }
+    ErrorEnvelope:
+      type: object
+      required: [success, data, code]
+      properties:
+        success: { type: boolean, example: false }
+        code: { type: integer, example: 404 }
+        data:
+          type: object
+          properties:
+            message: { type: string, example: An error occurred during execution }
+            error:
+              type: object
+              description: 'Details; only populated for validation errors, or with a stack trace when `YII_DEBUG`.'
+              additionalProperties: true
+    ValidationErrorEnvelope:
+      type: object
+      required: [success, data, code]
+      properties:
+        success: { type: boolean, example: false }
+        code: { type: integer, example: 422 }
+        data:
+          type: object
+          properties:
+            message: { type: string, example: An error occurred during execution }
+            error:
+              type: object
+              description: Field name → list of validation messages.
+              additionalProperties:
+                type: array
+                items: { type: string }
+              example:
+                email: ['Email cannot be blank.']
+
+    Pagination:
+      type: object
+      properties:
+        total: { type: integer, example: 45 }
+        per_page: { type: integer, example: 20 }
+        current_page: { type: integer, example: 1 }
+        last_page: { type: integer, example: 3 }
+        from: { type: integer, example: 1 }
+        to: { type: integer, example: 20 }
+
+    # -- Auth --------------------------------------------------------
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email, maxLength: 255, example: user@example.com }
+        password: { type: string, maxLength: 72, example: secret123 }
+    RegisterRequest:
+      type: object
+      required: [first_name, last_name, email, password]
+      properties:
+        first_name: { type: string, maxLength: 255, example: John }
+        last_name: { type: string, maxLength: 255, example: Doe }
+        email: { type: string, format: email, maxLength: 255, example: user@example.com }
+        password: { type: string, minLength: 6, maxLength: 72, example: secret123 }
+    RefreshTokenRequest:
+      type: object
+      required: [refresh_token]
+      properties:
+        refresh_token: { type: string, example: 3f7c1e9a8b2d... }
+    TokenResponse:
+      type: object
+      properties:
+        access_token: { type: string, example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9... }
+        refresh_token: { type: string, example: 3f7c1e9a8b2d... }
+        token_type: { type: string, example: Bearer }
+        expires_in: { type: integer, description: Access-token lifetime in seconds., example: 3600 }
+    TokenResponseEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - properties:
+            data: { $ref: '#/components/schemas/TokenResponse' }
+
+    # -- Health ------------------------------------------------------
+    HealthEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - properties:
+            data:
+              type: object
+              properties:
+                status: { type: string, enum: [ok, error], example: ok }
+                checks:
+                  type: object
+                  properties:
+                    database: { type: string, enum: [ok, error], example: ok }
+
+    # -- Users -------------------------------------------------------
+    User:
+      type: object
+      properties:
+        id: { type: integer, example: 12 }
+        first_name: { type: string, example: John }
+        last_name: { type: string, example: Doe }
+        email: { type: string, format: email, example: john@example.com }
+    UserWithAlbums:
+      allOf:
+        - $ref: '#/components/schemas/User'
+        - type: object
+          properties:
+            albums:
+              type: array
+              items: { $ref: '#/components/schemas/Album' }
+    Me:
+      allOf:
+        - $ref: '#/components/schemas/UserWithAlbums'
+        - type: object
+          properties:
+            roles:
+              type: array
+              items: { type: string, example: admin }
+    MePermissions:
+      type: object
+      properties:
+        roles:
+          type: array
+          items: { type: string, example: admin }
+        permissions:
+          type: array
+          items: { type: string, example: album.update.any }
+    UserCreateRequest:
+      type: object
+      required: [first_name, last_name, email, password]
+      properties:
+        first_name: { type: string, maxLength: 255, example: John }
+        last_name: { type: string, maxLength: 255, example: Doe }
+        email: { type: string, format: email, maxLength: 255, example: john@example.com }
+        password: { type: string, minLength: 6, maxLength: 72, example: secret123 }
+    UserUpdateRequest:
+      type: object
+      description: All fields optional — partial update.
+      properties:
+        first_name: { type: string, maxLength: 255 }
+        last_name: { type: string, maxLength: 255 }
+        email: { type: string, format: email, maxLength: 255 }
+        password: { type: string, minLength: 6, maxLength: 72 }
+
+    # -- Albums ------------------------------------------------------
+    Album:
+      type: object
+      description: Album list/summary shape.
+      properties:
+        id: { type: integer, example: 5 }
+        title: { type: string, example: Vacation 2025 }
+        is_deleted: { type: boolean, example: false }
+        delete_reason: { type: string, nullable: true, example: null }
+    AlbumView:
+      type: object
+      description: Richer single-album shape — includes the owner's name and the album's photos.
+      properties:
+        id: { type: integer, example: 5 }
+        title: { type: string, example: Vacation 2025 }
+        first_name: { type: string, description: Owner's first name., example: John }
+        last_name: { type: string, description: Owner's last name., example: Doe }
+        is_deleted: { type: boolean, example: false }
+        delete_reason: { type: string, nullable: true, example: null }
+        photos:
+          type: array
+          items: { $ref: '#/components/schemas/Photo' }
+    AlbumListEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - properties:
+            data:
+              type: object
+              properties:
+                items:
+                  type: array
+                  items: { $ref: '#/components/schemas/Album' }
+                pagination: { $ref: '#/components/schemas/Pagination' }
+    AlbumCreateRequest:
+      type: object
+      required: [title]
+      properties:
+        title: { type: string, maxLength: 255, example: Vacation 2025 }
+    AlbumUpdateRequest:
+      type: object
+      description: All fields optional — partial update.
+      properties:
+        title: { type: string, maxLength: 255 }
+    AlbumSoftDeleteRequest:
+      type: object
+      description: Optional body for a soft delete.
+      properties:
+        reason: { type: string, maxLength: 255, example: Reported for review }
+
+    # -- Photos ------------------------------------------------------
+    Photo:
+      type: object
+      properties:
+        id: { type: integer, example: 41 }
+        title: { type: string, example: Beach sunset }
+        url:
+          type: string
+          nullable: true
+          example: http://localhost:8084/uploads/albums/5/8f3ac91b.webp
+    PhotoUpdateRequest:
+      type: object
+      description: Only the title may change.
+      properties:
+        title: { type: string, maxLength: 255 }
+
+    # -- Roles & permissions ----------------------------------------
+    Role:
+      type: object
+      properties:
+        id: { type: integer, example: 2 }
+        name: { type: string, example: moderator }
+        description: { type: string, example: Can moderate albums and photos }
+        is_system:
+          type: boolean
+          description: Seeded roles (moderator/admin/super_admin) — cannot be renamed or deleted.
+          example: true
+    RoleWithPermissions:
+      allOf:
+        - $ref: '#/components/schemas/Role'
+        - type: object
+          properties:
+            permissions:
+              type: array
+              items: { $ref: '#/components/schemas/Permission' }
+    Permission:
+      type: object
+      properties:
+        name: { type: string, example: album.update.any }
+        description: { type: string, example: Update any album }
+    RoleCreateRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, maxLength: 64, example: editor }
+        description: { type: string, maxLength: 255, example: Can edit any album }
+        permissions:
+          type: array
+          description: Catalog permission names to grant.
+          items: { type: string, example: album.update.any }
+    RoleUpdateRequest:
+      type: object
+      description: All fields optional — partial update. Sending `permissions` replaces the set.
+      properties:
+        name: { type: string, maxLength: 64 }
+        description: { type: string, maxLength: 255 }
+        permissions:
+          type: array
+          items: { type: string }
+    RoleAssignRequest:
+      type: object
+      required: [roles]
+      properties:
+        roles:
+          type: array
+          description: The full replacement set of role names. An empty array revokes all roles.
+          items: { type: string, example: moderator }

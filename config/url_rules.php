@@ -8,6 +8,9 @@
  */
 
 return [
+    // interactive API documentation (Swagger UI + the raw OpenAPI spec), public
+    'GET docs' => 'docs/index',
+    'GET docs/openapi.yaml' => 'docs/spec',
     'GET,OPTIONS health' => 'health/index',
     'POST,OPTIONS auth/login' => 'auth/login',
     'POST,OPTIONS auth/register' => 'auth/register',
