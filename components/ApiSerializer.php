@@ -10,6 +10,14 @@ use Yii;
 
 class ApiSerializer extends Serializer
 {
+    /**
+     * Relations a caller may embed via `?expand=`. `null` means no extra
+     * restriction — the model's own `extraFields()` still applies.
+     *
+     * @var string[]|null
+     */
+    public ?array $allowedExpand = null;
+
     public function serialize($data): array
     {
         $status_code = Yii::$app->response->statusCode;
@@ -28,6 +36,25 @@ class ApiSerializer extends Serializer
 
         $result = parent::serialize($data);
         return BasicResponse::success($result, $status_code)->toArray();
+    }
+
+    /**
+     * Narrows the requested `expand` list to {@see $allowedExpand}. A relation
+     * gated by a permission the action itself does not require must not be
+     * reachable through `?expand=`, so the whitelist is applied here — the one
+     * point every serialization path goes through — rather than per action.
+     *
+     * @return array{string[], string[]}
+     */
+    protected function getRequestedFields(): array
+    {
+        [$fields, $expand] = parent::getRequestedFields();
+
+        if ($this->allowedExpand !== null) {
+            $expand = array_values(array_intersect($expand, $this->allowedExpand));
+        }
+
+        return [$fields, $expand];
     }
 
     private function serializePaginated(DataProviderInterface $dataProvider): array

@@ -98,7 +98,7 @@ The whole environment is defined by a single **multi-stage** [`Dockerfile`](Dock
 | `dev`  | `docker-compose.yml` (`target: dev`) | Your code and `vendor/` are bind-mounted from the host, so edits are live and `make` commands run against your local files |
 | `prod` | CD pipeline (`target: prod`) | Self-contained image: production dependencies (`--no-dev`) and app code baked in, no volumes |
 
-The Compose stack runs the `web` app plus three supporting services that all reuse the same image: `db` (MySQL), `cron` (scheduled console jobs), and `worker` (a long-running process that drains the background-job queue — see [Background Jobs](#background-jobs)).
+The Compose stack is five services. `cron` (scheduled console jobs) and `worker` (a long-running process that drains the background-job queue — see [Background Jobs](#background-jobs)) reuse the **same** `yii-app:dev` image as `web`, differing only in entrypoint, so the image is built once for all three. The remaining two are stock upstream images: `db` (`mysql:8.0`) and `phpmyadmin`.
 
 Local development uses the `dev` stage through Docker Compose. Handy lifecycle shortcuts (see `make help` for the full list):
 
@@ -130,6 +130,17 @@ FilesystemOperator::class => static fn () => new Filesystem(
 ```
 
 The `league/flysystem-aws-s3-v3` adapter is already installed, so switching to (or adding a CDN in front of) object storage is config-only. Tests point the same binding at `@runtime` (see [`config/test.php`](config/test.php)) so uploads never hit the web root.
+
+---
+
+## CORS
+
+Cross-origin requests are allowed from anywhere. The filter is attached to every REST controller by [`ApiControllerTrait`](controllers/basic/ApiControllerTrait.php): `Origin: *`, all standard methods (`GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD`, `OPTIONS`), all request headers, credentials **off**, and a 24-hour preflight cache (`Access-Control-Max-Age: 86400`).
+
+`OPTIONS` preflights are deliberately exempt from everything that could reject them:
+
+- **Never authenticated** — the authenticator is attached *after* the CORS filter with `except => ['options']`, so a preflight needs no bearer token.
+- **Never throttled** — [`RateLimiter`](components/RateLimiter.php) passes `OPTIONS` straight through, so a browser's preflights can't burn the caller's auth-endpoint budget.
 
 ---
 
@@ -229,11 +240,15 @@ make seed
 
 Pass a count with `make seed count=20` (default is 10). Seeded users all get the password from the `DEFAULT_PASSWORD` env var; seeded photos use `source = 'seed'` and resolve to `web/default-images/` rather than a real upload.
 
+> **`count` is cubic, not linear.** [`SeederService`](models/service/SeederService.php) nests its loops: **N** users, **N²** albums (N per user), **N³** photos (N per album). The default `count=10` creates 10 users / 100 albums / **1,000** photos; `count=50` would create 125,000 photo rows. Pick it accordingly.
+
 #### Clear all seeded data
 
 ```bash
 make seed-clear
 ```
+
+> ⚠️ **This is destructive well beyond seed data.** `seeder/clear` runs an unfiltered `DELETE FROM user` ([`UserRepository::clearAll()`](models/repository/UserRepository.php)), so it removes **every** account — hand-made ones too — and the FK cascade takes every album, photo and role assignment with it, **including the `super_admin` you appointed with `make rbac-assign`**. Re-run [`make rbac-assign`](#appointing-the-first-super-admin) afterwards to get back into the RBAC-gated endpoints.
 
 #### Prune expired refresh tokens
 
@@ -552,6 +567,8 @@ All endpoints below require the `Authorization: Bearer <token>` header. The **Wh
 | GET | `/users/{id}/roles` | List a user's roles | `admin`+ |
 | PUT | `/users/{id}/roles` | Replace a user's role set (`{"roles": [...]}`, empty array revokes all) | `admin`+ |
 
+> The `albums` embedded in `GET /users/{id}` only ever contains **live** albums — [`User::getAlbums()`](models/db/User.php) filters out soft-deleted ones at the relation level, even for a `super_admin`. To review a user's flagged albums, use `GET /albums?user_id={id}&is_deleted=1`.
+
 ### Albums
 
 | Method | Endpoint | Description | Who can access |
@@ -598,6 +615,24 @@ curl -X POST http://localhost:8084/albums/1/photos \
   -F "title=My Photo" \
   -F "file=@/path/to/image.jpg"
 ```
+
+### Request Validation Limits
+
+Enforced by the form requests in [`models/form/`](models/form/); a breach is a `422` with the field errors under `data.error`.
+
+| Field | Constraint |
+|-------|------------|
+| `password` | 6–72 characters (72 is bcrypt's own input limit) |
+| `email` | ≤255 chars, valid address, unique — an update excludes the record's own id |
+| `first_name` / `last_name` | ≤255 chars |
+| album / photo `title` | ≤255 chars |
+| album soft-delete `reason` | ≤255 chars, optional |
+| role `name` | ≤64 chars, unique |
+| role `description` | ≤255 chars |
+| `permissions` (role composition) | every name must exist in the catalog |
+| `roles` (role assignment body) | must be **present**; `[]` is valid and revokes every role; an unknown name → `422` |
+| photo upload `file` | required, extension in `jpg, jpeg, png, webp, gif, avif` — the bytes are re-validated by Imagick, so a renamed non-image still `422`s |
+| `per_page` | integer, 1–100 |
 
 ### Response Format
 
@@ -667,7 +702,16 @@ The list endpoints (`GET /users`, `GET /albums`, `GET /albums/my`, `GET /albums/
 | `page` | Page number to return (default `1`). |
 | `per_page` | Items per page, `1`–`100` (default `20`). |
 | `sort` | Comma-separated attribute list; prefix an attribute with `-` for descending order (e.g. `sort=-created_at,title`). |
+| `expand` | Comma-separated relations to embed in each item (see below). |
 | *filters* | One parameter per filterable attribute (see below). |
+
+Embeddable relations (`expand`):
+
+| Resource | `expand` values |
+|----------|-----------------|
+| Users | `albums` (live albums only, as noted above) |
+| Albums | `photos` |
+| Roles | `permissions` — **requires `role.view`** (`super_admin`). `GET /roles` itself only needs `role.index`, so for an `admin` the relation is silently dropped rather than rejected; the permission sets stay behind `GET /roles/{id}`. |
 
 Sortable / filterable attributes per resource:
 
@@ -678,7 +722,15 @@ Sortable / filterable attributes per resource:
 | Photos | `id`, `title`, `created_at` | `title` (partial match) |
 | Roles | `id`, `name` | `name` (partial match) |
 
-An unknown `sort` attribute or an out-of-range `per_page` returns `422`. A `page` past the last one is not clamped back — it returns an **empty** `items` array with `total`/`last_page` still reflecting the full result set (`current_page` echoes back whatever was requested). When `sort` is omitted (or resolves to nothing sortable), results default to `id` ascending. Example:
+An unknown `sort` attribute or an out-of-range `per_page` returns `422`. A `page` past the last one is not clamped back — it returns an **empty** `items` array with `total`/`last_page` still reflecting the full result set (`current_page` echoes back whatever was requested). When `sort` is omitted (or resolves to nothing sortable), results default to `id` ascending.
+
+A few more edge cases worth knowing:
+
+- **`last_page` is `0`, not `1`, for an empty result set** (`total: 0`), and `from`/`to` are both `0`.
+- **Filter values are matched literally.** Partial-match filters go through Yii's `like` operator, which escapes `%`, `_` and `\` — so `?title=100%` looks for the literal string, not a wildcard.
+- **An empty filter value is treated as absent.** `?title=` returns everything rather than matching `title = ''` or `NULL` (the repository applies filters with `andFilterWhere`, which skips empty operands).
+
+Example:
 
 ```bash
 curl "http://localhost:8084/users?first_name=jo&sort=-created_at&per_page=50&page=2" \

@@ -20,6 +20,8 @@ class Permission extends ActiveRecord
     public const string ROLE_MANAGE = 'role.manage';
     /** assign roles to users (privileged roles still require ROLE_MANAGE) */
     public const string ROLE_ASSIGN = 'role.assign';
+    /** reveal a role's permission set — `role.index` alone only lists name + description */
+    public const string ROLE_VIEW = 'role.view';
 
     public static function tableName(): string
     {

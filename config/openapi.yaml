@@ -36,6 +36,8 @@ tags:
     description: Login, registration, token refresh and logout (public, rate-limited per IP).
   - name: Health
     description: Liveness probe for load balancers / uptime monitoring (public).
+  - name: Docs
+    description: This interactive documentation itself (public, not wrapped in the response envelope).
   - name: Users
     description: User accounts, the current-user endpoints, and role assignment.
   - name: Albums
@@ -193,6 +195,38 @@ paths:
               schema:
                 $ref: '#/components/schemas/HealthEnvelope'
 
+  # ---------------------------------------------------------------- Docs
+  /docs:
+    get:
+      tags: [Docs]
+      summary: Swagger UI
+      description: |
+        Renders this interactive documentation. Served by `DocsController`, which
+        extends plain `yii\web\Controller` and sets `Response::FORMAT_RAW`, so it
+        deliberately bypasses both the JSON envelope and JWT auth. The page loads
+        `swagger-ui-dist` from a pinned CDN, so it needs internet access;
+        `/docs/openapi.yaml` itself is always served locally.
+      security: []
+      responses:
+        '200':
+          description: The Swagger UI HTML page.
+          content:
+            text/html:
+              schema: { type: string }
+
+  /docs/openapi.yaml:
+    get:
+      tags: [Docs]
+      summary: Raw OpenAPI specification
+      description: Serves this file (`config/openapi.yaml`) verbatim. Not wrapped in the JSON envelope.
+      security: []
+      responses:
+        '200':
+          description: The OpenAPI 3.0 spec, YAML-encoded.
+          content:
+            application/yaml:
+              schema: { type: string }
+
   # ---------------------------------------------------------------- Current user
   /users/me:
     get:
@@ -243,7 +277,7 @@ paths:
         - $ref: '#/components/parameters/perPage'
         - name: sort
           in: query
-          description: 'Comma-separated, `-` prefix = descending. Allowed: `id`, `first_name`, `last_name`, `email`, `created_at`, `updated_at`.'
+          description: 'Comma-separated, `-` prefix = descending. Allowed: `id`, `first_name`, `last_name`, `email`, `created_at`, `updated_at`. Defaults to `id` ascending when omitted or when it resolves to no whitelisted field.'
           schema: { type: string, example: -created_at,last_name }
         - { name: first_name, in: query, schema: { type: string }, description: Partial match. }
         - { name: last_name, in: query, schema: { type: string }, description: Partial match. }
@@ -606,7 +640,7 @@ paths:
         - $ref: '#/components/parameters/perPage'
         - name: sort
           in: query
-          description: 'Comma-separated, `-` prefix = descending. Allowed: `id`, `title`, `created_at`.'
+          description: 'Comma-separated, `-` prefix = descending. Allowed: `id`, `title`, `created_at`. Defaults to `id` ascending when omitted or when it resolves to no whitelisted field.'
           schema: { type: string }
         - { name: title, in: query, schema: { type: string }, description: Partial match. }
       responses:
@@ -745,13 +779,17 @@ paths:
     get:
       tags: [Roles]
       summary: List roles
-      description: Requires `role.index` (admin+). Returns name + description (no permission sets).
+      description: |
+        Requires `role.index` (admin+). Returns name + description; the permission
+        sets stay behind `role.view` (super admin), so `?expand=permissions` is
+        honoured only for a caller who holds it and ignored for everyone else.
       parameters:
         - $ref: '#/components/parameters/page'
         - $ref: '#/components/parameters/perPage'
+        - $ref: '#/components/parameters/expand'
         - name: sort
           in: query
-          description: 'Comma-separated, `-` prefix = descending. Allowed: `id`, `name`.'
+          description: 'Comma-separated, `-` prefix = descending. Allowed: `id`, `name`. Defaults to `id` ascending when omitted or when it resolves to no whitelisted field.'
           schema: { type: string }
         - { name: name, in: query, schema: { type: string }, description: Partial match. }
       responses:
@@ -921,12 +959,16 @@ components:
     expand:
       name: expand
       in: query
-      description: 'Comma-separated related resources to embed (e.g. `albums` on users, `photos` on albums).'
+      description: |
+        Comma-separated related resources to embed: `albums` on users, `photos` on
+        albums, `permissions` on roles. A relation the caller may not see on its own
+        endpoint is **silently dropped** rather than rejected — `permissions` needs
+        `role.view`, so a `role.index`-only caller gets the listing without it.
       schema: { type: string }
     albumSort:
       name: sort
       in: query
-      description: 'Comma-separated, `-` prefix = descending. Allowed: `id`, `user_id`, `title`, `created_at`, `updated_at`.'
+      description: 'Comma-separated, `-` prefix = descending. Allowed: `id`, `user_id`, `title`, `created_at`, `updated_at`. Defaults to `id` ascending when omitted or when it resolves to no whitelisted field.'
       schema: { type: string }
 
   responses:
@@ -1014,7 +1056,7 @@ components:
         total: { type: integer, example: 45 }
         per_page: { type: integer, example: 20 }
         current_page: { type: integer, example: 1 }
-        last_page: { type: integer, example: 3 }
+        last_page: { type: integer, example: 3, description: '`0` when `total` is `0` (an empty result set). An out-of-range `page` is not clamped — it returns empty `items` while `total`/`last_page` still describe the full set.' }
         from: { type: integer, example: 1 }
         to: { type: integer, example: 20 }
 

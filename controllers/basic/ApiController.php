@@ -141,6 +141,18 @@ abstract class ApiController extends ActiveController
     }
 
     /**
+     * Relations a caller may embed via `?expand=` on a *collection*. Override
+     * where a relation is gated by a permission the collection action itself
+     * does not require, so `expand` can't route around that gate.
+     *
+     * @return string[]|null null → no restriction beyond the model's extraFields()
+     */
+    protected function collectionExpandable(): ?array
+    {
+        return null;
+    }
+
+    /**
      * Shared index-action flow: validate the search form against the query
      * params (a failure becomes a 422 with the errors), then fetch the list.
      *
@@ -148,6 +160,11 @@ abstract class ApiController extends ActiveController
      */
     protected function handleIndex(SearchForm $form, callable $fetch): ActiveDataProvider|array
     {
+        // resolved here rather than in init(): the serializer is built in
+        // afterAction(), so by now the authenticator has resolved the identity
+        // a permission-dependent whitelist needs.
+        $this->serializer['allowedExpand'] = $this->collectionExpandable();
+
         if (!$this->validateRequest($form, Yii::$app->request->queryParams)) {
             return $form->getErrors();
         }

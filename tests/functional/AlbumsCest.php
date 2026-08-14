@@ -372,6 +372,30 @@ class AlbumsCest extends BaseCest
         $I->dontSeeResponseContainsJson(['title' => 'Flagged']);
     }
 
+    /**
+     * `expand` stays available where no permission gates the relation — the
+     * `role.view` whitelist on /roles must not disable it everywhere.
+     *
+     * @throws Exception
+     */
+    public function testMyEmbedsPhotosWhenExpanded(FunctionalTester $I): void
+    {
+        $userId = $this->actingAsUserWithRole($I, null);
+        $albumId = $this->insertRecord('album', ['user_id' => $userId, 'title' => 'Mine']);
+        $this->insertRecord('photo', [
+            'album_id'  => $albumId,
+            'title'     => 'Sunset',
+            'file_name' => '1.jpg',
+            'source'    => 'seed',
+        ]);
+
+        $I->sendGet('/albums/my?expand=photos');
+        $I->seeResponseCodeIs(200);
+        $I->seeResponseContainsJson([
+            'data' => ['items' => [['title' => 'Mine', 'photos' => [['title' => 'Sunset']]]]],
+        ]);
+    }
+
     // ==================== ACCESS (RBAC) ====================
 
     /**

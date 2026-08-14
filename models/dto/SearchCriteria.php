@@ -26,6 +26,13 @@ readonly class SearchCriteria
     /**
      * Returns a copy scoped to the given forced conditions, so callers can
      * pin a criteria to a parent resource (e.g. photos to their album).
+     *
+     * Per the `with*` convention this **replaces** the scope instead of merging
+     * into it, so a second call silently discards the first one's conditions.
+     * Pass every condition in a single call — `withScope(['user_id' => $id,
+     * 'is_deleted' => 0])`, never `withScope([...])->withScope([...])`. The
+     * failure is quiet and not cosmetic: a dropped `is_deleted` scope leaks
+     * soft-deleted rows into a listing.
      */
     public function withScope(array $scope): self
     {

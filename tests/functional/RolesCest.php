@@ -39,6 +39,49 @@ class RolesCest extends BaseCest
     }
 
     /**
+     * `?expand=permissions` must not route around the `role.view` gate: an
+     * admin holds `role.index` but not `role.view`, so the expand is ignored.
+     *
+     * @throws Exception
+     */
+    public function testIndexIgnoresPermissionsExpandForAdmin(FunctionalTester $I): void
+    {
+        $this->actingAsUserWithRole($I, 'admin');
+
+        $I->sendGet('/roles?expand=permissions');
+        $I->seeResponseCodeIs(200);
+
+        $response = json_decode($I->grabResponse(), true);
+        foreach ($response['data']['items'] as $role) {
+            Assert::assertArrayNotHasKey('permissions', $role);
+        }
+    }
+
+    /**
+     * The counterpart: a `role.view` holder does get the expand honoured.
+     */
+    public function testIndexHonoursPermissionsExpandForSuperAdmin(FunctionalTester $I): void
+    {
+        $I->sendGet('/roles?expand=permissions');
+        $I->seeResponseCodeIs(200);
+
+        $response = json_decode($I->grabResponse(), true);
+        foreach ($response['data']['items'] as $role) {
+            Assert::assertArrayHasKey('permissions', $role);
+        }
+        $I->seeResponseContainsJson([
+            'data' => [
+                'items' => [
+                    [
+                        'name'        => 'moderator',
+                        'permissions' => [['name' => 'album.soft-delete.any']],
+                    ],
+                ],
+            ],
+        ]);
+    }
+
+    /**
      * @throws Exception
      */
     public function testIndexForbiddenForBaseUser(FunctionalTester $I): void
