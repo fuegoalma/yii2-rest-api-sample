@@ -31,7 +31,7 @@ Verify with `docker compose version` and `docker buildx version`.
 
 ### 1. Initialize the project
 
-Run this once to create your `.env` file and install dependencies:
+Run this once to create your `.env` file (it only copies `.env.example` → `.env` — dependencies are installed by `make setup` below):
 
 ```bash
 make init
@@ -42,17 +42,31 @@ make init
 Edit `.env` with your local settings:
 
 ```env
+# Application
+BASE_URL=http://localhost:8084
+DEFAULT_PASSWORD=123456
+
+# Database
 DB_HOST=db
 DB_NAME=your_database
 DB_USER=root
 DB_PASSWORD=your_password
 TEST_DB_NAME=your_database_test
+
+# Cookie validation (any random 32-char string)
+COOKIE_VALIDATION_KEY=your-random-secret-at-least-32-chars
+
+# JWT authorization
 JWT_SECRET=your-random-secret-at-least-32-chars
 JWT_TTL=3600
 JWT_REFRESH_TTL=2592000
+
+# Login rate limiting (brute-force protection)
+LOGIN_RATE_LIMIT_ATTEMPTS=5
+LOGIN_RATE_LIMIT_WINDOW=60
 ```
 
-`JWT_SECRET` signs the API tokens (HS256) and must be at least 32 characters long — generate one with `openssl rand -hex 32`. `JWT_TTL` is the access-token lifetime in seconds; `JWT_REFRESH_TTL` is the refresh-token lifetime (default 30 days).
+`BASE_URL` is used to build public URLs (e.g. seeded/uploaded photo links). `DEFAULT_PASSWORD` is the password assigned to users created by `make seed`. `COOKIE_VALIDATION_KEY` is required by Yii's cookie validation even though this API is stateless (any random 32-char string). `JWT_SECRET` signs the API tokens (HS256) and must be at least 32 characters long — generate one with `openssl rand -hex 32`. `JWT_TTL` is the access-token lifetime in seconds; `JWT_REFRESH_TTL` is the refresh-token lifetime (default 30 days). `LOGIN_RATE_LIMIT_ATTEMPTS`/`LOGIN_RATE_LIMIT_WINDOW` configure the [rate limiter](#rate-limiting) on the auth endpoints (default 5 attempts per 60s, per client IP).
 
 ### 3. Run setup
 
@@ -91,6 +105,8 @@ Local development uses the `dev` stage through Docker Compose. Handy lifecycle s
 ```bash
 make up        # start the stack
 make down      # stop and remove the stack
+make restart   # restart the stack
+make logs      # follow container logs
 make sh        # open a shell inside the web container
 make rebuild   # rebuild the web image via Buildx (after editing the Dockerfile)
 ```
@@ -121,12 +137,37 @@ The `league/flysystem-aws-s3-v3` adapter is already installed, so switching to (
 
 Slow, retriable side-effects are pushed onto a queue instead of blocking the request. Everything depends on the small [`QueueInterface`](models/contract/queue/QueueInterface.php) / [`JobInterface`](models/contract/queue/JobInterface.php) seam, with two drivers:
 
-- **`DbQueue`** (default) — persists jobs to the `queue_job` table; the long-running **`worker`** service (`yii queue/listen`) drains them continuously, sleeping only when idle and shutting down gracefully on `SIGTERM` (`docker stop`). `yii queue/run` drains once (handy for CI/manual runs).
+- **`DbQueue`** (default) — persists jobs to the `queue_job` table; the long-running **`worker`** service (`yii queue/listen`) drains up to 100 pending jobs per pass continuously, sleeping only when idle and shutting down gracefully on `SIGTERM` (`docker stop`). `yii queue/run` drains once (handy for CI/manual runs).
 - **`SyncQueue`** — runs jobs in-process; bound in tests so they don't depend on a running worker.
+
+A job that throws is retried (logged as a warning each time) up to 3 attempts, then dropped with a logged error so one poison job can't wedge the queue.
 
 The first use case is permanently deleting an album: the rows go in a transaction, and each album's on-disk directory cleanup is enqueued (`DeleteAlbumDirectoryJob`) rather than done inline, so a large delete never blocks the response and a failure is retried by the worker instead of aborting the teardown.
 
 > **Why a hand-rolled queue?** The idiomatic choice is `yiisoft/yii2-queue`, but its current release caps `symfony/process` at `^7` while this project runs `^8` (PHP 8.5), so it can't be installed here. On a mainstream stack yii2-queue (Redis/DB/AMQP driver) would back the same `QueueInterface` with no call-site changes.
+
+---
+
+## Health Check
+
+`GET /health` is public, unauthenticated and never rate-limited (monitoring/orchestration tooling can't hold a JWT or tolerate a 429). It runs `SELECT 1` against the database and reports the result inside the standard response envelope:
+
+```bash
+curl http://localhost:8084/health
+```
+
+```json
+{
+    "success": true,
+    "data": {
+        "status": "ok",
+        "checks": { "database": "ok" }
+    },
+    "code": 200
+}
+```
+
+Returns **200** when healthy, **503** (with `status: "error"`) otherwise — point your load balancer / uptime monitor at this endpoint.
 
 ---
 
@@ -186,7 +227,7 @@ Seeders populate the database with generated test data.
 make seed
 ```
 
-Pass a count with `make seed count=20` (default is 10).
+Pass a count with `make seed count=20` (default is 10). Seeded users all get the password from the `DEFAULT_PASSWORD` env var; seeded photos use `source = 'seed'` and resolve to `web/default-images/` rather than a real upload.
 
 #### Clear all seeded data
 
@@ -321,8 +362,10 @@ The project ships a two-stage GitHub Actions pipeline — the two badges at the 
 ├── .github/workflows/ # CI (cs-fixer, phpstan, tests) + CD (build image, deploy) pipelines
 ├── Dockerfile         # Multi-stage image: base → dev → prod
 ├── .dockerignore      # Build-context excludes for the prod image
-├── docker-compose.yml # Local dev stack (web + db + phpMyAdmin), builds the dev stage
-├── commands/          # Console commands (seeders, etc.)
+├── docker-compose.yml # Local dev stack (web + db + phpMyAdmin + cron + worker), builds the dev stage
+├── docker/cron/       # Cron service: entrypoint + the versioned schedule (crontab)
+├── commands/          # Console commands (seeders, RBAC bootstrap, refresh-token pruning, queue worker)
+├── components/        # App components: JWT, rate limiter, image processing, queue drivers, response serialization
 ├── config/            # Application configuration
 │   ├── db.php         # Main database config (reads from .env)
 │   ├── test_db.php    # Test database config (reads from .env)
@@ -340,6 +383,10 @@ The project ships a two-stage GitHub Actions pipeline — the two badges at the 
 │   ├── jobs/          # Background-queue jobs
 │   ├── repository/    # Repository layer (database access)
 │   └── service/       # Service layer (business logic)
+├── web/               # Document root: entry script, uploads/, default-images/
+├── codeception.yml    # Test runner config (paths, modules)
+├── phpstan.neon.dist  # Static analysis config (level 5)
+├── .php-cs-fixer.dist.php # PSR-12 code style config
 ├── tests/
 │   ├── functional/    # Functional (integration) tests
 │   ├── unit/          # Unit tests
@@ -422,6 +469,26 @@ curl -X POST http://localhost:8084/auth/logout-all \
 ```
 
 Requests without a valid (unexpired, correctly signed) access token get a `401` — a refresh token is opaque and cannot be used as a bearer credential. Invalid credentials on login, and an invalid/expired/revoked refresh token, also return `401`; validation errors (e.g. a duplicate email on register) return `422`.
+
+---
+
+## Rate Limiting
+
+The five `/auth/*` endpoints are throttled per client IP to protect against brute-force credential guessing. Each action (`login`, `register`, `refresh`, `logout`, `logout-all`) has its **own independent budget** — hammering `/auth/login` doesn't affect your `/auth/refresh` allowance.
+
+- Every non-OPTIONS request increments the counter and refreshes the window.
+- A **successful** response (status `< 400`) resets the counter early.
+- Exceeding the limit returns **`429`** with a `Retry-After` header (seconds until the window clears).
+- Tune it with `LOGIN_RATE_LIMIT_ATTEMPTS` / `LOGIN_RATE_LIMIT_WINDOW` in `.env` (default: 5 attempts per 60s).
+
+```bash
+# after 5 failed logins within the window:
+curl -i -X POST http://localhost:8084/auth/login \
+    -H 'Content-Type: application/json' \
+    -d '{"email": "user@example.com", "password": "wrong"}'
+# HTTP/1.1 429 Too Many Requests
+# Retry-After: 60
+```
 
 ---
 
@@ -549,12 +616,27 @@ All endpoints return a unified JSON response:
 ```json
 {
     "success": false,
-    "data": {},
+    "data": {
+        "message": "An error occurred during execution",
+        "error": {}
+    },
     "code": 404
 }
 ```
 
-**Paginated list** (`GET /users`, `GET /albums`) — items are wrapped alongside a `pagination` block:
+Validation failures (422) put the field errors under `data.error` — e.g. creating an album without a title:
+```json
+{
+    "success": false,
+    "data": {
+        "message": "An error occurred during execution",
+        "error": { "title": ["Title cannot be blank."] }
+    },
+    "code": 422
+}
+```
+
+**Paginated list** — every index endpoint (`GET /users`, `GET /albums`, `GET /albums/my`, `GET /albums/{albumId}/photos`, `GET /roles`) wraps its items alongside a `pagination` block:
 ```json
 {
     "success": true,
@@ -596,7 +678,7 @@ Sortable / filterable attributes per resource:
 | Photos | `id`, `title`, `created_at` | `title` (partial match) |
 | Roles | `id`, `name` | `name` (partial match) |
 
-An unknown `sort` attribute or an out-of-range `per_page` returns `422`. Example:
+An unknown `sort` attribute or an out-of-range `per_page` returns `422`. A `page` past the last one is not clamped back — it returns an **empty** `items` array with `total`/`last_page` still reflecting the full result set (`current_page` echoes back whatever was requested). When `sort` is omitted (or resolves to nothing sortable), results default to `id` ascending. Example:
 
 ```bash
 curl "http://localhost:8084/users?first_name=jo&sort=-created_at&per_page=50&page=2" \
