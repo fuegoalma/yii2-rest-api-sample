@@ -702,16 +702,9 @@ The list endpoints (`GET /users`, `GET /albums`, `GET /albums/my`, `GET /albums/
 | `page` | Page number to return (default `1`). |
 | `per_page` | Items per page, `1`–`100` (default `20`). |
 | `sort` | Comma-separated attribute list; prefix an attribute with `-` for descending order (e.g. `sort=-created_at,title`). |
-| `expand` | Comma-separated relations to embed in each item (see below). |
 | *filters* | One parameter per filterable attribute (see below). |
 
-Embeddable relations (`expand`):
-
-| Resource | `expand` values |
-|----------|-----------------|
-| Users | `albums` (live albums only, as noted above) |
-| Albums | `photos` |
-| Roles | `permissions` — **requires `role.view`** (`super_admin`). `GET /roles` itself only needs `role.index`, so for an `admin` the relation is silently dropped rather than rejected; the permission sets stay behind `GET /roles/{id}`. |
+List endpoints return the plain resource shape — related records are not embeddable from the query string. Where a relation belongs to a response, the endpoint that owns it includes it unconditionally (`GET /users/{id}` and `GET /users/me` carry `albums`, `GET /albums/{id}` carries `photos`, `GET /roles/{id}` carries `permissions` behind `role.view`).
 
 Sortable / filterable attributes per resource:
 

@@ -41,16 +41,6 @@ class RolesController extends ApiController
         );
     }
 
-    /**
-     * `permissions` is exactly what {@see Permission::ROLE_VIEW} gates on the
-     * member action, so `GET /roles?expand=permissions` must not hand it to a
-     * caller who only holds `role.index` (an admin).
-     */
-    protected function collectionExpandable(): ?array
-    {
-        return $this->access->can(Permission::ROLE_VIEW) ? null : [];
-    }
-
     protected function createForm(): ApiForm
     {
         return new RoleCreateForm();

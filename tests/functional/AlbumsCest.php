@@ -373,12 +373,12 @@ class AlbumsCest extends BaseCest
     }
 
     /**
-     * `expand` stays available where no permission gates the relation — the
-     * `role.view` whitelist on /roles must not disable it everywhere.
+     * `expand` is not part of the API: the param is ignored, so the listing
+     * stays the plain album shape even for the owner.
      *
      * @throws Exception
      */
-    public function testMyEmbedsPhotosWhenExpanded(FunctionalTester $I): void
+    public function testMyIgnoresExpandParam(FunctionalTester $I): void
     {
         $userId = $this->actingAsUserWithRole($I, null);
         $albumId = $this->insertRecord('album', ['user_id' => $userId, 'title' => 'Mine']);
@@ -392,8 +392,11 @@ class AlbumsCest extends BaseCest
         $I->sendGet('/albums/my?expand=photos');
         $I->seeResponseCodeIs(200);
         $I->seeResponseContainsJson([
-            'data' => ['items' => [['title' => 'Mine', 'photos' => [['title' => 'Sunset']]]]],
+            'data' => ['items' => [['title' => 'Mine']]],
         ]);
+
+        $response = json_decode($I->grabResponse(), true);
+        Assert::assertArrayNotHasKey('photos', $response['data']['items'][0]);
     }
 
     // ==================== ACCESS (RBAC) ====================
