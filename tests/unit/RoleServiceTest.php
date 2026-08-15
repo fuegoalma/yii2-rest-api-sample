@@ -3,17 +3,15 @@
 namespace tests\unit;
 
 use app\models\contract\service\AccessControlInterface;
-use app\models\contract\service\TransactionRunnerInterface;
 use app\models\db\Permission;
 use app\models\db\Role;
 use app\models\repository\RoleRepository;
 use app\models\service\RoleService;
-use Codeception\Test\Unit;
 use PHPUnit\Framework\MockObject\Exception;
 use yii\web\ConflictHttpException;
 use yii\web\ForbiddenHttpException;
 
-class RoleServiceTest extends Unit
+class RoleServiceTest extends BaseUnitTest
 {
     private RoleService $service;
     private RoleRepository $rolesMock;
@@ -28,21 +26,6 @@ class RoleServiceTest extends Unit
         $this->rolesMock = $this->createMock(RoleRepository::class);
         $this->accessMock = $this->createMock(AccessControlInterface::class);
         $this->service = new RoleService($this->rolesMock, $this->accessMock, $this->immediateTx());
-    }
-
-    /**
-     * A transaction runner that just executes the operation, so the service's
-     * logic can be unit-tested without a database. Production wraps it in a real
-     * DB transaction ({@see \app\components\DbTransactionRunner}).
-     */
-    private function immediateTx(): TransactionRunnerInterface
-    {
-        return new class () implements TransactionRunnerInterface {
-            public function run(callable $operation): mixed
-            {
-                return $operation();
-            }
-        };
     }
 
     // ==================== create ====================

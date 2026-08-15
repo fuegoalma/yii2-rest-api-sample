@@ -2,13 +2,12 @@
 
 namespace tests\unit;
 
-use app\components\ImageProcessor;
+use app\components\ImageStorage;
 use app\models\db\Photo;
 use app\models\dto\SearchCriteria;
 use app\models\repository\AlbumRepository;
 use app\models\repository\PhotoRepository;
 use app\models\service\PhotoService;
-use Codeception\Test\Unit;
 use PHPUnit\Framework\MockObject\Exception;
 use yii\base\Exception as BaseException;
 use yii\data\ActiveDataProvider;
@@ -16,12 +15,12 @@ use yii\db\ActiveRecord;
 use yii\web\NotFoundHttpException;
 use yii\web\UploadedFile;
 
-class PhotoServiceTest extends Unit
+class PhotoServiceTest extends BaseUnitTest
 {
     private PhotoService $service;
     private PhotoRepository $photoRepository;
     private AlbumRepository $albumRepository;
-    private ImageProcessor $imageProcessor;
+    private ImageStorage $imageStorage;
 
     /**
      * @throws Exception
@@ -31,11 +30,11 @@ class PhotoServiceTest extends Unit
         parent::setUp();
         $this->photoRepository = $this->createMock(PhotoRepository::class);
         $this->albumRepository = $this->createMock(AlbumRepository::class);
-        $this->imageProcessor = $this->createMock(ImageProcessor::class);
+        $this->imageStorage = $this->createMock(ImageStorage::class);
         $this->service = new PhotoService(
             $this->photoRepository,
             $this->albumRepository,
-            $this->imageProcessor,
+            $this->imageStorage,
         );
     }
 
@@ -79,7 +78,7 @@ class PhotoServiceTest extends Unit
         $this->albumRepository->method('findById')->with(7)->willReturn($this->album(7));
 
         $file = $this->createMock(UploadedFile::class);
-        $this->imageProcessor
+        $this->imageStorage
             ->expects($this->once())
             ->method('save')
             ->with($file, '7')
@@ -100,7 +99,7 @@ class PhotoServiceTest extends Unit
     public function testCreateInAlbumThrowsNotFoundWhenAlbumMissing(): void
     {
         $this->albumRepository->method('findById')->with(99999)->willReturn(null);
-        $this->imageProcessor->expects($this->never())->method('save');
+        $this->imageStorage->expects($this->never())->method('save');
 
         $this->expectException(NotFoundHttpException::class);
         $this->service->createInAlbum(99999, 'X', $this->createMock(UploadedFile::class));
@@ -113,7 +112,7 @@ class PhotoServiceTest extends Unit
     {
         $this->albumRepository->method('findById')->with(1)->willReturn($this->album(1));
         $this->photoRepository->expects($this->never())->method('save');
-        $this->imageProcessor
+        $this->imageStorage
             ->method('save')
             ->willThrowException(new BaseException('bad image'));
 
@@ -138,7 +137,7 @@ class PhotoServiceTest extends Unit
 
         $this->photoRepository->method('findById')->with(1)->willReturn($photo);
         $this->photoRepository->expects($this->once())->method('delete')->with($photo)->willReturn(true);
-        $this->imageProcessor->expects($this->once())->method('delete')->with('5', 'p.webp');
+        $this->imageStorage->expects($this->once())->method('delete')->with('5', 'p.webp');
 
         $this->service->delete(1);
     }
@@ -151,7 +150,7 @@ class PhotoServiceTest extends Unit
     {
         $this->photoRepository->method('findById')->with(99999)->willReturn(null);
         $this->photoRepository->expects($this->never())->method('delete');
-        $this->imageProcessor->expects($this->never())->method('delete');
+        $this->imageStorage->expects($this->never())->method('delete');
 
         $this->expectException(NotFoundHttpException::class);
         $this->service->delete(99999);

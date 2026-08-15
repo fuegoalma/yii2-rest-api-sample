@@ -6,7 +6,7 @@ A REST API built with Yii2 following SOLID, DRY, and KISS principles. Implements
 
 The project ships a full **CI/CD** pipeline on [GitHub Actions](.github/workflows/):
 
-- **CI** ([`ci.yml`](.github/workflows/ci.yml)) — runs on every push and pull request: code style (PHP CS Fixer), static analysis (PHPStan), and the full Codeception suite against MySQL.
+- **CI** ([`ci.yml`](.github/workflows/ci.yml)) — runs on every push and pull request: code style (PHP CS Fixer), static analysis (PHPStan), the full Codeception suite against MySQL, and a **100% code-coverage gate**.
 - **CD** ([`cd.yml`](.github/workflows/cd.yml)) — chains off a green CI on `master`: builds a self-contained production Docker image from the [`Dockerfile`](Dockerfile) (proving the app containerises and is deployable) and runs a `production` GitHub Environment deployment. The release step is simulated — this sample intentionally provisions no real server — but the whole CI → build → deploy chain runs on every green build.
 
 ---
@@ -115,12 +115,17 @@ make rebuild   # rebuild the web image via Buildx (after editing the Dockerfile)
 
 ## File Storage
 
-Photo storage is abstracted behind [Flysystem](https://flysystem.thephpleague.com/) (`League\Flysystem\FilesystemOperator`). The application never touches the filesystem directly: [`ImageProcessor`](components/ImageProcessor.php) transforms the upload (Imagick → resized WebP) and hands the bytes to the injected filesystem, so **where** files live is a single DI decision in [`config/di.php`](config/di.php):
+An upload passes through two independent seams, so **what the bytes look like** and **where they end up** are separate decisions:
+
+- [`ImageEncoderInterface`](models/contract/image/ImageEncoderInterface.php) turns the uploaded file into storable bytes. The default [`ImagickWebpEncoder`](components/image/ImagickWebpEncoder.php) produces WebP, scaled to fit the configured bounding box (aspect ratio preserved, never upscaled). The dimensions and quality are a published API contract, so they live in [`config/params.php`](config/params.php) rather than in code.
+- `League\Flysystem\FilesystemOperator` decides where those bytes live. [`ImageStorage`](components/ImageStorage.php) composes the two: it names the file and hands it to the filesystem, and never touches an imaging library or a disk itself.
+
+So switching storage is a single DI decision in [`config/di.php`](config/di.php):
 
 ```php
-// local disk (default)
+// local disk (default) — the path comes from the `photo_upload_path` param
 FilesystemOperator::class => static fn () => new Filesystem(
-    new LocalFilesystemAdapter(Yii::getAlias($params['photo_upload_path']))
+    new LocalFilesystemAdapter(Yii::getAlias(Yii::$app->params['photo_upload_path']))
 ),
 
 // move everything to S3 — no application code changes:
@@ -129,7 +134,7 @@ FilesystemOperator::class => static fn () => new Filesystem(
 // ),
 ```
 
-The `league/flysystem-aws-s3-v3` adapter is already installed, so switching to (or adding a CDN in front of) object storage is config-only. Tests point the same binding at `@runtime` (see [`config/test.php`](config/test.php)) so uploads never hit the web root.
+The `league/flysystem-aws-s3-v3` adapter is already installed, so switching to (or adding a CDN in front of) object storage is config-only. Tests override the `photo_upload_path` param to point at `@runtime` (see [`config/test.php`](config/test.php)) so uploads never hit the web root.
 
 ---
 
@@ -146,14 +151,16 @@ Cross-origin requests are allowed from anywhere. The filter is attached to every
 
 ## Background Jobs
 
-Slow, retriable side-effects are pushed onto a queue instead of blocking the request. Everything depends on the small [`QueueInterface`](models/contract/queue/QueueInterface.php) / [`JobInterface`](models/contract/queue/JobInterface.php) seam, with two drivers:
+Slow, retriable side-effects are pushed onto a queue instead of blocking the request. Everything depends on a small seam in [`models/contract/queue/`](models/contract/queue/): a **job** ([`JobInterface`](models/contract/queue/JobInterface.php)) is a plain serializable message that names its **handler** ([`JobHandlerInterface`](models/contract/queue/JobHandlerInterface.php)), which holds the behaviour and takes its services by constructor injection. That split is what lets a job survive `serialize()` without carrying a database connection or a filesystem client around with it.
+
+Resolving a handler by name is the one lookup that can only happen at run time, so it is isolated behind [`JobRunnerInterface`](models/contract/queue/JobRunnerInterface.php) — the drivers below never touch the DI container themselves. Two drivers implement [`QueueInterface`](models/contract/queue/QueueInterface.php):
 
 - **`DbQueue`** (default) — persists jobs to the `queue_job` table; the long-running **`worker`** service (`yii queue/listen`) drains up to 100 pending jobs per pass continuously, sleeping only when idle and shutting down gracefully on `SIGTERM` (`docker stop`). `yii queue/run` drains once (handy for CI/manual runs).
 - **`SyncQueue`** — runs jobs in-process; bound in tests so they don't depend on a running worker.
 
 A job that throws is retried (logged as a warning each time) up to 3 attempts, then dropped with a logged error so one poison job can't wedge the queue.
 
-The first use case is permanently deleting an album: the rows go in a transaction, and each album's on-disk directory cleanup is enqueued (`DeleteAlbumDirectoryJob`) rather than done inline, so a large delete never blocks the response and a failure is retried by the worker instead of aborting the teardown.
+The first use case is permanently deleting an album: the rows go in a transaction, and each album's on-disk directory cleanup is enqueued (`DeleteAlbumDirectoryJob`, run by `DeleteAlbumDirectoryHandler`) rather than done inline, so a large delete never blocks the response and a failure is retried by the worker instead of aborting the teardown.
 
 > **Why a hand-rolled queue?** The idiomatic choice is `yiisoft/yii2-queue`, but its current release caps `symfony/process` at `^7` while this project runs `^8` (PHP 8.5), so it can't be installed here. On a mainstream stack yii2-queue (Redis/DB/AMQP driver) would back the same `QueueInterface` with no call-site changes.
 
@@ -299,6 +306,69 @@ make test-one suite=functional class=UsersCest
 make test-one suite=functional class=UsersCest:testMethodName
 ```
 
+### Code Coverage
+
+Coverage is measured with [pcov](https://github.com/krakjoe/pcov) (baked into the Docker `base` stage) and reported by Codeception. **The gate is 100% line coverage** of `commands/`, `components/`, `controllers/` and `models/` — CI fails below it.
+
+```bash
+make coverage        # run the suite with coverage and enforce the gate
+make coverage-html   # the same, then print the HTML report path
+```
+
+The HTML report lands in `tests/_output/coverage/index.html`, with the Clover XML the gate reads at `tests/_output/coverage.xml`. When coverage falls short, the check lists every offending file with its uncovered line numbers:
+
+```
+Files below 100% line coverage (1):
+
+  models/service/PermissionService.php                        50.00%  (2/4)
+      uncovered lines: 22, 24
+
+Total line coverage: 99.84% (1270/1272 statements), required 100.00%
+```
+
+A few things worth knowing:
+
+- **pcov is disabled by default** (`pcov.enabled=0`), so `make test` and `make test-one` — the inner TDD loop — run at full speed. Only `make coverage` turns it on, for that process alone.
+- **Both suites must run in a single `codecept run`.** Coverage from unit and functional is merged at the end of the run, so running the suites separately makes the second report overwrite the first and halves the number.
+- **`config/`, `migrations/`, `web/` and `tests/` are out of scope**, as are the interfaces in `models/contract/` — a file with no executable lines counts as 0/0 and neither helps nor hurts the total.
+- **Genuinely unreachable code** is marked with `@codeCoverageIgnore` **and a comment explaining why it cannot be reached**. Unreachable is a high bar: it means unreachable by construction, not merely inconvenient to test. See `RefreshTokenRepository::revoke()` for the shape of an acceptable justification.
+- Don't add `@covers` / `#[CoversClass]` annotations — Codeception treats them as strict, silently narrowing what a test is credited with covering.
+
+---
+
+## Test-Driven Development
+
+New work on this project is **test-first**. The cycle is the usual one:
+
+1. **Red** — write a test that expresses the behaviour you want, and watch it fail. A test that has never failed has not been shown to test anything.
+2. **Green** — write the least code that makes it pass.
+3. **Refactor** — clean up with the test as your safety net, and re-run it.
+
+```bash
+make test-one suite=unit class=AlbumServiceTest:testSomething   # tight loop
+make test                                                        # whole suite
+make coverage                                                    # before you call it done
+```
+
+#### Where a test belongs
+
+- **Unit** (`tests/unit/`) — a class in isolation with its collaborators mocked. Services, forms, DTOs, components. Extend `tests\unit\BaseUnitTest`; put anything two test classes both need on that base rather than copying it.
+- **Functional** (`tests/functional/`) — a real HTTP request through the whole stack against the test database. Endpoint behaviour, RBAC gates, response shapes. Extend `tests\functional\BaseCest` and use its fixture helpers (`insertRecord`, `actingAsUserWithRole`, `insertRole`, `sendPutJson`).
+
+Prefer a functional test when the thing you're specifying *is* the integration — repositories and ActiveRecord models are covered far better by exercising them against a real database than by asserting on mocks.
+
+#### Checklist for a new endpoint
+
+1. Migration for the table (run it on **both** databases: `make migrate`).
+2. **Failing tests first** — a functional Cest for the endpoint's contract, unit tests for the service logic.
+3. ActiveRecord model, repository and service (with their contracts in `models/contract/`).
+4. Create/update/search form requests.
+5. Controller extending `ApiController`, implementing `accessResource()`.
+6. Permissions seeded in a migration — **and granted to `super_admin`**.
+7. Route in `config/url_rules.php`.
+8. Document the endpoint in `config/openapi.yaml` (the single source of truth for the API).
+9. `make coverage` green, then `make cs-check` and `make stan`.
+
 ---
 
 ## Code Style
@@ -366,7 +436,7 @@ Verify with `codegraph --version`, then run `codegraph init` from the project ro
 
 The project ships a two-stage GitHub Actions pipeline — the two badges at the top of this README reflect the latest runs on the default branch:
 
-- **CI** ([`ci.yml`](.github/workflows/ci.yml)) — runs on every push and pull request. It installs dependencies, spins up a MySQL service, and runs the same three gates as locally: code style (PHP CS Fixer), static analysis (PHPStan), and the full test suite.
+- **CI** ([`ci.yml`](.github/workflows/ci.yml)) — runs on every push and pull request. It installs dependencies, spins up a MySQL service, and runs the same four gates as locally: code style (PHP CS Fixer), static analysis (PHPStan), the full test suite, and the [100% coverage gate](#code-coverage) (`make coverage`). When the coverage gate goes red the HTML report is uploaded as a build artifact, so the per-file breakdown is available without reproducing the run locally.
 - **CD** ([`cd.yml`](.github/workflows/cd.yml)) — runs only *after* CI passes on `master`. It builds the self-contained production image (the `prod` stage of the [`Dockerfile`](Dockerfile), via Buildx) to prove the app containerises and is deployable, then runs a deployment through a `production` GitHub Environment. The release step itself is **simulated** — this sample intentionally provisions no real server — but the complete CI → build → deploy chain runs on every green build.
 
 ---
@@ -399,13 +469,14 @@ The project ships a two-stage GitHub Actions pipeline — the two badges at the 
 │   ├── repository/    # Repository layer (database access)
 │   └── service/       # Service layer (business logic)
 ├── web/               # Document root: entry script, uploads/, default-images/
-├── codeception.yml    # Test runner config (paths, modules)
+├── codeception.yml    # Test runner config (paths, modules, coverage scope)
 ├── phpstan.neon.dist  # Static analysis config (level 5)
 ├── .php-cs-fixer.dist.php # PSR-12 code style config
 ├── tests/
 │   ├── functional/    # Functional (integration) tests
 │   ├── unit/          # Unit tests
-│   └── _support/      # Codeception helpers and base classes
+│   ├── _support/      # Codeception helpers and base classes (BaseCest, BaseUnitTest)
+│   └── bin/           # coverage-check.php — the 100% coverage gate
 ├── init.sh            # First-time project initialization
 ├── setup.sh           # Database creation and migration runner
 └── Makefile           # Short aliases for docker compose exec commands (make help)

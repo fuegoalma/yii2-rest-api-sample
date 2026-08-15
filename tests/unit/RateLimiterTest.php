@@ -3,14 +3,13 @@
 namespace tests\unit;
 
 use app\components\RateLimiter;
-use Codeception\Test\Unit;
 use Yii;
 use yii\base\Action;
 use yii\caching\ArrayCache;
 use yii\web\Controller;
 use yii\web\TooManyRequestsHttpException;
 
-class RateLimiterTest extends Unit
+class RateLimiterTest extends BaseUnitTest
 {
     private const int MAX_ATTEMPTS = 3;
     private const int WINDOW = 60;

@@ -3,11 +3,10 @@
 namespace tests\unit;
 
 use app\components\JwtService;
-use Codeception\Test\Unit;
 use Firebase\JWT\JWT;
 use yii\base\InvalidConfigException;
 
-class JwtServiceTest extends Unit
+class JwtServiceTest extends BaseUnitTest
 {
     private const string SECRET = 'unit-test-secret-that-is-long-enough-for-hs256';
     private const string OTHER_SECRET = 'another-secret-that-is-long-enough-for-hs256';

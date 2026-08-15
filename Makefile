@@ -7,6 +7,7 @@ WEB := $(DC) exec -T web
         seed seed-clear \
         refresh-token-prune rbac-assign \
         test test-unit test-functional test-one build \
+        coverage coverage-html \
         cs-check cs-fix stan
 
 help:
@@ -31,6 +32,8 @@ help:
 	@echo "  test-functional      Run functional tests only"
 	@echo "  test-one suite=<unit|functional> class=<Cest[:testMethod]>   Run one class/test"
 	@echo "  build                Rebuild Codeception support classes (after changing modules)"
+	@echo "  coverage             Run the suite with coverage and enforce the 100% gate"
+	@echo "  coverage-html        Same as coverage, then print the HTML report path"
 	@echo "  cs-check             Show PSR-12 code style violations (dry-run)"
 	@echo "  cs-fix               Auto-fix PSR-12 code style violations"
 	@echo "  stan                 Run PHPStan static analysis"
@@ -100,6 +103,18 @@ test-one:
 
 build:
 	$(WEB) php vendor/bin/codecept build
+
+# Both suites must run in ONE codecept process: coverage from each suite is
+# merged into a single report at the end of the run, so two separate runs would
+# have the second overwrite the first. pcov is off by default in the image
+# (see the Dockerfile), hence -d pcov.enabled=1 here and nowhere else.
+coverage:
+	$(WEB) php -d pcov.enabled=1 vendor/bin/codecept run \
+		--coverage --coverage-xml --coverage-html --coverage-text --disable-coverage-php
+	$(WEB) php tests/bin/coverage-check.php tests/_output/coverage.xml
+
+coverage-html: coverage
+	@echo "HTML report: tests/_output/coverage/index.html"
 
 cs-check:
 	$(WEB) php vendor/bin/php-cs-fixer fix --dry-run --diff

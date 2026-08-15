@@ -4,6 +4,7 @@ namespace app\commands;
 
 use app\commands\basic\BasicConsoleController;
 use app\components\queue\DbQueue;
+use app\models\contract\StopSignalInterface;
 use Throwable;
 use Yii;
 
@@ -21,6 +22,7 @@ class QueueController extends BasicConsoleController
         $id,
         $module,
         private readonly DbQueue $queue,
+        private readonly StopSignalInterface $stopSignal,
         $config = []
     ) {
         parent::__construct($id, $module, $config);
@@ -34,10 +36,9 @@ class QueueController extends BasicConsoleController
      */
     public function actionListen(int $delay = 3): void
     {
-        $shouldStop = false;
-        $this->trapStopSignals($shouldStop);
+        $this->stopSignal->listen();
 
-        while (!$shouldStop) {
+        while (!$this->stopSignal->shouldStop()) {
             try {
                 if ($this->queue->processPending() === 0) {
                     sleep($delay);
@@ -50,28 +51,7 @@ class QueueController extends BasicConsoleController
         }
     }
 
-    /**
-     * Flips $shouldStop when the process is asked to terminate, so the worker
-     * exits between jobs instead of being killed mid-job. Requires the pcntl
-     * extension (baked into the image); a no-op without it.
-     *
-     * @param-out bool $shouldStop
-     */
-    private function trapStopSignals(bool &$shouldStop): void
-    {
-        if (!function_exists('pcntl_async_signals')) {
-            return;
-        }
-
-        pcntl_async_signals(true);
-        $stop = static function () use (&$shouldStop): void {
-            $shouldStop = true;
-        };
-        pcntl_signal(SIGTERM, $stop);
-        pcntl_signal(SIGINT, $stop);
-    }
-
-    public function actionRun(int $limit = 100): void
+    public function actionRun(int $limit = DbQueue::DEFAULT_LIMIT): void
     {
         $done = $this->queue->processPending($limit);
         $this->stdout("Processed {$done} queued job(s)." . PHP_EOL);

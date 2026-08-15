@@ -2,7 +2,11 @@
 
 namespace tests\functional;
 
+use app\models\contract\service\HealthServiceInterface;
+use app\models\dto\HealthCheckResult;
+use app\models\service\HealthService;
 use FunctionalTester;
+use Yii;
 
 class HealthCest extends BaseCest
 {
@@ -30,5 +34,33 @@ class HealthCest extends BaseCest
             $I->sendGet('/health');
             $I->seeResponseCodeIs(200);
         }
+    }
+
+    /**
+     * A load balancer has to be able to take this instance out of rotation, so
+     * an unhealthy check must answer 503 rather than a 200 carrying bad news.
+     * The database is stubbed out at the service binding: actually breaking the
+     * connection would take the rest of the request down with it.
+     */
+    public function testHealthCheckReportsServiceUnavailableWhenTheDatabaseIsDown(FunctionalTester $I): void
+    {
+        $this->swapBinding(HealthService::class, static fn (): HealthServiceInterface => new class () implements HealthServiceInterface {
+            public function check(): HealthCheckResult
+            {
+                return new HealthCheckResult(false, ['database' => 'error']);
+            }
+        });
+
+        $I->deleteHeader('Authorization');
+        $I->sendGet('/health');
+
+        $I->seeResponseCodeIs(503);
+        $I->seeResponseContainsJson([
+            'success' => false,
+            'data'    => [
+                'status' => 'error',
+                'checks' => ['database' => 'error'],
+            ],
+        ]);
     }
 }

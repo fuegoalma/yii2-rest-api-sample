@@ -3,6 +3,7 @@
 namespace app\components\queue;
 
 use app\models\contract\queue\JobInterface;
+use app\models\contract\queue\JobRunnerInterface;
 use app\models\contract\queue\QueueInterface;
 use app\models\db\QueueJob;
 use Throwable;
@@ -16,12 +17,17 @@ use Yii;
  * yiisoft/yii2-queue, but its current release caps `symfony/process` at ^7 while
  * this project runs ^8 (PHP 8.5), so it can't be installed here; on a mainstream
  * stack yii2-queue would back this same {@see QueueInterface}. The payload is a
- * serialized job carrying only plain data (services are resolved at run time),
- * and the table is written to solely by {@see push()}, so it is trusted input.
+ * serialized job carrying only plain data — its services live on the handler,
+ * which is resolved from the container at run time — and the table is written to
+ * solely by {@see push()}, so it is trusted input.
  */
 class DbQueue implements QueueInterface
 {
+    /** How many jobs one drain pass takes. The driver owns this — see QueueController. */
+    public const int DEFAULT_LIMIT = 100;
+
     public function __construct(
+        private readonly JobRunnerInterface $runner,
         private readonly int $maxAttempts = 3,
     ) {
     }
@@ -41,7 +47,7 @@ class DbQueue implements QueueInterface
      *
      * @return int number of jobs that completed successfully
      */
-    public function processPending(int $limit = 100): int
+    public function processPending(int $limit = self::DEFAULT_LIMIT): int
     {
         $done = 0;
 
@@ -60,7 +66,7 @@ class DbQueue implements QueueInterface
         try {
             /** @var JobInterface $job */
             $job = unserialize($row->payload, ['allowed_classes' => true]);
-            $job->handle();
+            $this->runner->run($job);
             $row->delete();
 
             return true;

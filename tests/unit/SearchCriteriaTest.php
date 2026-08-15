@@ -3,9 +3,8 @@
 namespace tests\unit;
 
 use app\models\dto\SearchCriteria;
-use Codeception\Test\Unit;
 
-class SearchCriteriaTest extends Unit
+class SearchCriteriaTest extends BaseUnitTest
 {
     /**
      * Locks the `with*` contract: the scope is replaced, not merged. Callers

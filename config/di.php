@@ -1,8 +1,11 @@
 <?php
 
 use app\components\DbTransactionRunner;
-use app\components\ImageProcessor;
+use app\components\image\ImagickWebpEncoder;
+use app\components\ImageStorage;
 use app\components\JwtService;
+use app\components\PcntlStopSignal;
+use app\components\queue\ContainerJobRunner;
 use app\components\queue\DbQueue;
 use app\components\RateLimiter;
 use app\controllers\AlbumsController;
@@ -12,9 +15,12 @@ use app\controllers\PermissionsController;
 use app\controllers\PhotosController;
 use app\controllers\RolesController;
 use app\controllers\UsersController;
+use app\models\contract\image\ImageEncoderInterface;
+use app\models\contract\queue\JobRunnerInterface;
 use app\models\contract\queue\QueueInterface;
 use app\models\contract\service\AccessControlInterface;
 use app\models\contract\service\TransactionRunnerInterface;
+use app\models\contract\StopSignalInterface;
 use app\models\repository\AlbumRepository;
 use app\models\repository\PhotoRepository;
 use app\models\repository\RefreshTokenRepository;
@@ -52,12 +58,25 @@ return [
         // Photo storage behind Flysystem: local disk by default. To move uploads
         // to S3, swap this one binding for an AwsS3V3Adapter (see README) — no
         // application code changes, since everything depends on FilesystemOperator.
+        //
+        // The path is read from the live application params when the binding is
+        // first resolved, not from this file's own copy — so an environment that
+        // overrides `photo_upload_path` (config/test.php points it at @runtime)
+        // is honoured without having to restate this construction.
         FilesystemOperator::class => static fn (): FilesystemOperator => new Filesystem(
-            new LocalFilesystemAdapter(Yii::getAlias($params['photo_upload_path']))
+            new LocalFilesystemAdapter(Yii::getAlias(Yii::$app->params['photo_upload_path']))
         ),
-        ImageProcessor::class => [
-            'class' => ImageProcessor::class,
-            '__construct()' => ['filesystem' => Instance::of(FilesystemOperator::class)],
+        // Encoding policy lives in config/params.php, not in code: those numbers
+        // are published in config/openapi.yaml, so they get one editable home.
+        // ImageStorage itself needs no entry — both its constructor parameters
+        // are container-resolvable, so reflection autowires it.
+        ImageEncoderInterface::class => [
+            'class' => ImagickWebpEncoder::class,
+            '__construct()' => [
+                'maxWidth' => (int) $params['photo_max_width'],
+                'maxHeight' => (int) $params['photo_max_height'],
+                'quality' => (int) $params['photo_quality'],
+            ],
         ],
         // single source of rate-limiting config (brute-force protection on login)
         RateLimiter::class => [
@@ -73,6 +92,13 @@ return [
         // `worker` service (`yii queue/listen`). Tests override this with SyncQueue
         // (config/test.php) so they don't depend on a running worker.
         QueueInterface::class => DbQueue::class,
+        // a job names its handler as a string, so it can only be resolved at run
+        // time; isolating that lookup here keeps the drivers free of the container
+        JobRunnerInterface::class => static fn (): JobRunnerInterface
+            => new ContainerJobRunner(Yii::$container),
+        // lets the long-running queue worker (`yii queue/listen`) exit between
+        // jobs on SIGTERM instead of being killed mid-job
+        StopSignalInterface::class => PcntlStopSignal::class,
         UserService::class => [
             '__construct()' => [
                 'repository' => Instance::of(UserRepository::class),
@@ -98,7 +124,7 @@ return [
             '__construct()' => [
                 'repository' => Instance::of(PhotoRepository::class),
                 'albumRepository' => Instance::of(AlbumRepository::class),
-                'imageProcessor' => Instance::of(ImageProcessor::class),
+                'imageStorage' => Instance::of(ImageStorage::class),
             ],
         ],
         // refresh-token lifetime in seconds (single source, from env)

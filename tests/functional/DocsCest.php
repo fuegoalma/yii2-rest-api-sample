@@ -34,4 +34,18 @@ class DocsCest extends BaseCest
         $I->seeResponseContains('openapi: 3.0.3');
         $I->seeResponseContains('title: Photos REST API');
     }
+
+    /**
+     * A deployment that shipped without the spec file must answer a plain 404
+     * rather than leaking a filesystem error out of file_get_contents().
+     */
+    public function testMissingSpecFileIsANotFound(FunctionalTester $I): void
+    {
+        $this->overrideParam('openapi_path', '@runtime/no-such-spec.yaml');
+
+        $I->deleteHeader('Authorization');
+        $I->sendGet('/docs/openapi.yaml');
+
+        $I->seeResponseCodeIs(404);
+    }
 }

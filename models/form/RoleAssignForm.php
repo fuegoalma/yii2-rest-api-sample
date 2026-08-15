@@ -27,22 +27,11 @@ class RoleAssignForm extends ApiForm
 
     public function validateRoles(string $attribute): void
     {
-        if ($this->hasErrors($attribute)) {
-            return;
-        }
-
-        if (!is_array($this->roles)) {
-            $this->addError($attribute, 'Roles must be an array of role names.');
-            return;
-        }
-
-        $names = $this->knownNames(Role::class, $this->roles);
-
-        if ($names === null) {
-            $this->addError($attribute, 'Unknown role name(s).');
-            return;
-        }
-
-        $this->roles = $names;
+        $this->validateNameList(
+            $attribute,
+            Role::class,
+            'Roles must be an array of role names.',
+            'Unknown role name(s).',
+        );
     }
 }

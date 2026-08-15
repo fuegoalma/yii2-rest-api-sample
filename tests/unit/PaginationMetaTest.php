@@ -3,10 +3,9 @@
 namespace tests\unit;
 
 use app\models\dto\PaginationMeta;
-use Codeception\Test\Unit;
 use yii\data\ArrayDataProvider;
 
-class PaginationMetaTest extends Unit
+class PaginationMetaTest extends BaseUnitTest
 {
     private function dataProvider(int $itemCount, int $pageSize, int $zeroBasedPage): ArrayDataProvider
     {

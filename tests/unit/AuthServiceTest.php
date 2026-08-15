@@ -10,12 +10,11 @@ use app\models\repository\UserRepository;
 use app\models\service\AuthService;
 use app\models\service\RefreshTokenService;
 use app\models\service\UserService;
-use Codeception\Test\Unit;
 use PHPUnit\Framework\MockObject\Exception;
 use Yii;
 use yii\web\UnauthorizedHttpException;
 
-class AuthServiceTest extends Unit
+class AuthServiceTest extends BaseUnitTest
 {
     private AuthService $service;
     private UserRepository $repositoryMock;

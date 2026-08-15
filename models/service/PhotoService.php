@@ -2,7 +2,7 @@
 
 namespace app\models\service;
 
-use app\components\ImageProcessor;
+use app\components\ImageStorage;
 use app\models\contract\repository\ApiRepositoryInterface;
 use app\models\contract\service\PhotoServiceInterface;
 use app\models\db\Album;
@@ -21,7 +21,7 @@ readonly class PhotoService extends BaseCrudService implements PhotoServiceInter
     public function __construct(
         ApiRepositoryInterface $repository,
         private AlbumRepository $albumRepository,
-        private ImageProcessor $imageProcessor,
+        private ImageStorage $imageStorage,
     ) {
         parent::__construct($repository);
     }
@@ -72,7 +72,7 @@ readonly class PhotoService extends BaseCrudService implements PhotoServiceInter
         $photo->source = Photo::SOURCE_PHOTO;
 
         try {
-            $photo->file_name = $this->imageProcessor->save($file, (string) $albumId);
+            $photo->file_name = $this->imageStorage->save($file, (string) $albumId);
         } catch (BaseException $e) {
             $photo->addError('file', $e->getMessage());
             return $photo;
@@ -82,7 +82,7 @@ readonly class PhotoService extends BaseCrudService implements PhotoServiceInter
             $this->repository->save($photo);
         } else {
             // don't leave an orphan file when the record can't be persisted
-            $this->imageProcessor->delete((string) $albumId, $photo->file_name);
+            $this->imageStorage->delete((string) $albumId, $photo->file_name);
         }
 
         return $photo;
@@ -100,6 +100,6 @@ readonly class PhotoService extends BaseCrudService implements PhotoServiceInter
         $photo = $this->findOrFail($id);
 
         $this->repository->delete($photo);
-        $this->imageProcessor->delete((string) $photo->album_id, $photo->file_name);
+        $this->imageStorage->delete((string) $photo->album_id, $photo->file_name);
     }
 }

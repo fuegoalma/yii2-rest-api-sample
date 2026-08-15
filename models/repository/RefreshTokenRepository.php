@@ -33,9 +33,17 @@ class RefreshTokenRepository
     public function revoke(RefreshToken $token): void
     {
         $token->revoked_at = $this->now();
+        // @codeCoverageIgnoreStart
+        // Unreachable in practice, and deliberately kept: save(false) skips
+        // validation, so on an existing row it returns false only if a
+        // beforeSave() hook vetoes the write — RefreshToken has none, and a
+        // real DB failure throws instead. Silently failing to revoke a token
+        // would be a security bug, so the check stays as a guard against a
+        // future hook being added.
         if (!$token->save(false, ['revoked_at'])) {
             throw new Exception('Failed to revoke refresh token.');
         }
+        // @codeCoverageIgnoreEnd
     }
 
     /** Revokes every still-active token in a family (one login session). */

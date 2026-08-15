@@ -6,7 +6,7 @@ on:
 
 jobs:
   checks:
-    name: cs-fixer · phpstan · tests
+    name: cs-fixer · phpstan · tests · coverage
     runs-on: ubuntu-latest
 
     services:
@@ -45,7 +45,9 @@ jobs:
         with:
           php-version: '8.5'
           extensions: imagick, pdo_mysql, mysqli, pcntl
-          coverage: none
+          # pcov backs the 100% coverage gate below. The Dockerfile `base` stage
+          # installs the same driver for local `make coverage` — keep them in step.
+          coverage: pcov
           tools: composer:v2
 
       - name: Cache Composer packages
@@ -69,5 +71,26 @@ jobs:
       - name: Run migrations
         run: php yii migrate-test/up --interactive=0
 
-      - name: Run tests
-        run: vendor/bin/codecept run
+      # Both suites must run in ONE process: coverage is merged across suites at
+      # the end of the run, so a split would have the second overwrite the first.
+      # This replaces a plain `codecept run` — the pass/fail signal is identical,
+      # and running the suite twice would only double the wall clock.
+      - name: Run tests with coverage
+        run: |
+          php -d pcov.directory="$GITHUB_WORKSPACE" \
+              -d pcov.exclude='~/(vendor|tests)/~' \
+              vendor/bin/codecept run \
+              --coverage --coverage-xml --coverage-html --coverage-text \
+              --disable-coverage-php
+
+      - name: Enforce 100% coverage
+        run: php tests/bin/coverage-check.php tests/_output/coverage.xml
+
+      # On a red gate, the HTML report gives the same per-file drill-down locally
+      - name: Upload coverage report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-html
+          path: tests/_output/coverage/
+          retention-days: 7

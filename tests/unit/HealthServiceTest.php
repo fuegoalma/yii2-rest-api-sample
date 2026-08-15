@@ -3,13 +3,12 @@
 namespace tests\unit;
 
 use app\models\service\HealthService;
-use Codeception\Test\Unit;
 use PHPUnit\Framework\MockObject\Exception;
 use yii\db\Command;
 use yii\db\Connection;
 use yii\db\Exception as DbException;
 
-class HealthServiceTest extends Unit
+class HealthServiceTest extends BaseUnitTest
 {
     private Connection $dbMock;
     private HealthService $service;

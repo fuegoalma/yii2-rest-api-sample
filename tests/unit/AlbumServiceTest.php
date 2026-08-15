@@ -9,13 +9,12 @@ use app\models\db\Album;
 use app\models\dto\SearchCriteria;
 use app\models\jobs\DeleteAlbumDirectoryJob;
 use app\models\service\AlbumService;
-use Codeception\Test\Unit;
 use PHPUnit\Framework\MockObject\Exception;
 use yii\data\ActiveDataProvider;
 use yii\db\StaleObjectException;
 use yii\web\NotFoundHttpException;
 
-class AlbumServiceTest extends Unit
+class AlbumServiceTest extends BaseUnitTest
 {
     private AlbumService $service;
     private AlbumRepository $repositoryMock;

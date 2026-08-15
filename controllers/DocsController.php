@@ -36,7 +36,7 @@ class DocsController extends Controller
      */
     public function actionSpec(): string
     {
-        $path = Yii::getAlias('@app/config/openapi.yaml');
+        $path = Yii::getAlias(Yii::$app->params['openapi_path']);
         if (!is_file($path)) {
             throw new NotFoundHttpException('OpenAPI specification not found.');
         }

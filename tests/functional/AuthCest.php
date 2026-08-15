@@ -3,6 +3,11 @@
 namespace tests\functional;
 
 use app\components\RateLimiter;
+use app\models\contract\service\AuthServiceInterface;
+use app\models\db\User;
+use app\models\dto\TokenResponse;
+use app\models\service\AuthService;
+use BadMethodCallException;
 use Firebase\JWT\JWT;
 use FunctionalTester;
 use PHPUnit\Framework\Assert;
@@ -301,6 +306,70 @@ class AuthCest extends BaseCest
         $I->deleteHeader('Authorization');
         $I->sendPost('/auth/logout', []);
         $I->seeResponseCodeIs(422);
+    }
+
+    /**
+     * logout-all carries the same body as logout, so it validates the same way
+     * — a 204 here would revoke nothing while claiming success.
+     */
+    public function testLogoutAllFailsWithMissingToken(FunctionalTester $I): void
+    {
+        $I->deleteHeader('Authorization');
+        $I->sendPost('/auth/logout-all', []);
+        $I->seeResponseCodeIs(422);
+    }
+
+    /**
+     * The form and the User model validate the same rules, so in practice the
+     * form catches everything first — but registration still has to answer 422
+     * if persistence rejects the account (e.g. an email taken between the two
+     * checks). The service is stubbed because that race cannot be staged.
+     */
+    public function testRegisterReturnsUnprocessableWhenPersistenceRejectsTheAccount(FunctionalTester $I): void
+    {
+        $this->swapBinding(AuthService::class, static function (): AuthServiceInterface {
+            return new class () implements AuthServiceInterface {
+                public function register(array $data): User|TokenResponse
+                {
+                    $user = new User();
+                    $user->addError('email', 'Email has already been taken.');
+
+                    return $user;
+                }
+
+                public function login(string $email, string $password): TokenResponse
+                {
+                    throw new BadMethodCallException('not used by this test');
+                }
+
+                public function refresh(string $refreshToken): TokenResponse
+                {
+                    throw new BadMethodCallException('not used by this test');
+                }
+
+                public function logout(string $refreshToken): void
+                {
+                }
+
+                public function logoutAll(string $refreshToken): void
+                {
+                }
+            };
+        });
+
+        $I->deleteHeader('Authorization');
+        $I->sendPost('/auth/register', [
+            'first_name' => 'Race',
+            'last_name'  => 'Condition',
+            'email'      => 'race@example.com',
+            'password'   => 'secret123',
+        ]);
+
+        $I->seeResponseCodeIs(422);
+        $I->seeResponseContainsJson([
+            'success' => false,
+            'data'    => ['error' => ['email' => ['Email has already been taken.']]],
+        ]);
     }
 
     /**

@@ -8,12 +8,11 @@ use app\models\db\User;
 use app\models\repository\PermissionRepository;
 use app\models\repository\RoleRepository;
 use app\models\service\AccessControlService;
-use Codeception\Test\Unit;
 use PHPUnit\Framework\MockObject\Exception;
 use Yii;
 use yii\web\ForbiddenHttpException;
 
-class AccessControlServiceTest extends Unit
+class AccessControlServiceTest extends BaseUnitTest
 {
     private AccessControlService $service;
     private PermissionRepository $permissionsMock;

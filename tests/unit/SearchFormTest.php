@@ -3,13 +3,12 @@
 namespace tests\unit;
 
 use app\models\form\UserSearchForm;
-use Codeception\Test\Unit;
 
 /**
  * Exercises the shared SearchForm behaviour through a concrete subclass:
  * sort parsing + whitelisting, page-size bounds and filter building.
  */
-class SearchFormTest extends Unit
+class SearchFormTest extends BaseUnitTest
 {
     // ==================== sort ====================
 

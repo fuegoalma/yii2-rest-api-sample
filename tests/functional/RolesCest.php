@@ -17,6 +17,33 @@ class RolesCest extends BaseCest
      *
      * @throws Exception
      */
+    /**
+     * `sort` is whitelisted per resource, so the roles listing has to declare
+     * its own sortable columns — an unlisted one is a 422, not a silent SQL
+     * injection surface.
+     */
+    public function testIndexSortsByNameDescending(FunctionalTester $I): void
+    {
+        $this->actingAsUserWithRole($I, 'admin');
+
+        $I->sendGet('/roles', ['sort' => '-name']);
+        $I->seeResponseCodeIs(200);
+
+        $names = array_column(json_decode($I->grabResponse(), true)['data']['items'], 'name');
+        $sorted = $names;
+        rsort($sorted);
+
+        Assert::assertSame($sorted, $names);
+    }
+
+    public function testIndexRejectsUnknownSortField(FunctionalTester $I): void
+    {
+        $this->actingAsUserWithRole($I, 'admin');
+
+        $I->sendGet('/roles', ['sort' => 'is_system']);
+        $I->seeResponseCodeIs(422);
+    }
+
     public function testIndexReturnsRolesForAdmin(FunctionalTester $I): void
     {
         $this->actingAsUserWithRole($I, 'admin');

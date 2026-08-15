@@ -73,13 +73,6 @@ class Album extends ActiveRecord implements OwnableInterface
         ];
     }
 
-    public function extraFields(): array
-    {
-        return [
-            'photos',
-        ];
-    }
-
     public function getPhotos(): ActiveQuery
     {
         return $this->hasMany(Photo::class, ['album_id' => 'id']);

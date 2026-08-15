@@ -26,4 +26,45 @@ trait ValidatesKnownNames
             ? $names
             : null;
     }
+
+    /**
+     * Validates an attribute holding a list of catalog names and normalizes it
+     * in place.
+     *
+     * A null value is left alone, so a form allowing partial updates leaves the
+     * set untouched; a form that requires the field declares a `required` rule,
+     * which runs first and (via the default `skipOnError`) stops this validator
+     * from seeing the null at all.
+     *
+     * @param string $attribute the attribute holding the list
+     * @param class-string<ActiveRecord> $modelClass catalog table to check against
+     * @param string $typeError message when the value is not an array
+     * @param string $unknownError message when a name is not in the catalog
+     */
+    protected function validateNameList(
+        string $attribute,
+        string $modelClass,
+        string $typeError,
+        string $unknownError,
+    ): void {
+        $values = $this->$attribute;
+
+        if ($values === null) {
+            return;
+        }
+
+        if (!is_array($values)) {
+            $this->addError($attribute, $typeError);
+            return;
+        }
+
+        $names = $this->knownNames($modelClass, $values);
+
+        if ($names === null) {
+            $this->addError($attribute, $unknownError);
+            return;
+        }
+
+        $this->$attribute = $names;
+    }
 }

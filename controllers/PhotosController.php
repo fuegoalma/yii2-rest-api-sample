@@ -44,7 +44,8 @@ class PhotosController extends ApiController
         $this->requireVisibleAlbum($album);
         $this->access->requireOn('photo.create', $album);
 
-        $form = new PhotoCreateForm();
+        /** @var PhotoCreateForm $form */
+        $form = $this->createForm();
         $form->file = UploadedFile::getInstanceByName('file');
 
         return $this->handleWrite(

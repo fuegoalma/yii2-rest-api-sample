@@ -22,6 +22,13 @@ class RolesController extends ApiController
 {
     public $modelClass = Role::class;
 
+    /**
+     * Required by the base controller, but never consulted here: role
+     * permissions don't follow the `<resource>.<action>[.any]` naming, so both
+     * access hooks below are overridden and neither falls back to this prefix.
+     *
+     * @codeCoverageIgnore
+     */
     protected function accessResource(): string
     {
         return 'role';

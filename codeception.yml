@@ -13,15 +13,35 @@ modules:
         Yii2:
             configFile: 'config/test.php'
 
-# To enable code coverage:
-#coverage:
-#    #c3_url: http://localhost:8080/index-test.php/
-#    enabled: true
-#    #remote: true
-#    #remote_config: '../codeception.yml'
-#    whitelist:
-#        include:
-#            - models/*
-#            - controllers/*
-#            - commands/*
-#            - mail/*
+# Code coverage. Collected by pcov (baked into the Dockerfile `base` stage,
+# disabled by default) — run it with `make coverage`, which also enforces the
+# 100% gate via tests/bin/coverage-check.php.
+#
+# Paths are project-root relative and must NOT start with `/` or `./`:
+# Codeception concatenates them onto a projectDir() that already ends in a
+# slash, and a doubled slash makes an `exclude` entry silently match nothing.
+#
+# No `remote`/`c3_url` here on purpose: the functional suite drives
+# yii\web\Application in-process through the Yii2 BrowserKit connector, so
+# controllers and services run on the same call stack as the test and are
+# collected by the ordinary driver.
+coverage:
+    enabled: true
+    include:
+        - commands
+        - components
+        - controllers
+        - models
+    # Pure interfaces have zero executable lines, so they are already neutral
+    # for the gate (0/0); excluded only to keep the HTML report to real code.
+    exclude:
+        - models/contract
+    # Required for the gate to mean anything: without it a file that no test
+    # ever loads vanishes from the report instead of showing up as 0%.
+    show_uncovered: true
+    # pcov collects line coverage only; branch/path coverage needs Xdebug.
+    path_coverage: false
+    # Cosmetic (report colouring) only — Codeception has no built-in threshold,
+    # the real gate is tests/bin/coverage-check.php.
+    low_limit: 100
+    high_limit: 100

@@ -34,17 +34,11 @@ abstract class RoleForm extends ApiForm
      */
     public function validatePermissions(string $attribute): void
     {
-        if ($this->permissions === null) {
-            return; // not sent at all — a partial update leaves the set untouched
-        }
-
-        if (!is_array($this->permissions)) {
-            $this->addError($attribute, 'Permissions must be an array of permission names.');
-            return;
-        }
-
-        if ($this->knownNames(Permission::class, $this->permissions) === null) {
-            $this->addError($attribute, 'Unknown permission name(s).');
-        }
+        $this->validateNameList(
+            $attribute,
+            Permission::class,
+            'Permissions must be an array of permission names.',
+            'Unknown permission name(s).',
+        );
     }
 }

@@ -4,8 +4,6 @@ namespace tests\functional;
 
 use app\components\PhotoUrlBuilder;
 use FunctionalTester;
-use Imagick;
-use ImagickPixel;
 use PHPUnit\Framework\Assert;
 use Yii;
 use yii\db\Exception;
@@ -187,7 +185,7 @@ class PhotosCest extends BaseCest
     public function testCreateStoresResizedWebpAndReturnsPhoto(FunctionalTester $I): void
     {
         $albumId = $this->insertAlbum();
-        $file = $this->createImageFixture(800, 600);
+        $file = $this->imageFixture(800, 600);
 
         $I->sendPost('/albums/' . $albumId . '/photos', ['title' => 'Holiday'], ['file' => $file]);
 
@@ -223,7 +221,7 @@ class PhotosCest extends BaseCest
     public function testCreateDoesNotUpscaleSmallImages(FunctionalTester $I): void
     {
         $albumId = $this->insertAlbum();
-        $file = $this->createImageFixture(200, 100);
+        $file = $this->imageFixture(200, 100);
 
         $I->sendPost('/albums/' . $albumId . '/photos', ['title' => 'Small'], ['file' => $file]);
         $I->seeResponseCodeIs(201);
@@ -252,7 +250,7 @@ class PhotosCest extends BaseCest
     public function testCreateFailsWithoutTitle(FunctionalTester $I): void
     {
         $albumId = $this->insertAlbum();
-        $file = $this->createImageFixture(300, 300);
+        $file = $this->imageFixture(300, 300);
 
         $I->sendPost('/albums/' . $albumId . '/photos', [], ['file' => $file]);
         $I->seeResponseCodeIs(422);
@@ -265,8 +263,7 @@ class PhotosCest extends BaseCest
     public function testCreateFailsWithDisallowedExtension(FunctionalTester $I): void
     {
         $albumId = $this->insertAlbum();
-        $file = Yii::getAlias('@runtime/not-an-image.txt');
-        file_put_contents($file, 'this is not an image');
+        $file = $this->notAnImageFixture('txt');
 
         $I->sendPost('/albums/' . $albumId . '/photos', ['title' => 'Bad'], ['file' => $file]);
         $I->seeResponseCodeIs(422);
@@ -275,7 +272,7 @@ class PhotosCest extends BaseCest
 
     public function testCreateReturnsNotFoundForMissingAlbum(FunctionalTester $I): void
     {
-        $file = $this->createImageFixture(300, 300);
+        $file = $this->imageFixture(300, 300);
 
         $I->sendPost('/albums/99999/photos', ['title' => 'Orphan'], ['file' => $file]);
         $I->seeResponseCodeIs(404);
@@ -406,7 +403,7 @@ class PhotosCest extends BaseCest
     {
         $albumId = $this->insertAlbum();
         $this->actingAsUserWithRole($I, null);
-        $file = $this->createImageFixture(300, 300);
+        $file = $this->imageFixture(300, 300);
 
         $I->sendPost('/albums/' . $albumId . '/photos', ['title' => 'Sneaky'], ['file' => $file]);
         $I->seeResponseCodeIs(403);
@@ -419,7 +416,7 @@ class PhotosCest extends BaseCest
     {
         $userId = $this->actingAsUserWithRole($I, null);
         $albumId = $this->insertAlbum($userId);
-        $file = $this->createImageFixture(300, 300);
+        $file = $this->imageFixture(300, 300);
 
         $I->sendPost('/albums/' . $albumId . '/photos', ['title' => 'Own upload'], ['file' => $file]);
         $I->seeResponseCodeIs(201);
@@ -512,7 +509,9 @@ class PhotosCest extends BaseCest
 
     private function uploadRoot(): string
     {
-        return Yii::getAlias('@runtime/uploads/albums');
+        // wherever the app is configured to store uploads — config/test.php
+        // points this at @runtime so tests never touch the web root
+        return Yii::getAlias(Yii::$app->params['photo_upload_path']);
     }
 
     /**
@@ -540,16 +539,4 @@ class PhotosCest extends BaseCest
         ], $overrides));
     }
 
-    private function createImageFixture(int $width, int $height): string
-    {
-        $path = Yii::getAlias('@runtime/fixture-' . $width . 'x' . $height . '.png');
-
-        $image = new Imagick();
-        $image->newImage($width, $height, new ImagickPixel('skyblue'));
-        $image->setImageFormat('png');
-        $image->writeImage($path);
-        $image->clear();
-
-        return $path;
-    }
 }

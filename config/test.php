@@ -2,16 +2,20 @@
 
 $params = require __DIR__ . '/params.php';
 $db = require __DIR__ . '/test_db.php';
-
-// keep uploaded test images out of the web root: point the Flysystem storage
-// at @runtime instead of @webroot (production uses the local/S3 binding in di.php)
 $container = require __DIR__ . '/di.php';
-$container['definitions'][\League\Flysystem\FilesystemOperator::class] =
-    static fn (): \League\Flysystem\FilesystemOperator => new \League\Flysystem\Filesystem(
-        new \League\Flysystem\Local\LocalFilesystemAdapter(Yii::getAlias('@runtime/uploads/albums'))
-    );
 
-// run background jobs inline in tests, so they don't depend on a running worker
+// Keep uploaded test images out of the web root. The Flysystem binding in
+// config/di.php reads this param when it is first resolved, so overriding the
+// param is enough — the binding itself is not restated here.
+//
+// This must come AFTER the require above: di.php loads params.php into its own
+// $params, and `require` runs in the caller's scope, so an override placed
+// before it would be silently discarded.
+$params['photo_upload_path'] = '@runtime/uploads/albums';
+
+// run background jobs inline in tests, so they don't depend on a running worker.
+// This is also what keeps job handlers visible to code coverage — under DbQueue
+// they would execute in the worker process instead.
 $container['definitions'][\app\models\contract\queue\QueueInterface::class] =
     \app\components\queue\SyncQueue::class;
 

@@ -23,6 +23,22 @@ RUN apt-get update \
     && a2enmod rewrite \
     && rm -rf /var/lib/apt/lists/*
 
+# Code-coverage driver, in its own layer so a pcov failure never invalidates the
+# expensive imagick layer above. pcov (not Xdebug) because it exists only to
+# collect coverage and costs a fraction of Xdebug's overhead.
+#
+# It is compiled in but DISABLED by default (`pcov.enabled=0`): at 0 pcov does
+# not shadow-copy opcode arrays, so `make test` — the TDD inner loop — pays
+# literally nothing. Coverage runs opt in per-process with `php -d
+# pcov.enabled=1` (see the `coverage` target in the Makefile).
+#
+# CI installs its own driver via shivammathur/setup-php (`coverage: pcov` in
+# .github/workflows/ci.yml) — keep the two in step.
+RUN pecl install pcov \
+    && docker-php-ext-enable pcov \
+    && printf 'pcov.enabled=0\npcov.directory=/var/www/html\npcov.exclude="~/(vendor|tests|runtime)/~"\n' \
+        >> /usr/local/etc/php/conf.d/docker-php-ext-pcov.ini
+
 # Serve from web/ (Yii2 document root) with .htaccess overrides allowed.
 ENV APACHE_DOCUMENT_ROOT=/var/www/html/web
 RUN sed -i 's|DocumentRoot /var/www/html|DocumentRoot /var/www/html/web|g' \

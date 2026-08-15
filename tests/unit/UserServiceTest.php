@@ -3,16 +3,14 @@
 namespace tests\unit;
 
 use app\models\contract\service\AlbumServiceInterface;
-use app\models\contract\service\TransactionRunnerInterface;
 use app\models\repository\UserRepository;
 use app\models\db\User;
 use app\models\service\UserService;
-use Codeception\Test\Unit;
 use PHPUnit\Framework\MockObject\Exception;
 use yii\db\StaleObjectException;
 use yii\web\NotFoundHttpException;
 
-class UserServiceTest extends Unit
+class UserServiceTest extends BaseUnitTest
 {
     private UserService $service;
     private UserRepository $repositoryMock;
@@ -27,20 +25,6 @@ class UserServiceTest extends Unit
         $this->repositoryMock = $this->createMock(UserRepository::class);
         $this->albumServiceMock = $this->createMock(AlbumServiceInterface::class);
         $this->service = new UserService($this->repositoryMock, $this->albumServiceMock, $this->immediateTx());
-    }
-
-    /**
-     * Runs the operation without a real transaction, so the service is
-     * unit-testable without a database (production uses a DB transaction).
-     */
-    private function immediateTx(): TransactionRunnerInterface
-    {
-        return new class () implements TransactionRunnerInterface {
-            public function run(callable $operation): mixed
-            {
-                return $operation();
-            }
-        };
     }
 
     // ==================== findOrFail ====================

@@ -3,6 +3,8 @@
 namespace tests\functional;
 
 use FunctionalTester;
+use tests\support\CreatesImageFixtures;
+use tests\support\RestoresGlobalState;
 use yii\db\Exception;
 use Yii;
 use PHPUnit\Framework\Assert;
@@ -10,10 +12,24 @@ use yii\db\Query;
 
 abstract class BaseCest
 {
+    use CreatesImageFixtures;
+    use RestoresGlobalState;
+
     protected const string AUTH_USER_EMAIL = 'auth.user@example.com';
 
     /** id of the user every test is authenticated as */
     protected int $authUserId = 0;
+
+    /**
+     * Undoes anything a test registered through the traits above. Cests must not
+     * override this — a forgotten parent::_after() would let a swapped binding
+     * or a fixture file leak into every later test in the run.
+     */
+    public function _after(FunctionalTester $I): void
+    {
+        $this->restoreGlobalState();
+        $this->deleteImageFixtures();
+    }
 
     /**
      * @throws Exception

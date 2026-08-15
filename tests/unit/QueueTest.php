@@ -4,77 +4,66 @@ namespace tests\unit;
 
 use app\components\queue\DbQueue;
 use app\components\queue\SyncQueue;
+use app\models\contract\queue\JobInterface;
+use app\models\contract\queue\JobRunnerInterface;
 use app\models\db\QueueJob;
 use app\models\jobs\DeleteAlbumDirectoryJob;
-use Codeception\Test\Unit;
-use League\Flysystem\Filesystem;
-use League\Flysystem\FilesystemOperator;
-use League\Flysystem\Local\LocalFilesystemAdapter;
-use PHPUnit\Framework\MockObject\Exception;
 use RuntimeException;
-use Yii;
 
-class QueueTest extends Unit
+/**
+ * Queue semantics: what each driver does with a job, and how failures are
+ * retried. What the job itself *does* is the runner's business, so these tests
+ * substitute a fake runner and never touch storage or the container.
+ */
+class QueueTest extends BaseUnitTest
 {
-    private FilesystemOperator $storage;
-
-    /**
-     * @throws Exception
-     */
     protected function setUp(): void
     {
         parent::setUp();
-        // the jobs resolve storage from the container at run time; swap in a mock
-        $this->storage = $this->createMock(FilesystemOperator::class);
-        Yii::$container->set(FilesystemOperator::class, fn (): FilesystemOperator => $this->storage);
         QueueJob::deleteAll();
     }
 
     protected function tearDown(): void
     {
-        // restore the runtime-local storage binding for the rest of the suite
-        Yii::$container->set(
-            FilesystemOperator::class,
-            static fn (): FilesystemOperator => new Filesystem(
-                new LocalFilesystemAdapter(Yii::getAlias('@runtime/uploads/albums'))
-            )
-        );
         QueueJob::deleteAll();
         parent::tearDown();
     }
 
     public function testSyncQueueRunsJobImmediately(): void
     {
-        $this->storage->expects($this->once())->method('deleteDirectory')->with('42');
+        $runner = $this->recordingRunner();
 
-        (new SyncQueue())->push(new DeleteAlbumDirectoryJob('42'));
+        (new SyncQueue($runner))->push(new DeleteAlbumDirectoryJob('42'));
+
+        $this->assertCount(1, $runner->ran);
     }
 
     public function testDbQueuePersistsJobWithoutRunningIt(): void
     {
-        $this->storage->expects($this->never())->method('deleteDirectory');
+        $runner = $this->recordingRunner();
 
-        (new DbQueue())->push(new DeleteAlbumDirectoryJob('42'));
+        (new DbQueue($runner))->push(new DeleteAlbumDirectoryJob('42'));
 
+        $this->assertSame([], $runner->ran);
         $this->assertSame(1, (int) QueueJob::find()->count());
     }
 
     public function testDbQueueProcessesJobAndRemovesRow(): void
     {
-        $this->storage->expects($this->once())->method('deleteDirectory')->with('42');
-
-        $queue = new DbQueue();
+        $runner = $this->recordingRunner();
+        $queue = new DbQueue($runner);
         $queue->push(new DeleteAlbumDirectoryJob('42'));
 
         $this->assertSame(1, $queue->processPending());
+
+        $this->assertCount(1, $runner->ran);
+        $this->assertSame('42', $runner->ran[0]->subDir);
         $this->assertSame(0, (int) QueueJob::find()->count());
     }
 
     public function testDbQueueRetriesFailingJobThenDropsItAtMaxAttempts(): void
     {
-        $this->storage->method('deleteDirectory')->willThrowException(new RuntimeException('boom'));
-
-        $queue = new DbQueue(maxAttempts: 2);
+        $queue = new DbQueue($this->failingRunner(), maxAttempts: 2);
         $queue->push(new DeleteAlbumDirectoryJob('42'));
 
         // first drain: fails, attempt recorded, row kept for retry
@@ -84,5 +73,28 @@ class QueueTest extends Unit
         // second drain: fails again, reaches maxAttempts, row dropped
         $this->assertSame(0, $queue->processPending());
         $this->assertSame(0, (int) QueueJob::find()->count());
+    }
+
+    private function recordingRunner(): JobRunnerInterface
+    {
+        return new class () implements JobRunnerInterface {
+            /** @var JobInterface[] */
+            public array $ran = [];
+
+            public function run(JobInterface $job): void
+            {
+                $this->ran[] = $job;
+            }
+        };
+    }
+
+    private function failingRunner(): JobRunnerInterface
+    {
+        return new class () implements JobRunnerInterface {
+            public function run(JobInterface $job): void
+            {
+                throw new RuntimeException('boom');
+            }
+        };
     }
 }

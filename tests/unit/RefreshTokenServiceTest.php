@@ -5,11 +5,10 @@ namespace tests\unit;
 use app\models\db\RefreshToken;
 use app\models\repository\RefreshTokenRepository;
 use app\models\service\RefreshTokenService;
-use Codeception\Test\Unit;
 use PHPUnit\Framework\MockObject\Exception;
 use yii\web\UnauthorizedHttpException;
 
-class RefreshTokenServiceTest extends Unit
+class RefreshTokenServiceTest extends BaseUnitTest
 {
     private RefreshTokenService $service;
     private RefreshTokenRepository $repositoryMock;
