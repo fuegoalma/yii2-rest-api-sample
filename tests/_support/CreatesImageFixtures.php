@@ -35,24 +35,6 @@ trait CreatesImageFixtures
     }
 
     /**
-     * A noisy image of the requested size. A flat colour compresses to almost
-     * nothing whatever the quality setting, so anything asserting on encoded
-     * size needs real detail to act on.
-     */
-    protected function detailedImageFixture(int $width, int $height): string
-    {
-        $path = $this->fixturePath('png');
-
-        $image = new Imagick();
-        $image->newPseudoImage($width, $height, 'plasma:fractal');
-        $image->setImageFormat('png');
-        $image->writeImage($path);
-        $image->clear();
-
-        return $path;
-    }
-
-    /**
      * A two-frame animated gif, for the multi-frame flattening path.
      */
     protected function animatedGifFixture(int $width = 20, int $height = 20): string

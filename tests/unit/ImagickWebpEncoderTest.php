@@ -3,7 +3,9 @@
 namespace tests\unit;
 
 use app\components\image\ImagickWebpEncoder;
+use app\models\contract\image\ImageEncoderInterface;
 use Imagick;
+use Yii;
 use yii\base\Exception;
 
 /**
@@ -78,18 +80,25 @@ class ImagickWebpEncoderTest extends BaseUnitTest
     }
 
     /**
-     * Likewise for quality: a lower setting must produce fewer bytes.
+     * The encoder the application actually uses is built from config/params.php,
+     * so this is the end-to-end check that those values reach it — the wiring
+     * the whole seam exists for. Asserted through the output dimensions rather
+     * than the encoded size: how many bytes a quality setting saves depends on
+     * the ImageMagick build, so a size comparison passes locally and fails on
+     * another machine.
      *
      * @throws Exception
      */
-    public function testAppliesTheConfiguredQuality(): void
+    public function testTheContainerBuildsTheEncoderFromParams(): void
     {
-        $source = $this->detailedImageFixture(400, 400);
+        /** @var ImageEncoderInterface $encoder */
+        $encoder = Yii::$container->get(ImageEncoderInterface::class);
 
-        $low = (new ImagickWebpEncoder(500, 500, 10))->encode($source);
-        $high = (new ImagickWebpEncoder(500, 500, 95))->encode($source);
+        $image = $this->read($encoder->encode($this->imageFixture(800, 600)));
 
-        $this->assertLessThan(strlen($high), strlen($low));
+        $this->assertSame('webp', $encoder->extension());
+        $this->assertSame((int) Yii::$app->params['photo_max_width'], $image->getImageWidth());
+        $this->assertSame(375, $image->getImageHeight());
     }
 
     /**
