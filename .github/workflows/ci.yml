@@ -75,9 +75,14 @@ jobs:
       # the end of the run, so a split would have the second overwrite the first.
       # This replaces a plain `codecept run` — the pass/fail signal is identical,
       # and running the suite twice would only double the wall clock.
+      # pcov.enabled/directory are pinned here rather than trusted to whatever
+      # setup-php's `coverage: pcov` leaves in the ini — without an enabled
+      # driver Codeception aborts with "No code coverage driver available".
+      # Keep this invocation in step with the `coverage` target in the Makefile.
       - name: Run tests with coverage
         run: |
-          php -d pcov.directory="$GITHUB_WORKSPACE" \
+          php -d pcov.enabled=1 \
+              -d pcov.directory="$GITHUB_WORKSPACE" \
               -d pcov.exclude='~/(vendor|tests)/~' \
               vendor/bin/codecept run \
               --coverage --coverage-xml --coverage-html --coverage-text \
@@ -94,3 +99,6 @@ jobs:
           name: coverage-html
           path: tests/_output/coverage/
           retention-days: 7
+          # the report is absent when the run itself failed before writing it —
+          # don't turn that into a second, misleading failure
+          if-no-files-found: ignore
