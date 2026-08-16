@@ -35,7 +35,8 @@
         "codeception/module-rest": "^3.4",
         "codeception/module-db": "^3.2",
         "friendsofphp/php-cs-fixer": "^3.95",
-        "phpstan/phpstan": "^2.2"
+        "phpstan/phpstan": "^2.2",
+        "symfony/yaml": "^8.1"
     },
     "config": {
         "allow-plugins": {

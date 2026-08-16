@@ -57,6 +57,7 @@ paths:
   /auth/login:
     post:
       tags: [Auth]
+      x-permission: []
       summary: Log in with email and password
       description: Returns a fresh access + refresh token pair and starts a new token family (session). Wrong credentials → 401.
       security: []
@@ -83,6 +84,7 @@ paths:
   /auth/register:
     post:
       tags: [Auth]
+      x-permission: []
       summary: Self-register and log in
       description: Creates an account (assigned **no** role) and logs it straight in, returning a token pair. Duplicate email or a missing field → 422.
       security: []
@@ -107,6 +109,7 @@ paths:
   /auth/refresh:
     post:
       tags: [Auth]
+      x-permission: []
       summary: Exchange a refresh token for a fresh pair
       description: |
         Refresh tokens are single-use and **rotate**: this revokes the presented
@@ -137,6 +140,7 @@ paths:
   /auth/logout:
     post:
       tags: [Auth]
+      x-permission: []
       summary: Log out this device
       description: Revokes the presented token's **family** (one session/device). Best-effort and idempotent — an unknown token still returns 204.
       security: []
@@ -157,6 +161,7 @@ paths:
   /auth/logout-all:
     post:
       tags: [Auth]
+      x-permission: []
       summary: Log out all devices
       description: Revokes **every** family of the token's owner. Idempotent → 204.
       security: []
@@ -178,6 +183,7 @@ paths:
   /health:
     get:
       tags: [Health]
+      x-permission: []
       summary: Health check
       description: Public, unauthenticated, unthrottled. Runs `SELECT 1` against the database.
       security: []
@@ -199,6 +205,7 @@ paths:
   /docs:
     get:
       tags: [Docs]
+      x-permission: []
       summary: Swagger UI
       description: |
         Renders this interactive documentation. Served by `DocsController`, which
@@ -217,6 +224,7 @@ paths:
   /docs/openapi.yaml:
     get:
       tags: [Docs]
+      x-permission: []
       summary: Raw OpenAPI specification
       description: Serves this file (`config/openapi.yaml`) verbatim. Not wrapped in the JSON envelope.
       security: []
@@ -231,6 +239,7 @@ paths:
   /users/me:
     get:
       tags: [Users]
+      x-permission: []
       summary: The authenticated user's profile
       description: Available to every authenticated user (never gated). Returns the profile, the user's albums and their role names.
       responses:
@@ -250,6 +259,7 @@ paths:
   /users/me/permissions:
     get:
       tags: [Users]
+      x-permission: []
       summary: The caller's roles and effective permissions
       description: For a client to build its UI from — role names plus the union of their role-granted permission names. Never gated.
       responses:
@@ -270,6 +280,7 @@ paths:
   /users:
     get:
       tags: [Users]
+      x-permission: [user.index.any]
       summary: List users
       description: 'Requires `user.index.any` (moderator+).'
       parameters:
@@ -278,7 +289,7 @@ paths:
         - name: sort
           in: query
           description: 'Comma-separated, `-` prefix = descending. Allowed: `id`, `first_name`, `last_name`, `email`, `created_at`, `updated_at`. Defaults to `id` ascending when omitted or when it resolves to no whitelisted field.'
-          schema: { type: string, example: -created_at,last_name }
+          schema: { type: string, example: '-created_at,last_name' }
         - { name: first_name, in: query, schema: { type: string }, description: Partial match. }
         - { name: last_name, in: query, schema: { type: string }, description: Partial match. }
         - { name: email, in: query, schema: { type: string }, description: Partial match. }
@@ -303,6 +314,7 @@ paths:
         '422': { $ref: '#/components/responses/ValidationError' }
     post:
       tags: [Users]
+      x-permission: [user.create]
       summary: Create a user
       description: Requires `user.create` (admin+). The account is created with **no** role. Password is hashed server-side.
       requestBody:
@@ -328,6 +340,7 @@ paths:
       - $ref: '#/components/parameters/idPath'
     get:
       tags: [Users]
+      x-permission: [user.view.any]
       summary: Get a user
       description: Requires `user.view.any` (moderator+) — ownership does **not** grant it. Always includes the user's albums.
       responses:
@@ -344,6 +357,8 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
     put:
       tags: [Users]
+      x-permission: [user.update.any]
+      x-permission-ownership: true
       summary: Update a user (partial)
       description: Requires ownership (own profile) or `user.update.any` (admin+). All fields optional. An admin cannot take over a role-manager's account (409).
       requestBody:
@@ -367,6 +382,8 @@ paths:
         '422': { $ref: '#/components/responses/ValidationError' }
     patch:
       tags: [Users]
+      x-permission: [user.update.any]
+      x-permission-ownership: true
       summary: Update a user (partial, alias of PUT)
       requestBody:
         required: true
@@ -389,6 +406,7 @@ paths:
         '422': { $ref: '#/components/responses/ValidationError' }
     delete:
       tags: [Users]
+      x-permission: [user.delete.any]
       summary: Delete a user
       description: Requires `user.delete.any` (admin+). Blocked by the last-role-manager invariant (409).
       responses:
@@ -404,6 +422,7 @@ paths:
       - $ref: '#/components/parameters/idPath'
     get:
       tags: [Users]
+      x-permission: [role.assign]
       summary: List a user's roles
       description: Requires `role.assign` (admin+).
       responses:
@@ -423,6 +442,7 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
     put:
       tags: [Users]
+      x-permission: [role.assign]
       summary: Replace a user's role set
       description: |
         Requires `role.assign` (admin+). Full replacement — an empty array revokes
@@ -455,6 +475,7 @@ paths:
   /albums/my:
     get:
       tags: [Albums]
+      x-permission: []
       summary: The caller's own albums
       description: Available to every authenticated user. Soft-deleted albums are excluded.
       parameters:
@@ -474,6 +495,7 @@ paths:
   /albums:
     get:
       tags: [Albums]
+      x-permission: [album.index.any]
       summary: List all albums (review view)
       description: 'Requires `album.index.any` (moderator+). Soft-deleted albums are hidden unless requested via `?is_deleted=1` (the review queue).'
       parameters:
@@ -497,6 +519,7 @@ paths:
         '422': { $ref: '#/components/responses/ValidationError' }
     post:
       tags: [Albums]
+      x-permission: []
       summary: Create an album
       description: A base ability of every authenticated user. The owner is forced to the caller — `user_id` cannot be set from the body.
       requestBody:
@@ -521,6 +544,8 @@ paths:
       - $ref: '#/components/parameters/idPath'
     get:
       tags: [Albums]
+      x-permission: [album.view.any]
+      x-permission-ownership: true
       summary: Get an album with its photos and owner
       description: Requires ownership or `album.view.any` (moderator+). Returns a richer shape including the owner's name and the album's photos.
       responses:
@@ -537,6 +562,8 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
     put:
       tags: [Albums]
+      x-permission: [album.update.any]
+      x-permission-ownership: true
       summary: Update an album (partial)
       description: Requires ownership or `album.update.any` (moderator+). Only the title is editable.
       requestBody:
@@ -559,6 +586,8 @@ paths:
         '422': { $ref: '#/components/responses/ValidationError' }
     patch:
       tags: [Albums]
+      x-permission: [album.update.any]
+      x-permission-ownership: true
       summary: Update an album (partial, alias of PUT)
       requestBody:
         required: true
@@ -580,6 +609,8 @@ paths:
         '422': { $ref: '#/components/responses/ValidationError' }
     delete:
       tags: [Albums]
+      x-permission: [album.delete.any, album.soft-delete.any]
+      x-permission-ownership: true
       summary: Delete an album (permanent or soft)
       description: |
         One route, outcome decided by permission:
@@ -606,6 +637,7 @@ paths:
       - $ref: '#/components/parameters/idPath'
     post:
       tags: [Albums]
+      x-permission: [album.restore]
       summary: Restore a soft-deleted album
       description: Requires `album.restore` (admin+). Lifts the pseudo-deletion after review.
       responses:
@@ -630,6 +662,8 @@ paths:
         schema: { type: integer, minimum: 1 }
     get:
       tags: [Photos]
+      x-permission: [photo.view.any]
+      x-permission-ownership: true
       summary: List an album's photos
       description: Requires ownership of the album or `photo.view.any` (moderator+). A missing album → 404.
       parameters:
@@ -662,6 +696,8 @@ paths:
         '422': { $ref: '#/components/responses/ValidationError' }
     post:
       tags: [Photos]
+      x-permission: [photo.create.any]
+      x-permission-ownership: true
       summary: Upload a photo into an album
       description: |
         Requires ownership of the album or `photo.create.any` (moderator+).
@@ -703,6 +739,8 @@ paths:
       - $ref: '#/components/parameters/idPath'
     get:
       tags: [Photos]
+      x-permission: [photo.view.any]
+      x-permission-ownership: true
       summary: Get a photo
       description: Requires ownership (via the album) or `photo.view.any` (moderator+).
       responses:
@@ -719,6 +757,8 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
     put:
       tags: [Photos]
+      x-permission: [photo.update.any]
+      x-permission-ownership: true
       summary: Update a photo (title only)
       description: Requires ownership or `photo.update.any` (moderator+). The album and the stored file are immutable — only the title can change.
       requestBody:
@@ -741,6 +781,8 @@ paths:
         '422': { $ref: '#/components/responses/ValidationError' }
     patch:
       tags: [Photos]
+      x-permission: [photo.update.any]
+      x-permission-ownership: true
       summary: Update a photo (title only, alias of PUT)
       requestBody:
         required: true
@@ -762,6 +804,8 @@ paths:
         '422': { $ref: '#/components/responses/ValidationError' }
     delete:
       tags: [Photos]
+      x-permission: [photo.delete.any]
+      x-permission-ownership: true
       summary: Delete a photo
       description: Requires ownership or `photo.delete.any` (moderator+). Removes the record and, for uploaded photos, the physical file.
       responses:
@@ -775,6 +819,7 @@ paths:
   /roles:
     get:
       tags: [Roles]
+      x-permission: [role.index]
       summary: List roles
       description: |
         Requires `role.index` (admin+). Returns name + description; the permission
@@ -808,6 +853,7 @@ paths:
         '422': { $ref: '#/components/responses/ValidationError' }
     post:
       tags: [Roles]
+      x-permission: [role.manage]
       summary: Compose a custom role
       description: Requires `role.manage` (super-admin). Built from catalog permissions; an unknown permission name → 422, a duplicate role name → 422.
       requestBody:
@@ -833,6 +879,7 @@ paths:
       - $ref: '#/components/parameters/idPath'
     get:
       tags: [Roles]
+      x-permission: [role.view]
       summary: Get a role with its permissions
       description: Requires `role.view` (super-admin). Includes the role's permission set.
       responses:
@@ -849,6 +896,7 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
     put:
       tags: [Roles]
+      x-permission: [role.manage]
       summary: Re-compose a role (partial)
       description: |
         Requires `role.manage` (super-admin). A system role can be re-composed but
@@ -874,6 +922,7 @@ paths:
         '422': { $ref: '#/components/responses/ValidationError' }
     patch:
       tags: [Roles]
+      x-permission: [role.manage]
       summary: Re-compose a role (partial, alias of PUT)
       requestBody:
         required: true
@@ -896,6 +945,7 @@ paths:
         '422': { $ref: '#/components/responses/ValidationError' }
     delete:
       tags: [Roles]
+      x-permission: [role.manage]
       summary: Delete a custom role
       description: Requires `role.manage` (super-admin). A system role cannot be deleted (409). Blocked by the last-role-manager invariant (409).
       responses:
@@ -910,6 +960,7 @@ paths:
   /permissions:
     get:
       tags: [Permissions]
+      x-permission: [permission.index]
       summary: List the permission catalog
       description: Requires `permission.index` (super-admin). Read-only — permissions are managed by migrations.
       responses:
@@ -1051,7 +1102,7 @@ components:
       type: object
       required: [email, password]
       properties:
-        email: { type: string, format: email, maxLength: 255, example: user@example.com }
+        email: { type: string, format: email, maxLength: 254, example: user@example.com }
         password: { type: string, maxLength: 72, example: secret123 }
     RegisterRequest:
       type: object
@@ -1059,7 +1110,7 @@ components:
       properties:
         first_name: { type: string, maxLength: 255, example: John }
         last_name: { type: string, maxLength: 255, example: Doe }
-        email: { type: string, format: email, maxLength: 255, example: user@example.com }
+        email: { type: string, format: email, maxLength: 254, example: user@example.com }
         password: { type: string, minLength: 6, maxLength: 72, example: secret123 }
     RefreshTokenRequest:
       type: object
@@ -1132,7 +1183,7 @@ components:
       properties:
         first_name: { type: string, maxLength: 255, example: John }
         last_name: { type: string, maxLength: 255, example: Doe }
-        email: { type: string, format: email, maxLength: 255, example: john@example.com }
+        email: { type: string, format: email, maxLength: 254, example: john@example.com }
         password: { type: string, minLength: 6, maxLength: 72, example: secret123 }
     UserUpdateRequest:
       type: object
@@ -1140,7 +1191,7 @@ components:
       properties:
         first_name: { type: string, maxLength: 255 }
         last_name: { type: string, maxLength: 255 }
-        email: { type: string, format: email, maxLength: 255 }
+        email: { type: string, format: email, maxLength: 254 }
         password: { type: string, minLength: 6, maxLength: 72 }
 
     # -- Albums ------------------------------------------------------

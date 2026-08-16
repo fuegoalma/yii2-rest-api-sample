@@ -6,7 +6,7 @@ WEB := $(DC) exec -T web
         migration-create migration-update \
         seed seed-clear \
         refresh-token-prune rbac-assign \
-        test test-unit test-functional test-one build \
+        test test-unit test-functional test-one test-contract build \
         coverage coverage-html \
         cs-check cs-fix stan check
 
@@ -31,6 +31,7 @@ help:
 	@echo "  test-unit            Run unit tests only"
 	@echo "  test-functional      Run functional tests only"
 	@echo "  test-one suite=<unit|functional> class=<Cest[:testMethod]>   Run one class/test"
+	@echo "  test-contract        Run the OpenAPI contract gates only (tests/unit/contract/)"
 	@echo "  build                Rebuild Codeception support classes (after changing modules)"
 	@echo "  coverage             Run the suite with coverage and enforce the 100% gate"
 	@echo "  coverage-html        Same as coverage, then print the HTML report path"
@@ -101,6 +102,12 @@ test-functional:
 
 test-one:
 	$(WEB) php vendor/bin/codecept run $(suite) $(class)
+
+# Inner-loop convenience only: the contract gates live in tests/unit/contract/,
+# so a bare `codecept run` already picks them up. `make coverage` must stay a
+# bare run — coverage is merged across suites at the end of one process.
+test-contract:
+	$(WEB) php vendor/bin/codecept run unit contract
 
 build:
 	$(WEB) php vendor/bin/codecept build
