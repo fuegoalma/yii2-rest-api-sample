@@ -1,17 +1,41 @@
-.git
-.github
-.idea
-.vscode
-vendor
-docs
-tests
+# Allow-list: everything is excluded, then the build inputs are added back.
+# This keeps the context minimal and — more importantly — independent of whatever
+# else sits in the working directory. A deny-list silently ships every new file
+# added at the root; this one silently ships nothing.
+*
+
+# Composer manifests. The prod stage copies these on their own layer, so a
+# dependency change is the only thing that invalidates `composer install`.
+!composer.json
+!composer.lock
+
+# Application code.
+!commands
+!components
+!config
+!controllers
+!migrations
+!models
+!web
+!yii
+
+# The `cron` compose service shares this image and installs its schedule from
+# here (docker/cron/entrypoint.sh + crontab).
+!docker
+
+!LICENSE.md
+!README.md
+
+# These directories must exist in the image — the prod stage chowns them — but
+# their contents are generated at runtime and are never a build input.
+!runtime
 runtime/*
 !runtime/.gitkeep
 web/assets/*
 !web/assets/.gitkeep
 web/uploads/*
 !web/uploads/.gitkeep
+
+# Never ship secrets or a host-built vendor tree, even from the paths above.
 .env
-.php-cs-fixer.cache
-*.md
-!README.md
+**/vendor

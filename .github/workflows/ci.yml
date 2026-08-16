@@ -1,8 +1,20 @@
 name: CI
 
 on:
+  # A branch with an open pull request would otherwise be built twice for the
+  # same commit — once by `push`, once by `pull_request`. Pushes are therefore
+  # narrowed to the branch CD chains off; every other branch is covered by its
+  # pull request.
   push:
+    branches: [master]
   pull_request:
+
+# Superseded runs on the same ref are pointless — except on master, where CD
+# picks up the completed run via `workflow_run` and cancelling one would drop
+# the deploy with it.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
 
 jobs:
   checks:
@@ -91,9 +103,11 @@ jobs:
       - name: Enforce 100% coverage
         run: php tests/bin/coverage-check.php tests/_output/coverage.xml
 
-      # On a red gate, the HTML report gives the same per-file drill-down locally
+      # The HTML report gives the same per-file drill-down as locally. Uploaded
+      # on a green run too: a gate that passes at exactly 100% is the run you
+      # most want the report from when the next commit drops below it.
       - name: Upload coverage report
-        if: failure()
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: coverage-html

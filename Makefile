@@ -8,7 +8,7 @@ WEB := $(DC) exec -T web
         refresh-token-prune rbac-assign \
         test test-unit test-functional test-one build \
         coverage coverage-html \
-        cs-check cs-fix stan
+        cs-check cs-fix stan check
 
 help:
 	@echo "Available targets:"
@@ -37,6 +37,7 @@ help:
 	@echo "  cs-check             Show PSR-12 code style violations (dry-run)"
 	@echo "  cs-fix               Auto-fix PSR-12 code style violations"
 	@echo "  stan                 Run PHPStan static analysis"
+	@echo "  check                cs-check + stan + coverage — what CI runs"
 
 init:
 	./init.sh
@@ -124,3 +125,10 @@ cs-fix:
 
 stan:
 	$(WEB) php vendor/bin/phpstan analyse --no-progress --memory-limit=512M
+
+# Every gate CI runs, in the same order and with the same commands, so a red
+# build is never the first time a problem is seen. `coverage` last: it is by far
+# the slowest, and there is no point paying for it while the style pass is red.
+# Keep this list in step with .github/workflows/ci.yml — they must stay runnable
+# both ways.
+check: cs-check stan coverage
