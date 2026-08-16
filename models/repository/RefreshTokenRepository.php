@@ -2,6 +2,7 @@
 
 namespace app\models\repository;
 
+use app\models\contract\repository\RefreshTokenRepositoryInterface;
 use app\models\db\RefreshToken;
 use yii\db\Exception;
 
@@ -10,7 +11,7 @@ use yii\db\Exception;
  * this is not a REST collection, so it only exposes the focused lookups and
  * bulk revocations the auth flow needs.
  */
-class RefreshTokenRepository
+class RefreshTokenRepository implements RefreshTokenRepositoryInterface
 {
     public function findByHash(string $hash): ?RefreshToken
     {

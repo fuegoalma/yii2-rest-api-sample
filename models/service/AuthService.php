@@ -3,17 +3,17 @@
 namespace app\models\service;
 
 use app\components\JwtService;
+use app\models\contract\repository\UserRepositoryInterface;
 use app\models\contract\service\AuthServiceInterface;
 use app\models\db\User;
 use app\models\dto\TokenResponse;
-use app\models\repository\UserRepository;
 use yii\base\Exception;
 use yii\web\UnauthorizedHttpException;
 
 readonly class AuthService implements AuthServiceInterface
 {
     public function __construct(
-        private UserRepository $repository,
+        private UserRepositoryInterface $repository,
         private UserService $userService,
         private RefreshTokenService $refreshTokens,
         private JwtService $jwt,

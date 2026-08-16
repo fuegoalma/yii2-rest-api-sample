@@ -3,12 +3,12 @@
 namespace app\models\service;
 
 use app\components\ImageStorage;
-use app\models\contract\repository\ApiRepositoryInterface;
+use app\models\contract\repository\AlbumRepositoryInterface;
+use app\models\contract\repository\PhotoRepositoryInterface;
 use app\models\contract\service\PhotoServiceInterface;
 use app\models\db\Album;
 use app\models\db\Photo;
 use app\models\dto\SearchCriteria;
-use app\models\repository\AlbumRepository;
 use app\models\service\basic\BaseCrudService;
 use yii\base\Exception as BaseException;
 use yii\data\ActiveDataProvider;
@@ -19,8 +19,8 @@ use yii\web\UploadedFile;
 readonly class PhotoService extends BaseCrudService implements PhotoServiceInterface
 {
     public function __construct(
-        ApiRepositoryInterface $repository,
-        private AlbumRepository $albumRepository,
+        PhotoRepositoryInterface $repository,
+        private AlbumRepositoryInterface $albumRepository,
         private ImageStorage $imageStorage,
     ) {
         parent::__construct($repository);

@@ -2,6 +2,7 @@
 
 namespace app\models\repository;
 
+use app\models\contract\repository\PermissionRepositoryInterface;
 use app\models\db\Permission;
 use yii\db\Query;
 
@@ -10,7 +11,7 @@ use yii\db\Query;
  * changed exclusively by migrations, so unlike the resource repositories this
  * one implements no generic CRUD contract.
  */
-class PermissionRepository
+class PermissionRepository implements PermissionRepositoryInterface
 {
     /**
      * @return Permission[] the whole catalog, ordered by name

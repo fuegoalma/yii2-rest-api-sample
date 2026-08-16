@@ -23,7 +23,14 @@ class JwtService extends Component
     private const int MIN_SECRET_LENGTH = 32;
 
     public string $secret = '';
-    public int $ttl = 3600;
+
+    /**
+     * Access-token lifetime in seconds. Deliberately left uninitialised: both
+     * this and $secret come from config/di.php, and configuration that has gone
+     * dead must fail loudly instead of silently restoring a magic number (the
+     * rule ImagickWebpEncoder's bounding box follows for the same reason).
+     */
+    public int $ttl;
 
     /**
      * @throws InvalidConfigException
@@ -36,6 +43,11 @@ class JwtService extends Component
                 'JwtService::$secret (JWT_SECRET env variable) must be at least %d characters long.',
                 self::MIN_SECRET_LENGTH
             ));
+        }
+        if (!isset($this->ttl)) {
+            throw new InvalidConfigException(
+                'JwtService::$ttl (JWT_TTL env variable) must be configured.'
+            );
         }
     }
 

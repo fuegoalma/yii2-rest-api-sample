@@ -2,8 +2,8 @@
 
 namespace app\models\service;
 
+use app\models\contract\repository\RefreshTokenRepositoryInterface;
 use app\models\db\RefreshToken;
-use app\models\repository\RefreshTokenRepository;
 use Yii;
 use yii\base\Exception;
 use yii\web\UnauthorizedHttpException;
@@ -21,9 +21,14 @@ readonly class RefreshTokenService
 {
     private const int TOKEN_LENGTH = 64;
 
+    /**
+     * $ttl (seconds) comes from JWT_REFRESH_TTL via config/di.php and carries
+     * no default on purpose — wiring that has gone dead must fail loudly rather
+     * than silently fall back to a hard-coded 30 days.
+     */
     public function __construct(
-        private RefreshTokenRepository $repository,
-        private int $ttl = 2592000, // 30 days
+        private RefreshTokenRepositoryInterface $repository,
+        private int $ttl,
     ) {
     }
 

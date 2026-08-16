@@ -2,6 +2,7 @@
 
 namespace app\models\repository;
 
+use app\models\contract\repository\RoleRepositoryInterface;
 use app\models\db\Permission;
 use app\models\db\Role;
 use app\models\repository\basic\BaseRepository;
@@ -9,7 +10,7 @@ use yii\db\Exception;
 use yii\db\Query;
 use Yii;
 
-class RoleRepository extends BaseRepository
+class RoleRepository extends BaseRepository implements RoleRepositoryInterface
 {
     protected function modelClass(): string
     {

@@ -2,11 +2,12 @@
 
 namespace app\models\repository;
 
+use app\models\contract\repository\PhotoRepositoryInterface;
 use app\models\db\Photo;
 use app\models\repository\basic\BaseRepository;
 use yii\db\Exception;
 
-class PhotoRepository extends BaseRepository
+class PhotoRepository extends BaseRepository implements PhotoRepositoryInterface
 {
     protected function modelClass(): string
     {

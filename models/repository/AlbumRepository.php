@@ -2,11 +2,12 @@
 
 namespace app\models\repository;
 
+use app\models\contract\repository\AlbumRepositoryInterface;
 use app\models\db\Album;
 use app\models\repository\basic\BaseRepository;
 use yii\db\Exception;
 
-class AlbumRepository extends BaseRepository
+class AlbumRepository extends BaseRepository implements AlbumRepositoryInterface
 {
     protected function modelClass(): string
     {

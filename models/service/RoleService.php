@@ -2,12 +2,12 @@
 
 namespace app\models\service;
 
+use app\models\contract\repository\RoleRepositoryInterface;
 use app\models\contract\service\AccessControlInterface;
 use app\models\contract\service\RoleServiceInterface;
 use app\models\contract\service\TransactionRunnerInterface;
 use app\models\db\Permission;
 use app\models\db\Role;
-use app\models\repository\RoleRepository;
 use app\models\service\basic\BaseCrudService;
 use yii\db\ActiveRecord;
 use yii\helpers\ArrayHelper;
@@ -31,7 +31,7 @@ readonly class RoleService extends BaseCrudService implements RoleServiceInterfa
     private const array PRIVILEGED_PERMISSIONS = [Permission::ROLE_MANAGE, Permission::ROLE_ASSIGN];
 
     public function __construct(
-        private RoleRepository $roles,
+        private RoleRepositoryInterface $roles,
         private AccessControlInterface $access,
         private TransactionRunnerInterface $tx,
     ) {

@@ -2,11 +2,11 @@
 
 namespace app\models\service;
 
+use app\models\contract\repository\AlbumRepositoryInterface;
+use app\models\contract\repository\PhotoRepositoryInterface;
+use app\models\contract\repository\UserRepositoryInterface;
 use app\models\db\Photo;
 use app\models\db\User;
-use app\models\repository\AlbumRepository;
-use app\models\repository\PhotoRepository;
-use app\models\repository\UserRepository;
 use yii\db\Exception;
 use Yii;
 use yii\helpers\ArrayHelper;
@@ -14,9 +14,9 @@ use yii\helpers\ArrayHelper;
 readonly class SeederService
 {
     public function __construct(
-        private UserRepository $userRepository,
-        private AlbumRepository $albumRepository,
-        private PhotoRepository $photoRepository,
+        private UserRepositoryInterface $userRepository,
+        private AlbumRepositoryInterface $albumRepository,
+        private PhotoRepositoryInterface $photoRepository,
     ) {
     }
 

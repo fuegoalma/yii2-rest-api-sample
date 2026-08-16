@@ -3,8 +3,8 @@
 namespace app\commands;
 
 use app\commands\basic\BasicConsoleController;
-use app\models\repository\RoleRepository;
-use app\models\repository\UserRepository;
+use app\models\contract\repository\RoleRepositoryInterface;
+use app\models\contract\repository\UserRepositoryInterface;
 use yii\console\ExitCode;
 use yii\db\Exception;
 
@@ -18,8 +18,8 @@ class RbacController extends BasicConsoleController
     public function __construct(
         $id,
         $module,
-        private readonly UserRepository $users,
-        private readonly RoleRepository $roles,
+        private readonly UserRepositoryInterface $users,
+        private readonly RoleRepositoryInterface $roles,
         $config = []
     ) {
         parent::__construct($id, $module, $config);

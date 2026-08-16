@@ -6,7 +6,7 @@ use app\components\JwtService;
 use app\models\db\RefreshToken;
 use app\models\db\User;
 use app\models\dto\TokenResponse;
-use app\models\repository\UserRepository;
+use app\models\contract\repository\UserRepositoryInterface;
 use app\models\service\AuthService;
 use app\models\service\RefreshTokenService;
 use app\models\service\UserService;
@@ -17,7 +17,7 @@ use yii\web\UnauthorizedHttpException;
 class AuthServiceTest extends BaseUnitTest
 {
     private AuthService $service;
-    private UserRepository $repositoryMock;
+    private UserRepositoryInterface $repositoryMock;
     private UserService $userServiceMock;
     private RefreshTokenService $refreshTokensMock;
     private JwtService $jwt;
@@ -28,7 +28,7 @@ class AuthServiceTest extends BaseUnitTest
     protected function setUp(): void
     {
         parent::setUp();
-        $this->repositoryMock = $this->createMock(UserRepository::class);
+        $this->repositoryMock = $this->createMock(UserRepositoryInterface::class);
         $this->userServiceMock = $this->createMock(UserService::class);
         $this->refreshTokensMock = $this->createMock(RefreshTokenService::class);
         $this->jwt = new JwtService([

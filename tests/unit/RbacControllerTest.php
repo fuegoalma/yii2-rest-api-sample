@@ -5,8 +5,8 @@ namespace tests\unit;
 use app\commands\RbacController;
 use app\models\db\Role;
 use app\models\db\User;
-use app\models\repository\RoleRepository;
-use app\models\repository\UserRepository;
+use app\models\contract\repository\RoleRepositoryInterface;
+use app\models\contract\repository\UserRepositoryInterface;
 use PHPUnit\Framework\MockObject\Exception;
 use tests\support\CapturesConsoleOutput;
 use Yii;
@@ -14,8 +14,8 @@ use yii\console\ExitCode;
 
 class RbacControllerTest extends BaseUnitTest
 {
-    private UserRepository $usersMock;
-    private RoleRepository $rolesMock;
+    private UserRepositoryInterface $usersMock;
+    private RoleRepositoryInterface $rolesMock;
 
     /**
      * @throws Exception
@@ -23,8 +23,8 @@ class RbacControllerTest extends BaseUnitTest
     protected function setUp(): void
     {
         parent::setUp();
-        $this->usersMock = $this->createMock(UserRepository::class);
-        $this->rolesMock = $this->createMock(RoleRepository::class);
+        $this->usersMock = $this->createMock(UserRepositoryInterface::class);
+        $this->rolesMock = $this->createMock(RoleRepositoryInterface::class);
     }
 
     // ==================== assign ====================

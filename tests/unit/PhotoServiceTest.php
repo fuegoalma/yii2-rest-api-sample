@@ -5,8 +5,8 @@ namespace tests\unit;
 use app\components\ImageStorage;
 use app\models\db\Photo;
 use app\models\dto\SearchCriteria;
-use app\models\repository\AlbumRepository;
-use app\models\repository\PhotoRepository;
+use app\models\contract\repository\AlbumRepositoryInterface;
+use app\models\contract\repository\PhotoRepositoryInterface;
 use app\models\service\PhotoService;
 use PHPUnit\Framework\MockObject\Exception;
 use yii\base\Exception as BaseException;
@@ -18,8 +18,8 @@ use yii\web\UploadedFile;
 class PhotoServiceTest extends BaseUnitTest
 {
     private PhotoService $service;
-    private PhotoRepository $photoRepository;
-    private AlbumRepository $albumRepository;
+    private PhotoRepositoryInterface $photoRepository;
+    private AlbumRepositoryInterface $albumRepository;
     private ImageStorage $imageStorage;
 
     /**
@@ -28,8 +28,8 @@ class PhotoServiceTest extends BaseUnitTest
     protected function setUp(): void
     {
         parent::setUp();
-        $this->photoRepository = $this->createMock(PhotoRepository::class);
-        $this->albumRepository = $this->createMock(AlbumRepository::class);
+        $this->photoRepository = $this->createMock(PhotoRepositoryInterface::class);
+        $this->albumRepository = $this->createMock(AlbumRepositoryInterface::class);
         $this->imageStorage = $this->createMock(ImageStorage::class);
         $this->service = new PhotoService(
             $this->photoRepository,

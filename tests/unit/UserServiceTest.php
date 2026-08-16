@@ -3,7 +3,7 @@
 namespace tests\unit;
 
 use app\models\contract\service\AlbumServiceInterface;
-use app\models\repository\UserRepository;
+use app\models\contract\repository\UserRepositoryInterface;
 use app\models\db\User;
 use app\models\service\UserService;
 use PHPUnit\Framework\MockObject\Exception;
@@ -13,7 +13,7 @@ use yii\web\NotFoundHttpException;
 class UserServiceTest extends BaseUnitTest
 {
     private UserService $service;
-    private UserRepository $repositoryMock;
+    private UserRepositoryInterface $repositoryMock;
     private AlbumServiceInterface $albumServiceMock;
 
     /**
@@ -22,7 +22,7 @@ class UserServiceTest extends BaseUnitTest
     protected function setUp(): void
     {
         parent::setUp();
-        $this->repositoryMock = $this->createMock(UserRepository::class);
+        $this->repositoryMock = $this->createMock(UserRepositoryInterface::class);
         $this->albumServiceMock = $this->createMock(AlbumServiceInterface::class);
         $this->service = new UserService($this->repositoryMock, $this->albumServiceMock, $this->immediateTx());
     }

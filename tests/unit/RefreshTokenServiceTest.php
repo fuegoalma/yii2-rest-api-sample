@@ -3,7 +3,7 @@
 namespace tests\unit;
 
 use app\models\db\RefreshToken;
-use app\models\repository\RefreshTokenRepository;
+use app\models\contract\repository\RefreshTokenRepositoryInterface;
 use app\models\service\RefreshTokenService;
 use PHPUnit\Framework\MockObject\Exception;
 use yii\web\UnauthorizedHttpException;
@@ -11,7 +11,7 @@ use yii\web\UnauthorizedHttpException;
 class RefreshTokenServiceTest extends BaseUnitTest
 {
     private RefreshTokenService $service;
-    private RefreshTokenRepository $repositoryMock;
+    private RefreshTokenRepositoryInterface $repositoryMock;
 
     /**
      * @throws Exception
@@ -19,7 +19,7 @@ class RefreshTokenServiceTest extends BaseUnitTest
     protected function setUp(): void
     {
         parent::setUp();
-        $this->repositoryMock = $this->createMock(RefreshTokenRepository::class);
+        $this->repositoryMock = $this->createMock(RefreshTokenRepositoryInterface::class);
         $this->service = new RefreshTokenService($this->repositoryMock, 600);
     }
 

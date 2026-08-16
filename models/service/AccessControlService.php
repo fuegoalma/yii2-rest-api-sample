@@ -3,9 +3,9 @@
 namespace app\models\service;
 
 use app\models\contract\OwnableInterface;
+use app\models\contract\repository\PermissionRepositoryInterface;
+use app\models\contract\repository\RoleRepositoryInterface;
 use app\models\contract\service\AccessControlInterface;
-use app\models\repository\PermissionRepository;
-use app\models\repository\RoleRepository;
 use yii\db\ActiveRecord;
 use yii\web\ForbiddenHttpException;
 use Yii;
@@ -46,8 +46,8 @@ class AccessControlService implements AccessControlInterface
     private ?array $roles = null;
 
     public function __construct(
-        private readonly PermissionRepository $permissionRepository,
-        private readonly RoleRepository $roleRepository,
+        private readonly PermissionRepositoryInterface $permissionRepository,
+        private readonly RoleRepositoryInterface $roleRepository,
     ) {
     }
 

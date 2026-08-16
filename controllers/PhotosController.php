@@ -28,9 +28,7 @@ class PhotosController extends ApiController
      */
     public function actionIndex(int $albumId = 0): ActiveDataProvider|array
     {
-        $album = $this->photoService()->findAlbumOrFail($albumId);
-        $this->requireVisibleAlbum($album);
-        $this->access->requireOn('photo.view', $album);
+        $this->requireAlbumAccess($albumId, 'photo.view');
 
         return $this->handleIndex(
             $this->searchForm(),
@@ -40,9 +38,7 @@ class PhotosController extends ApiController
 
     public function actionCreate(int $albumId = 0): mixed
     {
-        $album = $this->photoService()->findAlbumOrFail($albumId);
-        $this->requireVisibleAlbum($album);
-        $this->access->requireOn('photo.create', $album);
+        $this->requireAlbumAccess($albumId, 'photo.create');
 
         /** @var PhotoCreateForm $form */
         $form = $this->createForm();
@@ -53,6 +49,20 @@ class PhotosController extends ApiController
             fn () => $this->photoService()->createInAlbum($albumId, (string) $form->title, $form->file),
             201
         );
+    }
+
+    /**
+     * The gate the album-nested collection actions share: the album must exist,
+     * be visible to the caller, and permit the ability being attempted. A photo
+     * permission is checked against the *album* — that is what carries the
+     * ownership the implicit own-abilities are resolved from, which is why
+     * these two actions bypass {@see ApiController::requireCollectionAccess()}.
+     */
+    private function requireAlbumAccess(int $albumId, string $ability): void
+    {
+        $album = $this->photoService()->findAlbumOrFail($albumId);
+        $this->requireVisibleAlbum($album);
+        $this->access->requireOn($ability, $album);
     }
 
     protected function accessResource(): string

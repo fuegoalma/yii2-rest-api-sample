@@ -5,7 +5,7 @@ namespace tests\unit;
 use app\models\contract\service\AccessControlInterface;
 use app\models\db\Permission;
 use app\models\db\Role;
-use app\models\repository\RoleRepository;
+use app\models\contract\repository\RoleRepositoryInterface;
 use app\models\service\RoleService;
 use PHPUnit\Framework\MockObject\Exception;
 use yii\web\ConflictHttpException;
@@ -14,7 +14,7 @@ use yii\web\ForbiddenHttpException;
 class RoleServiceTest extends BaseUnitTest
 {
     private RoleService $service;
-    private RoleRepository $rolesMock;
+    private RoleRepositoryInterface $rolesMock;
     private AccessControlInterface $accessMock;
 
     /**
@@ -23,7 +23,7 @@ class RoleServiceTest extends BaseUnitTest
     protected function setUp(): void
     {
         parent::setUp();
-        $this->rolesMock = $this->createMock(RoleRepository::class);
+        $this->rolesMock = $this->createMock(RoleRepositoryInterface::class);
         $this->accessMock = $this->createMock(AccessControlInterface::class);
         $this->service = new RoleService($this->rolesMock, $this->accessMock, $this->immediateTx());
     }

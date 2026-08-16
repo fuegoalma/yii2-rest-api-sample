@@ -2,7 +2,6 @@
 
 use app\components\DbTransactionRunner;
 use app\components\image\ImagickWebpEncoder;
-use app\components\ImageStorage;
 use app\components\JwtService;
 use app\components\PcntlStopSignal;
 use app\components\queue\ContainerJobRunner;
@@ -18,9 +17,17 @@ use app\controllers\UsersController;
 use app\models\contract\image\ImageEncoderInterface;
 use app\models\contract\queue\JobRunnerInterface;
 use app\models\contract\queue\QueueInterface;
+use app\models\contract\repository\AlbumRepositoryInterface;
+use app\models\contract\repository\PermissionRepositoryInterface;
+use app\models\contract\repository\PhotoRepositoryInterface;
+use app\models\contract\repository\RefreshTokenRepositoryInterface;
+use app\models\contract\repository\RoleRepositoryInterface;
+use app\models\contract\repository\UserRepositoryInterface;
 use app\models\contract\service\AccessControlInterface;
+use app\models\contract\service\AlbumServiceInterface;
 use app\models\contract\service\TransactionRunnerInterface;
 use app\models\contract\StopSignalInterface;
+use app\models\repository\PermissionRepository;
 use app\models\repository\AlbumRepository;
 use app\models\repository\PhotoRepository;
 use app\models\repository\RefreshTokenRepository;
@@ -84,8 +91,20 @@ return [
             'maxAttempts' => (int) (getenv('LOGIN_RATE_LIMIT_ATTEMPTS') ?: 5),
             'window' => (int) (getenv('LOGIN_RATE_LIMIT_WINDOW') ?: 60),
         ],
-        // permission checks for the current user; concrete repositories autowire
+        // Every repository has its own contract (the generic CRUD shape plus only
+        // what its consumers actually call), so a service depends on an interface
+        // and the container resolves it by type — no per-service wiring, and no
+        // narrowing a too-generic ApiRepositoryInterface back down with a cast.
+        AlbumRepositoryInterface::class => AlbumRepository::class,
+        PhotoRepositoryInterface::class => PhotoRepository::class,
+        UserRepositoryInterface::class => UserRepository::class,
+        RoleRepositoryInterface::class => RoleRepository::class,
+        PermissionRepositoryInterface::class => PermissionRepository::class,
+        RefreshTokenRepositoryInterface::class => RefreshTokenRepository::class,
+        // permission checks for the current user
         AccessControlInterface::class => AccessControlService::class,
+        // UserService tears down the user's albums through this contract
+        AlbumServiceInterface::class => AlbumService::class,
         // atomic multi-row operations (RBAC mutations, user teardown) run through this
         TransactionRunnerInterface::class => DbTransactionRunner::class,
         // background jobs are deferred to the DB queue, drained by the long-running
@@ -99,47 +118,15 @@ return [
         // lets the long-running queue worker (`yii queue/listen`) exit between
         // jobs on SIGTERM instead of being killed mid-job
         StopSignalInterface::class => PcntlStopSignal::class,
-        UserService::class => [
-            '__construct()' => [
-                'repository' => Instance::of(UserRepository::class),
-                'albumService' => Instance::of(AlbumService::class),
-                'tx' => Instance::of(TransactionRunnerInterface::class),
-            ],
-        ],
-        AlbumService::class => [
-            '__construct()' => [
-                'repository' => Instance::of(AlbumRepository::class),
-                'photoRepository' => Instance::of(PhotoRepository::class),
-                'queue' => Instance::of(QueueInterface::class),
-            ],
-        ],
-        RoleService::class => [
-            '__construct()' => [
-                'roles' => Instance::of(RoleRepository::class),
-                'access' => Instance::of(AccessControlInterface::class),
-                'tx' => Instance::of(TransactionRunnerInterface::class),
-            ],
-        ],
-        PhotoService::class => [
-            '__construct()' => [
-                'repository' => Instance::of(PhotoRepository::class),
-                'albumRepository' => Instance::of(AlbumRepository::class),
-                'imageStorage' => Instance::of(ImageStorage::class),
-            ],
-        ],
+        // UserService, AlbumService, PhotoService, RoleService and AuthService
+        // need no entry of their own: every constructor parameter is either an
+        // interface bound above or a concrete class the container can build, so
+        // reflection wires them. Only values that cannot be inferred are stated.
+        //
         // refresh-token lifetime in seconds (single source, from env)
         RefreshTokenService::class => [
             '__construct()' => [
-                'repository' => Instance::of(RefreshTokenRepository::class),
                 'ttl' => (int) (getenv('JWT_REFRESH_TTL') ?: 2592000),
-            ],
-        ],
-        AuthService::class => [
-            '__construct()' => [
-                'repository' => Instance::of(UserRepository::class),
-                'userService' => Instance::of(UserService::class),
-                'refreshTokens' => Instance::of(RefreshTokenService::class),
-                'jwt' => Instance::of(JwtService::class),
             ],
         ],
         // 'db' is an app component, not a container definition, so it can't be

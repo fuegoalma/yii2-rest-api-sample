@@ -2,12 +2,13 @@
 
 namespace app\models\repository;
 
+use app\models\contract\repository\UserRepositoryInterface;
 use app\models\db\User;
 use app\models\repository\basic\BaseRepository;
 use yii\db\Exception;
 use Yii;
 
-class UserRepository extends BaseRepository
+class UserRepository extends BaseRepository implements UserRepositoryInterface
 {
     protected function modelClass(): string
     {

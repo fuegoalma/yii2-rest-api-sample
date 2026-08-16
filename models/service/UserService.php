@@ -2,7 +2,7 @@
 
 namespace app\models\service;
 
-use app\models\contract\repository\ApiRepositoryInterface;
+use app\models\contract\repository\UserRepositoryInterface;
 use app\models\contract\service\AlbumServiceInterface;
 use app\models\contract\service\TransactionRunnerInterface;
 use app\models\db\User;
@@ -14,7 +14,7 @@ use yii\web\NotFoundHttpException;
 readonly class UserService extends BaseCrudService
 {
     public function __construct(
-        ApiRepositoryInterface $repository,
+        UserRepositoryInterface $repository,
         private AlbumServiceInterface $albumService,
         private TransactionRunnerInterface $tx,
     ) {

@@ -3,8 +3,8 @@
 namespace tests\unit;
 
 use app\models\contract\queue\QueueInterface;
-use app\models\repository\AlbumRepository;
-use app\models\repository\PhotoRepository;
+use app\models\contract\repository\AlbumRepositoryInterface;
+use app\models\contract\repository\PhotoRepositoryInterface;
 use app\models\db\Album;
 use app\models\dto\SearchCriteria;
 use app\models\jobs\DeleteAlbumDirectoryJob;
@@ -17,8 +17,8 @@ use yii\web\NotFoundHttpException;
 class AlbumServiceTest extends BaseUnitTest
 {
     private AlbumService $service;
-    private AlbumRepository $repositoryMock;
-    private PhotoRepository $photoRepositoryMock;
+    private AlbumRepositoryInterface $repositoryMock;
+    private PhotoRepositoryInterface $photoRepositoryMock;
     private QueueInterface $queueMock;
 
     /**
@@ -27,8 +27,8 @@ class AlbumServiceTest extends BaseUnitTest
     protected function setUp(): void
     {
         parent::setUp();
-        $this->repositoryMock = $this->createMock(AlbumRepository::class);
-        $this->photoRepositoryMock = $this->createMock(PhotoRepository::class);
+        $this->repositoryMock = $this->createMock(AlbumRepositoryInterface::class);
+        $this->photoRepositoryMock = $this->createMock(PhotoRepositoryInterface::class);
         $this->queueMock = $this->createMock(QueueInterface::class);
         $this->service = new AlbumService(
             $this->repositoryMock,

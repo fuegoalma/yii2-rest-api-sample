@@ -3,13 +3,12 @@
 namespace app\models\service;
 
 use app\models\contract\queue\QueueInterface;
-use app\models\contract\repository\ApiRepositoryInterface;
+use app\models\contract\repository\AlbumRepositoryInterface;
+use app\models\contract\repository\PhotoRepositoryInterface;
 use app\models\contract\service\AlbumServiceInterface;
 use app\models\db\Album;
 use app\models\dto\SearchCriteria;
 use app\models\jobs\DeleteAlbumDirectoryJob;
-use app\models\repository\AlbumRepository;
-use app\models\repository\PhotoRepository;
 use app\models\service\basic\BaseCrudService;
 use yii\data\ActiveDataProvider;
 use yii\db\ActiveRecord;
@@ -18,11 +17,11 @@ use yii\web\NotFoundHttpException;
 readonly class AlbumService extends BaseCrudService implements AlbumServiceInterface
 {
     public function __construct(
-        ApiRepositoryInterface $repository,
-        private PhotoRepository $photoRepository,
+        private AlbumRepositoryInterface $albums,
+        private PhotoRepositoryInterface $photoRepository,
         private QueueInterface $queue,
     ) {
-        parent::__construct($repository);
+        parent::__construct($albums);
     }
 
     protected function modelClass(): string
@@ -62,7 +61,7 @@ readonly class AlbumService extends BaseCrudService implements AlbumServiceInter
      */
     public function deleteByUser(int $userId): void
     {
-        $this->purgeAlbums($this->albums()->findIdsByUser($userId));
+        $this->purgeAlbums($this->albums->findIdsByUser($userId));
     }
 
     /**
@@ -87,24 +86,11 @@ readonly class AlbumService extends BaseCrudService implements AlbumServiceInter
         }
 
         $this->photoRepository->deleteByAlbumIds($albumIds);
-        $this->albums()->deleteByIds($albumIds);
+        $this->albums->deleteByIds($albumIds);
 
         foreach ($albumIds as $albumId) {
             $this->queue->push(new DeleteAlbumDirectoryJob((string) $albumId));
         }
-    }
-
-    /**
-     * The injected repository is always an {@see AlbumRepository}; this narrows
-     * the base {@see ApiRepositoryInterface} type so its album-specific bulk
-     * methods can be used without repeating the cast.
-     */
-    private function albums(): AlbumRepository
-    {
-        /** @var AlbumRepository $repository */
-        $repository = $this->repository;
-
-        return $repository;
     }
 
     /**

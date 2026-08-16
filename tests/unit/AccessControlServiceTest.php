@@ -5,8 +5,8 @@ namespace tests\unit;
 use app\models\db\Album;
 use app\models\db\Photo;
 use app\models\db\User;
-use app\models\repository\PermissionRepository;
-use app\models\repository\RoleRepository;
+use app\models\contract\repository\PermissionRepositoryInterface;
+use app\models\contract\repository\RoleRepositoryInterface;
 use app\models\service\AccessControlService;
 use PHPUnit\Framework\MockObject\Exception;
 use Yii;
@@ -15,8 +15,8 @@ use yii\web\ForbiddenHttpException;
 class AccessControlServiceTest extends BaseUnitTest
 {
     private AccessControlService $service;
-    private PermissionRepository $permissionsMock;
-    private RoleRepository $rolesMock;
+    private PermissionRepositoryInterface $permissionsMock;
+    private RoleRepositoryInterface $rolesMock;
 
     /**
      * @throws Exception
@@ -24,8 +24,8 @@ class AccessControlServiceTest extends BaseUnitTest
     protected function setUp(): void
     {
         parent::setUp();
-        $this->permissionsMock = $this->createMock(PermissionRepository::class);
-        $this->rolesMock = $this->createMock(RoleRepository::class);
+        $this->permissionsMock = $this->createMock(PermissionRepositoryInterface::class);
+        $this->rolesMock = $this->createMock(RoleRepositoryInterface::class);
         $this->service = new AccessControlService($this->permissionsMock, $this->rolesMock);
     }
 
