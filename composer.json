@@ -1,21 +1,26 @@
 {
-    "name": "yiisoft/yii2-app-basic",
-    "description": "Yii 2 Basic Project Template",
+    "name": "fuegoalma/yii2-rest-api-sample",
+    "description": "REST API for users, albums and photos: Yii2 on PHP 8.5, two-token JWT authentication, flat RBAC, background jobs, and an OpenAPI document checked against the code.",
     "keywords": [
         "yii2",
-        "framework",
-        "basic",
-        "project template"
+        "rest-api",
+        "jwt",
+        "rbac",
+        "openapi"
     ],
-    "homepage": "https://www.yiiframework.com/",
+    "homepage": "https://github.com/fuegoalma/yii2-rest-api-sample",
     "type": "project",
     "license": "MIT",
+    "authors": [
+        {
+            "name": "fuegoalma",
+            "homepage": "https://github.com/fuegoalma"
+        }
+    ],
     "support": {
-        "issues": "https://github.com/yiisoft/yii2/issues?state=open",
-        "forum": "https://www.yiiframework.com/forum/",
-        "wiki": "https://www.yiiframework.com/wiki/",
-        "irc": "ircs://irc.libera.chat:6697/yii",
-        "source": "https://github.com/yiisoft/yii2"
+        "issues": "https://github.com/fuegoalma/yii2-rest-api-sample/issues",
+        "source": "https://github.com/fuegoalma/yii2-rest-api-sample",
+        "docs": "https://fuegoalma.github.io/yii2-rest-api-sample/"
     },
     "minimum-stability": "stable",
     "require": {
