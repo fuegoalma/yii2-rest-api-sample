@@ -276,7 +276,7 @@ A few things worth knowing:
 - **pcov is disabled by default** (`pcov.enabled=0`), so `make test` and `make test-one` — the inner TDD loop — run at full speed. Only `make coverage` turns it on, for that process alone.
 - **Both suites must run in a single `codecept run`.** Coverage from unit and functional is merged at the end of the run, so running the suites separately makes the second report overwrite the first and halves the number.
 - **`config/`, `migrations/`, `web/` and `tests/` are out of scope**, as are the interfaces in `models/contract/` — a file with no executable lines counts as 0/0 and neither helps nor hurts the total.
-- **Genuinely unreachable code** is marked with `@codeCoverageIgnore` **and a comment explaining why it cannot be reached**. Unreachable is a high bar: it means unreachable by construction, not merely inconvenient to test. See `RefreshTokenRepository::revoke()` for the shape of an acceptable justification.
+- **Genuinely unreachable code** is marked with `@codeCoverageIgnore` **and a comment explaining why it cannot be reached**. Unreachable is a high bar: it means unreachable by construction, not merely inconvenient to test. See `RolesController::accessResource()` for the shape of an acceptable justification.
 - Don't add `@covers` / `#[CoversClass]` annotations — Codeception treats them as strict, silently narrowing what a test is credited with covering.
 
 ---

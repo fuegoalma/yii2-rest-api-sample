@@ -74,18 +74,36 @@ readonly class RefreshTokenService
         }
 
         if ($token->isRevoked()) {
-            // a revoked token is being replayed — treat the family as compromised
-            $this->repository->revokeFamily($token->family_id);
-            throw new UnauthorizedException('Refresh token has been revoked.', 'refresh_token.reused');
+            // a revoked token is being replayed
+            $this->reuseDetected($token);
         }
 
         if ($token->isExpired()) {
             throw new UnauthorizedException('Refresh token has expired.', 'refresh_token.expired');
         }
 
-        $this->repository->revoke($token);
+        if (!$this->repository->consume($token)) {
+            // The row was active when we read it and is spent by the time we
+            // write, so a concurrent request rotated this same token value.
+            // Sequential replay and a lost race are the same evidence — one
+            // token presented twice — and get the same answer.
+            $this->reuseDetected($token);
+        }
 
         return $token;
+    }
+
+    /**
+     * A token value presented more than once means a copy is loose, so the
+     * whole session family goes and the client has to log in again.
+     *
+     * @throws UnauthorizedHttpException always
+     */
+    private function reuseDetected(RefreshToken $token): never
+    {
+        $this->repository->revokeFamily($token->family_id);
+
+        throw new UnauthorizedException('Refresh token has been revoked.', 'refresh_token.reused');
     }
 
     /**

@@ -48,16 +48,42 @@ class RefreshTokenRepositoryTest extends BaseUnitTest
     }
 
     /**
+     * The concurrent-refresh race, reproduced without concurrency.
+     *
+     * Two simultaneous POST /auth/refresh calls each run findByHash() before
+     * either has revoked anything, so both hold an in-memory row whose
+     * revoked_at is still null. Whether the second one is allowed to rotate is
+     * decided entirely by whether the claim is atomic — actual parallelism is
+     * not needed to show it, only a second object read before the first write.
+     *
      * @throws Exception
      */
-    public function testRevokeStampsTheToken(): void
+    public function testConsumeClaimsATokenOnlyOnce(): void
     {
         $token = $this->token();
         $this->repository->add($token);
 
-        $this->repository->revoke($token);
+        // the copy the second request is holding: same row, read beforehand
+        $stale = RefreshToken::findOne(['id' => $token->id]);
+        $this->assertNotNull($stale);
+        $this->assertFalse($stale->isRevoked());
 
-        $this->assertNotNull($token->revoked_at);
+        $this->assertTrue($this->repository->consume($token));
+        $this->assertFalse($this->repository->consume($stale));
+    }
+
+    /**
+     * @throws Exception
+     */
+    public function testConsumeStampsTheRowItClaims(): void
+    {
+        $token = $this->token();
+        $this->repository->add($token);
+
+        $this->repository->consume($token);
+
+        $this->assertTrue(RefreshToken::findOne(['id' => $token->id])->isRevoked());
+        // the caller keeps using the object it passed in, so it has to agree
         $this->assertTrue($token->isRevoked());
     }
 
