@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace app\models\dto;
 
 readonly class HealthCheckResult

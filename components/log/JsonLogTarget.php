@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace app\components\log;
 
 use app\models\contract\CorrelationIdInterface;

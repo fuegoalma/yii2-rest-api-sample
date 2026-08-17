@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace app\components\image;
 
 use app\models\contract\image\ImageEncoderInterface;

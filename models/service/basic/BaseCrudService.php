@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace app\models\service\basic;
 
 use app\models\contract\repository\ApiRepositoryInterface;

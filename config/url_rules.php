@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /**
  * REST API URL rules — single source of truth shared by the web (`web.php`) and
  * test (`test.php`) configs so the route table never drifts between them. Only

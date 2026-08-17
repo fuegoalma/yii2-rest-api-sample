@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 use app\components\CorrelationId;
 use app\components\DbTransactionRunner;
 use app\components\image\ImagickWebpEncoder;
