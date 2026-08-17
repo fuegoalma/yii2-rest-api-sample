@@ -73,6 +73,9 @@ class RefreshTokenRepository implements RefreshTokenRepositoryInterface
         return RefreshToken::deleteAll(['<', 'expires_at', $this->now()]);
     }
 
+    /**
+     * @param array<string, mixed> $condition which tokens to revoke
+     */
     private function revokeWhere(array $condition): void
     {
         RefreshToken::updateAll(

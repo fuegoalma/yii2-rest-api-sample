@@ -13,10 +13,10 @@ use app\models\form\basic\ApiForm;
  */
 abstract class UserForm extends ApiForm
 {
-    public $first_name;
-    public $last_name;
-    public $email;
-    public $password;
+    public mixed $first_name = null;
+    public mixed $last_name = null;
+    public mixed $email = null;
+    public mixed $password = null;
 
     public function rules(): array
     {

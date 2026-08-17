@@ -26,8 +26,8 @@ abstract class SearchForm extends ApiForm
 {
     protected const int MAX_PAGE_SIZE = 100;
 
-    public $sort;
-    public $per_page;
+    public mixed $sort = null;
+    public mixed $per_page = null;
 
     public function rules(): array
     {
@@ -133,7 +133,7 @@ abstract class SearchForm extends ApiForm
     }
 
     /**
-     * @return array<int, array> conditions for andFilterWhere (empty ones skipped there)
+     * @return list<array<mixed>> conditions for andFilterWhere (empty ones skipped there)
      */
     private function filters(): array
     {

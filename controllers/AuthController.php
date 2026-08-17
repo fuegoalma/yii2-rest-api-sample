@@ -108,6 +108,7 @@ class AuthController extends Controller
         return null;
     }
 
+    /** @return array<string, list<string>> */
     protected function verbs(): array
     {
         return [

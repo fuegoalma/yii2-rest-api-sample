@@ -15,7 +15,7 @@ trait ValidatesKnownNames
 {
     /**
      * @param class-string<ActiveRecord> $modelClass catalog table to check against
-     * @param array $values raw name list from the request
+     * @param array<mixed> $values raw name list from the request
      *
      * @return string[]|null the normalized (unique, string) names, or null when
      *                       any of them is not a known catalog name

@@ -27,6 +27,8 @@ class PhotosController extends ApiController
     /**
      * Photos are always listed within their album; there is no flat
      * photo collection (the route always supplies an album id).
+     *
+     * @return ActiveDataProvider|array<string, string[]>
      */
     public function actionIndex(int $albumId = 0): ActiveDataProvider|array
     {

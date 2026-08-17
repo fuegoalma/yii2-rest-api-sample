@@ -45,6 +45,8 @@ abstract readonly class BaseCrudService implements ApiServiceInterface
     }
 
     /**
+     * @param array<string, mixed> $data
+     *
      * @throws Exception
      */
     public function create(array $data): ActiveRecord
@@ -54,6 +56,8 @@ abstract readonly class BaseCrudService implements ApiServiceInterface
     }
 
     /**
+     * @param array<string, mixed> $data
+     *
      * @throws Exception
      * @throws NotFoundHttpException
      */
@@ -65,6 +69,8 @@ abstract readonly class BaseCrudService implements ApiServiceInterface
     /**
      * Loads data into the model and saves it only when valid;
      * an invalid model is returned with its errors and never persisted.
+     *
+     * @param array<string, mixed> $data
      *
      * @throws Exception
      */

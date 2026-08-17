@@ -17,6 +17,7 @@ class UserRepository extends BaseRepository implements UserRepositoryInterface
         return User::class;
     }
 
+    /** @return string[] */
     protected function viewRelations(): array
     {
         return ['albums'];

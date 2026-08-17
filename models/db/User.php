@@ -68,6 +68,7 @@ class User extends ActiveRecord implements IdentityInterface, OwnableInterface
         ];
     }
 
+    /** @return array<int|string, string|callable> */
     public function fields(): array // API fields
     {
         return [
@@ -78,6 +79,7 @@ class User extends ActiveRecord implements IdentityInterface, OwnableInterface
         ];
     }
 
+    /** @return list<string> */
     public function extraFields(): array
     {
         return [

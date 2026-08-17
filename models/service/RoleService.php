@@ -48,6 +48,8 @@ readonly class RoleService extends BaseCrudService implements RoleServiceInterfa
     }
 
     /**
+     * @param array<string, mixed> $data
+     *
      * @throws \yii\db\Exception
      */
     public function create(array $data): ActiveRecord
@@ -65,6 +67,8 @@ readonly class RoleService extends BaseCrudService implements RoleServiceInterfa
     }
 
     /**
+     * @param array<string, mixed> $data
+     *
      * @throws NotFoundHttpException
      * @throws ConflictHttpException
      * @throws \yii\db\Exception
@@ -199,7 +203,9 @@ readonly class RoleService extends BaseCrudService implements RoleServiceInterfa
      * permission-name list (null when the request did not send it at all,
      * so partial updates leave the set untouched).
      *
-     * @return array{0: array, 1: ?string[]}
+     * @param array<string, mixed> $data
+     *
+     * @return array{0: array<string, mixed>, 1: ?string[]}
      */
     private function extractPermissions(array $data): array
     {

@@ -16,6 +16,7 @@ class AlbumRepository extends BaseRepository implements AlbumRepositoryInterface
         return Album::class;
     }
 
+    /** @return string[] */
     protected function viewRelations(): array
     {
         return ['photos', 'user'];

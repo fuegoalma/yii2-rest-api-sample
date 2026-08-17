@@ -11,8 +11,8 @@ use app\models\form\basic\ApiForm;
  */
 class LoginForm extends ApiForm
 {
-    public $email;
-    public $password;
+    public mixed $email = null;
+    public mixed $password = null;
 
     public function rules(): array
     {

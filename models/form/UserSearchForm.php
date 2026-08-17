@@ -12,9 +12,9 @@ use app\models\form\basic\SearchForm;
  */
 class UserSearchForm extends SearchForm
 {
-    public $first_name;
-    public $last_name;
-    public $email;
+    public mixed $first_name = null;
+    public mixed $last_name = null;
+    public mixed $email = null;
 
     public function rules(): array
     {

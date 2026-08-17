@@ -13,7 +13,7 @@ use app\models\form\basic\ApiForm;
  */
 abstract class AlbumForm extends ApiForm
 {
-    public $title;
+    public mixed $title = null;
 
     public function rules(): array
     {

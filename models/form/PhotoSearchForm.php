@@ -13,7 +13,7 @@ use app\models\form\basic\SearchForm;
  */
 class PhotoSearchForm extends SearchForm
 {
-    public $title;
+    public mixed $title = null;
 
     public function rules(): array
     {

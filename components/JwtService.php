@@ -69,7 +69,7 @@ class JwtService extends Component
     }
 
     /**
-     * @return null|array decoded claims, or null when the token is invalid or expired
+     * @return null|array<string, mixed> decoded claims, or null when the token is invalid or expired
      */
     public function decode(string $token): ?array
     {

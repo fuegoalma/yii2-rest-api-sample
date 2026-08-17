@@ -50,6 +50,8 @@ readonly class UserService extends BaseCrudService
     }
 
     /**
+     * @param array<string, mixed> $data
+     *
      * @throws Exception
      * @throws \yii\db\Exception
      */
@@ -59,6 +61,8 @@ readonly class UserService extends BaseCrudService
     }
 
     /**
+     * @param array<string, mixed> $data
+     *
      * @throws Exception
      * @throws \yii\db\Exception
      * @throws NotFoundHttpException
@@ -72,6 +76,10 @@ readonly class UserService extends BaseCrudService
      * Replaces the plain-text password from the request with its hash.
      * A client-supplied password_hash is never accepted — the hash is
      * only ever produced server-side from the plain password.
+     *
+     * @param array<string, mixed> $data
+     *
+     * @return array<string, mixed>
      *
      * @throws Exception
      */

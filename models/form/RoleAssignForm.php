@@ -17,7 +17,7 @@ class RoleAssignForm extends ApiForm
 {
     use ValidatesKnownNames;
 
-    public $roles;
+    public mixed $roles = null;
 
     public function rules(): array
     {

@@ -13,6 +13,9 @@ use Yii;
 
 class ApiSerializer extends Serializer
 {
+    /**
+     * @return array<string, mixed>
+     */
     public function serialize($data): array
     {
         $status_code = Yii::$app->response->statusCode;
@@ -58,6 +61,9 @@ class ApiSerializer extends Serializer
         return [$fields, []];
     }
 
+    /**
+     * @return array{items: mixed, pagination?: array<string, mixed>}
+     */
     private function serializePaginated(DataProviderInterface $dataProvider): array
     {
         $result = [

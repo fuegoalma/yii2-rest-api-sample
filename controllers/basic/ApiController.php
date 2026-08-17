@@ -47,6 +47,10 @@ abstract class ApiController extends ActiveController
         return $actions;
     }
 
+    /**
+     * @return ActiveDataProvider|array<string, string[]> the list, or the
+     *         search form's errors when the query params are rejected
+     */
     public function actionIndex(): ActiveDataProvider|array
     {
         $this->requireCollectionAccess('index');
@@ -57,6 +61,9 @@ abstract class ApiController extends ActiveController
         );
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     public function actionView(int $id): array
     {
         $model = $this->service->findOrFail($id);
@@ -147,6 +154,8 @@ abstract class ApiController extends ActiveController
      * params (a failure becomes a 422 with the errors), then fetch the list.
      *
      * @param callable(SearchCriteria): ActiveDataProvider $fetch
+     *
+     * @return ActiveDataProvider|array<string, string[]>
      */
     protected function handleIndex(SearchForm $form, callable $fetch): ActiveDataProvider|array
     {
@@ -161,7 +170,7 @@ abstract class ApiController extends ActiveController
      * Shared write-action flow: validate the form request, run the service
      * operation, and turn validation errors (form or model) into a 422.
      *
-     * @param callable(array): \yii\db\ActiveRecord $operation
+     * @param callable(array<string, mixed>): \yii\db\ActiveRecord $operation
      */
     protected function handleWrite(ApiForm $form, callable $operation, int $successCode): mixed
     {

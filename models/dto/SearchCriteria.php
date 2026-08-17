@@ -12,8 +12,8 @@ namespace app\models\dto;
 readonly class SearchCriteria
 {
     /**
-     * @param array $scope forced conditions (e.g. route scoping) applied verbatim via andWhere
-     * @param array $filters user-supplied conditions applied via andFilterWhere (empty values are skipped)
+     * @param array<string, mixed> $scope forced conditions (e.g. route scoping) applied verbatim via andWhere
+     * @param list<array<mixed>> $filters user-supplied conditions applied via andFilterWhere (empty values are skipped)
      * @param array<string, int> $orderBy attribute => SORT_ASC|SORT_DESC
      * @param int|null $pageSize null → the repository default
      */
@@ -35,6 +35,8 @@ readonly class SearchCriteria
      * 'is_deleted' => 0])`, never `withScope([...])->withScope([...])`. The
      * failure is quiet and not cosmetic: a dropped `is_deleted` scope leaks
      * soft-deleted rows into a listing.
+     *
+     * @param array<string, mixed> $scope
      */
     public function withScope(array $scope): self
     {

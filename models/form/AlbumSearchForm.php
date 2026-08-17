@@ -12,9 +12,9 @@ use app\models\form\basic\SearchForm;
  */
 class AlbumSearchForm extends SearchForm
 {
-    public $user_id;
-    public $title;
-    public $is_deleted;
+    public mixed $user_id = null;
+    public mixed $title = null;
+    public mixed $is_deleted = null;
 
     public function rules(): array
     {

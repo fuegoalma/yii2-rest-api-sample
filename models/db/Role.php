@@ -50,6 +50,7 @@ class Role extends ActiveRecord
         ];
     }
 
+    /** @return array<int|string, string|callable> */
     public function fields(): array // API fields
     {
         return [
@@ -60,6 +61,7 @@ class Role extends ActiveRecord
         ];
     }
 
+    /** @return list<string> */
     public function extraFields(): array
     {
         return [

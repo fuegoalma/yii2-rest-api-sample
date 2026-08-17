@@ -36,6 +36,8 @@ class UsersController extends ApiController
 
     /**
      * Who am I — available to every authenticated user, no permission needed.
+     *
+     * @return array<string, mixed>
      */
     public function actionMe(): array
     {
@@ -51,6 +53,8 @@ class UsersController extends ApiController
      * from: role names plus the union of their role-granted permissions
      * (what a user may do with their own records is implicit and static, so
      * it is not repeated here).
+     *
+     * @return array{roles: string[], permissions: string[]}
      */
     public function actionMePermissions(): array
     {
@@ -60,6 +64,9 @@ class UsersController extends ApiController
         ];
     }
 
+    /**
+     * @return list<array<string, mixed>> the user's roles
+     */
     public function actionRoles(int $id): array
     {
         $this->access->requirePermission(Permission::ROLE_ASSIGN);
@@ -105,6 +112,7 @@ class UsersController extends ApiController
         return 'user';
     }
 
+    /** @return array<string, list<string>> */
     protected function verbs(): array
     {
         return array_merge(parent::verbs(), [
@@ -137,6 +145,8 @@ class UsersController extends ApiController
 
     /**
      * @param Role[] $roles
+     *
+     * @return list<array<string, mixed>>
      */
     private function rolesToArray(array $roles): array
     {

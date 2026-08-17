@@ -43,6 +43,8 @@ readonly class AuthService implements AuthServiceInterface
      * server-managed fields stay in one place) and logs it straight in.
      * A model with validation errors is returned unchanged for a 422.
      *
+     * @param array<string, mixed> $data
+     *
      * @throws Exception
      */
     public function register(array $data): User|TokenResponse

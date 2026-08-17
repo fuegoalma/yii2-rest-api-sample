@@ -11,7 +11,7 @@ use app\models\form\basic\SearchForm;
  */
 class RoleSearchForm extends SearchForm
 {
-    public $name;
+    public mixed $name = null;
 
     public function rules(): array
     {

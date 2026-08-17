@@ -33,6 +33,10 @@ trait ApiControllerTrait
     /**
      * The authenticator is attached after the CORS filter so preflight
      * OPTIONS requests stay public.
+     *
+     * @param array<string, mixed> $behaviors the parent's behaviour definitions
+     *
+     * @return array<string, mixed>
      */
     protected function apiBehaviors(array $behaviors, bool $requireAuth = true): array
     {
@@ -69,6 +73,8 @@ trait ApiControllerTrait
      * Loads request data into the form request; a validation failure turns
      * the response into a 422. Defaults to the request body, but index
      * endpoints pass the query params for their search forms.
+     *
+     * @param array<string, mixed>|null $data null → the request body
      */
     protected function validateRequest(ApiForm $form, ?array $data = null): bool
     {

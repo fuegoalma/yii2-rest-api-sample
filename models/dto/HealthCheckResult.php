@@ -15,6 +15,7 @@ readonly class HealthCheckResult
     ) {
     }
 
+    /** @return array<string, mixed> */
     public function toArray(): array
     {
         return [

@@ -54,6 +54,7 @@ readonly class BasicResponse
         return new self(false, $data, $code);
     }
 
+    /** @return array<string, mixed> */
     public function toArray(): array
     {
         return [

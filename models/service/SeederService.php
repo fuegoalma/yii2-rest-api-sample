@@ -42,6 +42,8 @@ readonly class SeederService
     }
 
     /**
+     * @return list<int> ids of the users just inserted
+     *
      * @throws \yii\base\Exception
      * @throws Exception
      */
@@ -71,6 +73,10 @@ readonly class SeederService
     }
 
     /**
+     * @param list<int> $userIds owners to spread the albums across
+     *
+     * @return list<int> ids of the albums just inserted
+     *
      * @throws Exception
      * @throws \yii\base\Exception
      */
@@ -95,6 +101,8 @@ readonly class SeederService
     }
 
     /**
+     * @param list<int> $albumIds albums to spread the photos across
+     *
      * @throws \yii\base\Exception
      * @throws Exception
      */

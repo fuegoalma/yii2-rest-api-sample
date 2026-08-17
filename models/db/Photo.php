@@ -64,6 +64,7 @@ class Photo extends ActiveRecord implements OwnableInterface
         ];
     }
 
+    /** @return array<int|string, string|callable> */
     public function fields(): array // API fields
     {
         return [

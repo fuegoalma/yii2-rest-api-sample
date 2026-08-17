@@ -18,9 +18,9 @@ abstract class RoleForm extends ApiForm
 {
     use ValidatesKnownNames;
 
-    public $name;
-    public $description;
-    public $permissions;
+    public mixed $name = null;
+    public mixed $description = null;
+    public mixed $permissions = null;
 
     public function rules(): array
     {

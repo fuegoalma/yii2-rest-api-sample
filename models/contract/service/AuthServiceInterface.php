@@ -12,6 +12,8 @@ interface AuthServiceInterface
     public function login(string $email, string $password): TokenResponse;
 
     /**
+     * @param array<string, mixed> $data validated attribute => value
+     *
      * @return User|TokenResponse the token pair on success, or the
      *                            unsaved User carrying validation errors
      */

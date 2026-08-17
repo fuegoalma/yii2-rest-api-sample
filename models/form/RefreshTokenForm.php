@@ -12,7 +12,7 @@ use app\models\form\basic\ApiForm;
  */
 class RefreshTokenForm extends ApiForm
 {
-    public $refresh_token;
+    public mixed $refresh_token = null;
 
     public function rules(): array
     {

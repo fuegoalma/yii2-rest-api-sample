@@ -31,6 +31,8 @@ class AlbumsController extends ApiController
      * The admin/moderator listing: requires `album.index.any`. Soft-deleted
      * albums are the review queue — hidden unless explicitly requested via
      * the `is_deleted` filter.
+     *
+     * @return ActiveDataProvider|array<string, string[]>
      */
     public function actionIndex(): ActiveDataProvider|array
     {
@@ -50,6 +52,8 @@ class AlbumsController extends ApiController
 
     /**
      * The caller's own albums — available to every authenticated user.
+     *
+     * @return ActiveDataProvider|array<string, string[]>
      */
     public function actionMy(): ActiveDataProvider|array
     {
@@ -61,6 +65,8 @@ class AlbumsController extends ApiController
     }
 
     /**
+     * @return array<string, mixed>
+     *
      * @throws NotFoundHttpException
      */
     public function actionView(int $id): array
@@ -118,6 +124,8 @@ class AlbumsController extends ApiController
 
     /**
      * Lifts a pseudo-deletion after review.
+     *
+     * @return array<string, mixed>
      */
     public function actionRestore(int $id): array
     {
@@ -137,6 +145,7 @@ class AlbumsController extends ApiController
         $this->requireVisibleAlbum($model);
     }
 
+    /** @return array<string, list<string>> */
     protected function verbs(): array
     {
         return array_merge(parent::verbs(), [

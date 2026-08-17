@@ -12,7 +12,7 @@ use app\models\form\basic\ApiForm;
  */
 class AlbumSoftDeleteForm extends ApiForm
 {
-    public $reason;
+    public mixed $reason = null;
 
     public function rules(): array
     {
