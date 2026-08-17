@@ -8,6 +8,7 @@ use app\components\image\ImagickWebpEncoder;
 use app\components\JwtService;
 use app\components\PcntlStopSignal;
 use app\components\queue\ContainerJobRunner;
+use app\components\mail\LogMailer;
 use app\components\queue\DbQueue;
 use app\components\RateLimiter;
 use app\controllers\AlbumsController;
@@ -24,16 +25,20 @@ use app\models\contract\queue\QueueInterface;
 use app\models\contract\repository\AlbumRepositoryInterface;
 use app\models\contract\repository\PermissionRepositoryInterface;
 use app\models\contract\repository\PhotoRepositoryInterface;
+use app\models\contract\MailerInterface;
+use app\models\contract\repository\PasswordResetTokenRepositoryInterface;
 use app\models\contract\repository\RefreshTokenRepositoryInterface;
 use app\models\contract\repository\RoleRepositoryInterface;
 use app\models\contract\repository\UserRepositoryInterface;
 use app\models\contract\service\AccessControlInterface;
 use app\models\contract\service\AlbumServiceInterface;
+use app\models\contract\service\PasswordServiceInterface;
 use app\models\contract\service\TransactionRunnerInterface;
 use app\models\contract\StopSignalInterface;
 use app\models\repository\PermissionRepository;
 use app\models\repository\AlbumRepository;
 use app\models\repository\PhotoRepository;
+use app\models\repository\PasswordResetTokenRepository;
 use app\models\repository\RefreshTokenRepository;
 use app\models\repository\RoleRepository;
 use app\models\repository\UserRepository;
@@ -43,6 +48,7 @@ use app\models\service\AuthService;
 use app\models\service\HealthService;
 use app\models\service\PermissionService;
 use app\models\service\PhotoService;
+use app\models\service\PasswordService;
 use app\models\service\RefreshTokenService;
 use app\models\service\RoleService;
 use app\models\service\UserService;
@@ -117,6 +123,14 @@ return [
         RoleRepositoryInterface::class => RoleRepository::class,
         PermissionRepositoryInterface::class => PermissionRepository::class,
         RefreshTokenRepositoryInterface::class => RefreshTokenRepository::class,
+        PasswordResetTokenRepositoryInterface::class => PasswordResetTokenRepository::class,
+        // password change + recovery
+        PasswordServiceInterface::class => PasswordService::class,
+        // No mail server is provisioned here, so messages are written to the
+        // structured log. Swap this one binding for yii\symfonymailer\Mailer to
+        // send them — nothing above the seam changes. See LogMailer's docblock
+        // for why it must not stay in front of real users.
+        MailerInterface::class => LogMailer::class,
         // permission checks for the current user
         AccessControlInterface::class => AccessControlService::class,
         // UserService tears down the user's albums through this contract
@@ -145,6 +159,14 @@ return [
                 'ttl' => (int) (getenv('JWT_REFRESH_TTL') ?: 2592000),
             ],
         ],
+        // password-reset link lifetime in seconds (single source, from env).
+        // Deliberately short: the token is a bearer credential sitting in an
+        // inbox, which is not a place a credential should live for long.
+        PasswordService::class => [
+            '__construct()' => [
+                'ttl' => (int) (getenv('PASSWORD_RESET_TTL') ?: 3600),
+            ],
+        ],
         // 'db' is an app component, not a container definition, so it can't be
         // referenced with Instance::of() (that only resolves container-managed
         // classes) — build the service from the live app component instead
@@ -158,6 +180,7 @@ return [
                 2 => Instance::of(UserService::class),
                 3 => Instance::of(AccessControlInterface::class),
                 4 => Instance::of(RoleService::class),
+                5 => Instance::of(PasswordService::class),
             ],
         ],
         AlbumsController::class => [
@@ -185,7 +208,10 @@ return [
             ],
         ],
         AuthController::class => [
-            '__construct()' => [2 => Instance::of(AuthService::class)],
+            '__construct()' => [
+                2 => Instance::of(AuthService::class),
+                3 => Instance::of(PasswordService::class),
+            ],
         ],
         HealthController::class => [
             '__construct()' => [2 => Instance::of(HealthService::class)],

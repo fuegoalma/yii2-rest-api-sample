@@ -8,6 +8,9 @@ use app\models\form\AlbumCreateForm;
 use app\models\form\AlbumSoftDeleteForm;
 use app\models\form\AlbumUpdateForm;
 use app\models\form\basic\ApiForm;
+use app\models\form\ChangePasswordForm;
+use app\models\form\ForgotPasswordForm;
+use app\models\form\ResetPasswordForm;
 use app\models\form\LoginForm;
 use app\models\form\PhotoCreateForm;
 use app\models\form\PhotoUpdateForm;
@@ -59,6 +62,9 @@ final class WriteFormContractTest extends ContractTestCase
             'LoginRequest' => static fn (): ApiForm => new LoginForm(),
             'RegisterRequest' => static fn (): ApiForm => new UserCreateForm(),
             'RefreshTokenRequest' => static fn (): ApiForm => new RefreshTokenForm(),
+            'ForgotPasswordRequest' => static fn (): ApiForm => new ForgotPasswordForm(),
+            'ResetPasswordRequest' => static fn (): ApiForm => new ResetPasswordForm(),
+            'ChangePasswordRequest' => static fn (): ApiForm => new ChangePasswordForm(),
             'UserCreateRequest' => static fn (): ApiForm => new UserCreateForm(),
             // the id it excludes from the `unique` check; any value will do here
             'UserUpdateRequest' => static fn (): ApiForm => new UserUpdateForm(1),

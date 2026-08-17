@@ -192,6 +192,69 @@ paths:
         '429':
           $ref: '#/components/responses/TooManyRequests'
 
+  /auth/forgot-password:
+    post:
+      tags: [Auth]
+      x-permission: []
+      operationId: authForgotPassword
+      summary: Request a password-reset token
+      description: |
+        Emails a single-use token to the address, if it belongs to an account.
+
+        **Always answers 204**, registered or not. Answering differently would
+        make this an account-enumeration oracle, which `POST /auth/login` takes
+        deliberate trouble to avoid being.
+
+        A new request invalidates any token issued earlier, so only the newest
+        one works.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForgotPasswordRequest'
+      responses:
+        '204':
+          description: Request accepted (whether or not the address is registered).
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /auth/reset-password:
+    post:
+      tags: [Auth]
+      x-permission: []
+      operationId: authResetPassword
+      summary: Set a new password with a reset token
+      description: |
+        Spends the token from `POST /auth/forgot-password` and stores the new
+        password.
+
+        **Every session of the account ends**: refresh families are revoked and
+        the access tokens already issued are withdrawn. No token pair is returned
+        — log in with the new password.
+
+        Unknown or already-spent token → 401 `password_reset.invalid`; expired →
+        401 `password_reset.expired`.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResetPasswordRequest'
+      responses:
+        '204':
+          description: Password changed and every session ended.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
   # ---------------------------------------------------------------- Health
   /health:
     get:
@@ -440,6 +503,37 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+
+  /users/me/password:
+    put:
+      tags: [Users]
+      x-permission: []
+      operationId: usersChangePassword
+      summary: Change your own password
+      description: |
+        Changes the **caller's** password; there is no id in the route, so this
+        cannot be used against another account.
+
+        The current password is required even though the caller is
+        authenticated: a bearer token left on a shared machine should not be
+        enough to take the account over for good. Wrong current password → 401
+        `auth.invalid_credentials`.
+
+        **Every session ends**, including the caller's own — log in again with
+        the new password.
+      responses:
+        '204':
+          description: Password changed and every session ended.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
 
   /users/{id}/roles:
     parameters:
@@ -1134,7 +1228,7 @@ components:
                 reason narrow it further: `auth.invalid_credentials`,
                 `refresh_token.invalid`, `refresh_token.reused`,
                 `refresh_token.expired`, `role.system_immutable`,
-                `role.escalation_denied`, `role.last_manager`.
+                `role.escalation_denied`, `role.last_manager`, `password_reset.invalid`, `password_reset.expired`.
               example: not_found
             error:
               type: object
@@ -1227,6 +1321,23 @@ components:
                     database: { type: string, enum: [ok, error], example: ok }
 
     # -- Users -------------------------------------------------------
+    ForgotPasswordRequest:
+      type: object
+      required: [email]
+      properties:
+        email: { type: string, format: email, maxLength: 254, example: john@example.com }
+    ResetPasswordRequest:
+      type: object
+      required: [token, password]
+      properties:
+        token: { type: string, maxLength: 64, example: 8f3ac91b7d2e4a6c }
+        password: { type: string, minLength: 6, maxLength: 72, example: brand-new-secret }
+    ChangePasswordRequest:
+      type: object
+      required: [current_password, password]
+      properties:
+        current_password: { type: string, minLength: 6, maxLength: 72, example: secret123 }
+        password: { type: string, minLength: 6, maxLength: 72, example: brand-new-secret }
     User:
       type: object
       properties:

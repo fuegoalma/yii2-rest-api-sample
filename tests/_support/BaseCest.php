@@ -43,6 +43,7 @@ abstract class BaseCest
         $db->createCommand('SET FOREIGN_KEY_CHECKS=0')->execute();
         $db->createCommand('TRUNCATE TABLE user_role')->execute();
         $db->createCommand('TRUNCATE TABLE refresh_token')->execute();
+        $db->createCommand('TRUNCATE TABLE password_reset_token')->execute();
         $db->createCommand('TRUNCATE TABLE photo')->execute();
         $db->createCommand('TRUNCATE TABLE album')->execute();
         $db->createCommand('TRUNCATE TABLE user')->execute();

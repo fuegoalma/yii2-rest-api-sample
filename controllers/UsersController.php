@@ -11,7 +11,9 @@ use app\models\contract\service\RoleServiceInterface;
 use app\models\db\Permission;
 use app\models\db\Role;
 use app\models\db\User;
+use app\models\contract\service\PasswordServiceInterface;
 use app\models\form\basic\ApiForm;
+use app\models\form\ChangePasswordForm;
 use app\models\form\basic\SearchForm;
 use app\models\form\RoleAssignForm;
 use app\models\form\UserCreateForm;
@@ -29,6 +31,7 @@ class UsersController extends ApiController
         ApiServiceInterface $service,
         AccessControlInterface $access,
         private readonly RoleServiceInterface $roleService,
+        private readonly PasswordServiceInterface $passwords,
         $config = []
     ) {
         parent::__construct($id, $module, $service, $access, $config);
@@ -62,6 +65,30 @@ class UsersController extends ApiController
             'roles' => $this->access->getRoles(),
             'permissions' => $this->access->getPermissions(),
         ];
+    }
+
+    /**
+     * Changes the caller's own password. Never anyone else's — there is no id in
+     * the route, so an administrator cannot use this to take an account over;
+     * that is what the reset flow is for, and it goes through the owner's inbox.
+     */
+    public function actionChangePassword(): mixed
+    {
+        $form = new ChangePasswordForm();
+
+        if (!$this->validateRequest($form)) {
+            return $form->getErrors();
+        }
+
+        $this->passwords->change(
+            $this->currentUserId(),
+            (string) $form->current_password,
+            (string) $form->password
+        );
+
+        Yii::$app->response->statusCode = 204;
+
+        return null;
     }
 
     /**
@@ -118,6 +145,7 @@ class UsersController extends ApiController
         return array_merge(parent::verbs(), [
             'me' => ['GET', 'OPTIONS'],
             'me-permissions' => ['GET', 'OPTIONS'],
+            'change-password' => ['PUT', 'OPTIONS'],
             'roles' => ['GET', 'OPTIONS'],
             'set-roles' => ['PUT', 'OPTIONS'],
         ]);
