@@ -58,6 +58,29 @@ FilesystemOperator::class => static fn () => new Filesystem(
 
 The `league/flysystem-aws-s3-v3` adapter is already installed, so switching to (or adding a CDN in front of) object storage is config-only. Tests override the `photo_upload_path` param to point at `@runtime` (see [`config/test.php`](../config/test.php)) so uploads never hit the web root.
 
+### Caching
+
+Stored images are served by Apache as plain files — the application never sees those requests — so
+the freshness policy is stated in [`web/.htaccess`](../web/.htaccess):
+
+| Path | `Cache-Control` |
+| --- | --- |
+| `/uploads/albums/**` | `public, max-age=31536000, immutable` |
+| `/default-images/**` | `public, max-age=86400` |
+
+An upload can carry the maximum lifetime because its URL is immutable **by construction**:
+`ImageStorage` names every file with a 40-character random string, and `PhotoUpdateForm` accepts a
+title change only, so nothing can replace the bytes behind an existing URL. Seeded demo images keep
+fixed names and a release can change them, so they revalidate daily.
+
+That precondition is load-bearing — a future "replace this photo's file" feature must mint a new
+file name, or clients will hold stale bytes for a year. See
+[ADR 12](adr/0012-immutable-cache-for-uploaded-images.md).
+
+Because no PHP test starts Apache, the policy is verified in
+[`docker/smoke.sh`](../docker/smoke.sh) against the production image: upload through the API, assert
+the header, then repeat with `If-None-Match` and assert the `304` still carries it.
+
 ---
 
 ## CORS

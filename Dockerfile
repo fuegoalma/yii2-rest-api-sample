@@ -20,7 +20,7 @@ RUN apt-get update \
     && printf '\n' | pecl install imagick \
     && docker-php-ext-enable imagick \
     && docker-php-ext-install pdo pdo_mysql mysqli pcntl \
-    && a2enmod rewrite \
+    && a2enmod rewrite headers \
     && rm -rf /var/lib/apt/lists/*
 
 # Code-coverage driver, in its own layer so a pcov failure never invalidates the
