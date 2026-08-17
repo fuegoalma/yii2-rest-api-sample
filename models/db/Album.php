@@ -73,6 +73,8 @@ class Album extends ActiveRecord implements OwnableInterface
             'title',
             'is_deleted' => fn () => (bool) $this->is_deleted,
             'delete_reason',
+            'created_at',
+            'updated_at',
         ];
     }
 

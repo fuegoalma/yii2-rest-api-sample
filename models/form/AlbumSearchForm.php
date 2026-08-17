@@ -28,7 +28,7 @@ class AlbumSearchForm extends SearchForm
 
     protected function sortableAttributes(): array
     {
-        return ['id', 'user_id', 'title', 'created_at', 'updated_at'];
+        return ['id', 'title', 'created_at', 'updated_at'];
     }
 
     protected function likeAttributes(): array

@@ -1050,7 +1050,7 @@ components:
     albumSort:
       name: sort
       in: query
-      description: 'Comma-separated, `-` prefix = descending. Allowed: `id`, `user_id`, `title`, `created_at`, `updated_at`. Defaults to `id` ascending when omitted or when it resolves to no whitelisted field.'
+      description: 'Comma-separated, `-` prefix = descending. Allowed: `id`, `title`, `created_at`, `updated_at`. Defaults to `id` ascending when omitted or when it resolves to no whitelisted field.'
       schema: { type: string }
 
   responses:
@@ -1227,6 +1227,8 @@ components:
         first_name: { type: string, example: John }
         last_name: { type: string, example: Doe }
         email: { type: string, format: email, example: john@example.com }
+        created_at: { type: string, format: date-time, example: '2026-02-28 20:11:48' }
+        updated_at: { type: string, format: date-time, example: '2026-02-28 20:11:48' }
     UserWithAlbums:
       allOf:
         - $ref: '#/components/schemas/User'
@@ -1278,6 +1280,8 @@ components:
         title: { type: string, example: Vacation 2025 }
         is_deleted: { type: boolean, example: false }
         delete_reason: { type: string, nullable: true, example: null }
+        created_at: { type: string, format: date-time, example: '2026-02-28 20:11:48' }
+        updated_at: { type: string, format: date-time, example: '2026-02-28 20:11:48' }
     AlbumView:
       type: object
       description: Richer single-album shape — includes the owner's name and the album's photos.
@@ -1328,6 +1332,7 @@ components:
           type: string
           nullable: true
           example: http://localhost:8084/uploads/albums/5/8f3ac91b.webp
+        created_at: { type: string, format: date-time, example: '2026-02-28 20:11:48' }
     PhotoUpdateRequest:
       type: object
       description: Only the title may change.

@@ -70,7 +70,8 @@ class Photo extends ActiveRecord implements OwnableInterface
         return [
             'id',
             'title',
-            'url'
+            'url',
+            'created_at',
         ];
     }
 
