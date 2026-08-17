@@ -115,6 +115,46 @@ class ImagickWebpEncoderTest extends BaseUnitTest
         $this->encoder()->encode($this->notAnImageFixture());
     }
 
+    /**
+     * A decoded bitmap is allocated by ImageMagick's C library, outside PHP's
+     * `memory_limit`, so a small file can still cost a lot of RAM. ImageMagick's
+     * own policy.xml caps it, but at values sized for a general-purpose image
+     * tool — a gigabyte of memory and 256 megapixels — which is far more than an
+     * endpoint whose every output is 500×500 has any use for.
+     */
+    public function testRefusesAnImageBeyondItsResourceLimits(): void
+    {
+        $this->expectException(Exception::class);
+        $this->expectExceptionMessage('The uploaded file is not a valid image.');
+
+        $this->encoder()->encode($this->oversizedImageFixture());
+    }
+
+    /**
+     * The limits are process-wide, so an encoder that left them narrowed would
+     * silently constrain every other user of Imagick in the process. This is
+     * also what lets the fixture above be created at all.
+     */
+    public function testItLeavesTheProcessResourceLimitsAsItFoundThem(): void
+    {
+        $probe = new Imagick();
+        $before = $probe->getResourceLimit(Imagick::RESOURCETYPE_WIDTH);
+
+        $this->encoder()->encode($this->imageFixture(10, 10));
+
+        $this->assertSame($before, $probe->getResourceLimit(Imagick::RESOURCETYPE_WIDTH));
+
+        // and a failed decode must restore them too — that path throws
+        try {
+            $this->encoder()->encode($this->notAnImageFixture());
+        } catch (Exception) {
+            // expected; the assertion is what the finally block left behind
+        }
+
+        $this->assertSame($before, $probe->getResourceLimit(Imagick::RESOURCETYPE_WIDTH));
+        $probe->clear();
+    }
+
     private function encoder(): ImagickWebpEncoder
     {
         return new ImagickWebpEncoder(500, 500, 80);
