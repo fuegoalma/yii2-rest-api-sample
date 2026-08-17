@@ -408,15 +408,17 @@ The project ships a two-stage GitHub Actions pipeline — the two badges at the 
 
 ## Authentication
 
-All resource endpoints require a JWT. The auth endpoints below are public (and rate-limited per IP); the token-issuing ones return a pair — a short-lived **access token** (a stateless JWT) for the `Authorization` header and a long-lived **refresh token** (an opaque, server-stored credential) to obtain a new pair without re-entering credentials.
+All resource endpoints require a JWT. The `/auth/*` endpoints are public and
+rate-limited per IP; the token-issuing ones return a pair — a short-lived
+**access token** (a stateless JWT) for the `Authorization` header and a
+long-lived **refresh token** (an opaque, server-stored credential) to obtain a
+new pair without re-entering credentials. See
+[ADR 1](adr/0001-two-token-authentication.md) for why the two differ in kind.
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/auth/register` | Create an account and receive a token pair (201) |
-| POST | `/auth/login` | Exchange `email` + `password` for a token pair |
-| POST | `/auth/refresh` | Exchange a valid `refresh_token` for a fresh token pair |
-| POST | `/auth/logout` | Revoke the refresh token's session — log out this device (204) |
-| POST | `/auth/logout-all` | Revoke every session of the token's owner — log out everywhere (204) |
+What follows is a walkthrough of the flow. The endpoints themselves — request
+bodies, status codes, error shapes — are in the
+[OpenAPI document](https://fuegoalma.github.io/yii2-rest-api-sample/), which is
+the only place they are described.
 
 **Register** a new account (no token required — this is how you bootstrap the first user):
 
@@ -537,70 +539,91 @@ These mutations are **atomic and concurrency-safe**: each runs inside a DB trans
 
 ## API Endpoints
 
-> **Interactive docs:** the document is published at **<https://fuegoalma.github.io/yii2-rest-api-sample/>** (nothing needs to be running), and served by the app itself as **Swagger UI at [`/docs`](http://localhost:8084/docs)** (raw spec at [`/docs/openapi.yaml`](http://localhost:8084/docs/openapi.yaml)). The spec lives in [`config/openapi.yaml`](../config/openapi.yaml) — the single source of truth for request/response shapes and RBAC gates. The tables below are a quick reference.
+The endpoint reference is the OpenAPI document, and **only** the OpenAPI document:
 
-All endpoints below require the `Authorization: Bearer <token>` header. The **Who can access** column summarises the RBAC gate — "base user" means any authenticated caller (see [Authorization](#authorization-rbac)).
+- **<https://fuegoalma.github.io/yii2-rest-api-sample/>** — published on every green build, nothing needs to be running
+- **[`/docs`](http://localhost:8084/docs)** — the same document as Swagger UI, served by the app when the stack is up
+- **[`config/openapi.yaml`](../config/openapi.yaml)** — the source, and the thing the code is held to
 
-### The current user
+This page used to repeat all of it: a table per resource, a table of validation
+limits, a table of sortable and filterable attributes, and sample envelopes.
+That was a **second source of truth**, checked by nothing — and it drifted
+within a single afternoon. While the contract gates were being written, the
+email limit moved from 255 to 254 and every error response gained an
+`error_code`; the spec and the code were updated together, because
+`WriteFormContractTest` and `ResponseSchemaContractTest` fail otherwise. The
+tables here were not, and nothing noticed.
 
-| Method | Endpoint | Description | Who can access |
-|--------|----------|-------------|----------------|
-| GET | `/users/me` | The authenticated user's profile + their role names | Base user |
-| GET | `/users/me/permissions` | The caller's roles + the union of their permissions (so a client can build its UI) | Base user |
+So they are gone. Each of them now has a gate behind it instead:
 
-### Users
+| What used to be tabulated here | What holds it to the code now |
+| --- | --- |
+| Endpoints and their RBAC gates | `RouteContractTest`, `PermissionContractTest` (`x-permission` on every operation) |
+| Validation limits | `WriteFormContractTest` (probed at the boundary, both directions) |
+| Sortable / filterable attributes | `SearchFormContractTest` (read out of the `sort` parameter's own description) |
+| Response envelopes | `ResponseSchemaContractTest` |
+| Upload conversion (WebP, quality, bounding box) | `UploadParamsContractTest` |
 
-| Method | Endpoint | Description | Who can access |
-|--------|----------|-------------|----------------|
-| GET | `/users` | List all users | `moderator`+ |
-| GET | `/users/{id}` | Get user with albums | `moderator`+ |
-| POST | `/users` | Create a user (assigned no role) | `admin`+ |
-| PUT | `/users/{id}` | Update a user | Owner (self) or `admin`+ |
-| DELETE | `/users/{id}` | Delete a user | `admin`+ |
-| GET | `/users/{id}/roles` | List a user's roles | `admin`+ |
-| PUT | `/users/{id}/roles` | Replace a user's role set (`{"roles": [...]}`, empty array revokes all) | `admin`+ |
+See [ADR 5](adr/0005-openapi-as-a-checked-contract.md) for why the document is
+written by hand and checked rather than generated.
 
-> The `albums` embedded in `GET /users/{id}` only ever contains **live** albums — [`User::getAlbums()`](../models/db/User.php) filters out soft-deleted ones at the relation level, even for a `super_admin`. To review a user's flagged albums, use `GET /albums?user_id={id}&is_deleted=1`.
+---
 
-### Albums
+## Behaviour the document does not describe
 
-| Method | Endpoint | Description | Who can access |
-|--------|----------|-------------|----------------|
-| GET | `/albums/my` | List **the caller's own** albums | Base user |
-| GET | `/albums` | List all albums (the admin/moderator view) | `moderator`+ |
-| GET | `/albums/{id}` | Get album with photos and user info | Owner or `moderator`+ |
-| POST | `/albums` | Create an album (owned by the caller) | Base user |
-| PUT | `/albums/{id}` | Update an album | Owner or `moderator`+ |
-| DELETE | `/albums/{id}` | Delete an album — see below | Owner, `moderator` or `admin`+ |
-| POST | `/albums/{id}/restore` | Restore a soft-deleted album | `admin`+ |
+What follows is the part a schema cannot carry: things you would otherwise have
+to discover by trying them.
 
-### Photos
+### Deleting an album has two outcomes
 
-| Method | Endpoint | Description | Who can access |
-|--------|----------|-------------|----------------|
-| GET | `/albums/{albumId}/photos` | List the photos of an album | Album owner or `moderator`+ |
-| POST | `/albums/{albumId}/photos` | Upload a photo to an album (`multipart/form-data`) | Album owner or `moderator`+ |
-| GET | `/photos/{id}` | Get a single photo | Album owner or `moderator`+ |
-| PUT | `/photos/{id}` | Update a photo (title only) | Album owner or `moderator`+ |
-| DELETE | `/photos/{id}` | Delete a photo (removes its file, permanent) | Album owner or `moderator`+ |
+`DELETE /albums/{id}` is one route. It deletes **permanently** for whoever may
+delete outright — the owner, or a holder of `album.delete.any` — and **soft**
+(a flag plus an optional `{"reason": "..."}`, idempotent) for a caller holding
+only `album.soft-delete.any`. Permanent wins when a role has both.
 
-### Roles & permissions
+A soft-deleted album is hidden from every listing by default and is a `404` for
+its own owner, until an admin restores it (`POST /albums/{id}/restore`). The
+review queue is `GET /albums?is_deleted=1`, visible to the review audience only.
 
-| Method | Endpoint | Description | Who can access |
-|--------|----------|-------------|----------------|
-| GET | `/roles` | List roles (name + description) | `admin`+ |
-| GET | `/roles/{id}` | Get a role including its permissions | `super_admin` |
-| POST | `/roles` | Compose a custom role from catalog permissions | `super_admin` |
-| PUT | `/roles/{id}` | Update a role's description/permission set | `super_admin` |
-| DELETE | `/roles/{id}` | Delete a custom role | `super_admin` |
-| GET | `/permissions` | The permission catalog (to compose roles from) | `super_admin` |
+See [ADR 9](adr/0009-one-delete-route-two-outcomes.md).
 
-Photos are always scoped to an album — there is no flat `GET /photos` listing. Uploads take `title` + `file` as `multipart/form-data`; the image (`jpg, jpeg, png, webp, gif, avif`) is converted to WebP (quality 80), resized to fit 500×500 preserving aspect ratio, and stored under `web/uploads/albums/{albumId}/`.
+### Relations are embedded by the endpoint that owns them
 
-**Deleting an album** (`DELETE /albums/{id}`) is one endpoint with two outcomes decided by the caller's permissions:
+There is no `?expand=`: the parameter is accepted and ignored, deliberately, so
+a query string can never route around the permission gating a relation (see
+[ADR 4](adr/0004-no-client-driven-expansion.md)). A relation is included
+unconditionally by the endpoint it belongs to, or not at all.
 
-- **Permanent** for whoever may delete it outright — its **owner**, or an **admin** (`album.delete.any`). The album, its photos and their files are removed.
-- **Soft** (pending review) for a **moderator**: the album is flagged (with an optional `{"reason": "..."}` body) instead of removed, and the request is idempotent. Soft-deleted albums are hidden from every listing by default and become a `404` for their owner until an admin restores them (`POST /albums/{id}/restore`). To review the queue, an admin lists them with `?is_deleted=1`.
+One consequence worth knowing: the `albums` embedded in `GET /users/{id}` and
+`GET /users/me` contains **live albums only**. [`User::getAlbums()`](../models/db/User.php)
+filters soft-deleted ones at the relation level, even for a `super_admin` — to
+review a user's flagged albums, ask `GET /albums?user_id={id}&is_deleted=1`.
+
+### Photos are never listed flat
+
+There is no `GET /photos`. Listing and creation are nested under the album
+(`GET|POST /albums/{albumId}/photos`) because a photo's ownership *is* its
+album's, and that is what the implicit own-abilities resolve against. The member
+routes (`GET|PUT|DELETE /photos/{id}`) stay flat.
+
+### Pagination and filtering edge cases
+
+- **A page past the last one is not clamped.** It returns an empty `items` array
+  while `total` and `last_page` still describe the full result set, and
+  `current_page` echoes back whatever was asked for.
+- **`last_page` is `0`, not `1`, for an empty result set**, and `from`/`to` are
+  both `0`.
+- **Filter values are matched literally.** Partial-match filters go through
+  Yii's `like` operator, which escapes `%`, `_` and `\` — so `?title=100%` looks
+  for that string, not a wildcard.
+- **An empty filter value is treated as absent.** `?title=` returns everything
+  rather than matching `title = ''` or `NULL`, because the repository applies
+  filters with `andFilterWhere`, which skips empty operands.
+
+### Examples
+
+Uploading a photo is the one `multipart/form-data` endpoint, and the one worth
+spelling out:
 
 ```bash
 curl -X POST http://localhost:8084/albums/1/photos \
@@ -609,114 +632,7 @@ curl -X POST http://localhost:8084/albums/1/photos \
   -F "file=@/path/to/image.jpg"
 ```
 
-### Request Validation Limits
-
-Enforced by the form requests in [`models/form/`](../models/form/); a breach is a `422` with the field errors under `data.error`.
-
-| Field | Constraint |
-|-------|------------|
-| `password` | 6–72 characters (72 is bcrypt's own input limit) |
-| `email` | ≤255 chars, valid address, unique — an update excludes the record's own id |
-| `first_name` / `last_name` | ≤255 chars |
-| album / photo `title` | ≤255 chars |
-| album soft-delete `reason` | ≤255 chars, optional |
-| role `name` | ≤64 chars, unique |
-| role `description` | ≤255 chars |
-| `permissions` (role composition) | every name must exist in the catalog |
-| `roles` (role assignment body) | must be **present**; `[]` is valid and revokes every role; an unknown name → `422` |
-| photo upload `file` | required, extension in `jpg, jpeg, png, webp, gif, avif` — the bytes are re-validated by Imagick, so a renamed non-image still `422`s |
-| `per_page` | integer, 1–100 |
-
-### Response Format
-
-All endpoints return a unified JSON response:
-
-**Success:**
-```json
-{
-    "success": true,
-    "data": {},
-    "code": 200
-}
-```
-
-**Error:**
-```json
-{
-    "success": false,
-    "data": {
-        "message": "An error occurred during execution",
-        "error": {}
-    },
-    "code": 404
-}
-```
-
-Validation failures (422) put the field errors under `data.error` — e.g. creating an album without a title:
-```json
-{
-    "success": false,
-    "data": {
-        "message": "An error occurred during execution",
-        "error": { "title": ["Title cannot be blank."] }
-    },
-    "code": 422
-}
-```
-
-**Paginated list** — every index endpoint (`GET /users`, `GET /albums`, `GET /albums/my`, `GET /albums/{albumId}/photos`, `GET /roles`) wraps its items alongside a `pagination` block:
-```json
-{
-    "success": true,
-    "data": {
-        "items": [
-            { "id": 1, "title": "..." },
-            { "id": 2, "title": "..." }
-        ],
-        "pagination": {
-            "total": 100,
-            "per_page": 20,
-            "current_page": 1,
-            "last_page": 5,
-            "from": 1,
-            "to": 20
-        }
-    },
-    "code": 200
-}
-```
-
-### List query parameters
-
-The list endpoints (`GET /users`, `GET /albums`, `GET /albums/my`, `GET /albums/{albumId}/photos`, `GET /roles`) accept optional query parameters for pagination, sorting and filtering:
-
-| Parameter | Description |
-|-----------|-------------|
-| `page` | Page number to return (default `1`). |
-| `per_page` | Items per page, `1`–`100` (default `20`). |
-| `sort` | Comma-separated attribute list; prefix an attribute with `-` for descending order (e.g. `sort=-created_at,title`). |
-| *filters* | One parameter per filterable attribute (see below). |
-
-List endpoints return the plain resource shape — related records are not embeddable from the query string. Where a relation belongs to a response, the endpoint that owns it includes it unconditionally (`GET /users/{id}` and `GET /users/me` carry `albums`, `GET /albums/{id}` carries `photos`, `GET /roles/{id}` carries `permissions` behind `role.view`).
-
-Sortable / filterable attributes per resource:
-
-| Resource | Sortable | Filterable |
-|----------|----------|------------|
-| Users | `id`, `first_name`, `last_name`, `email`, `created_at`, `updated_at` | `first_name`, `last_name`, `email` (partial match) |
-| Albums | `id`, `user_id`, `title`, `created_at`, `updated_at` | `title` (partial match), `user_id` (exact), `is_deleted` (exact — the review queue on `GET /albums`) |
-| Photos | `id`, `title`, `created_at` | `title` (partial match) |
-| Roles | `id`, `name` | `name` (partial match) |
-
-An unknown `sort` attribute or an out-of-range `per_page` returns `422`. A `page` past the last one is not clamped back — it returns an **empty** `items` array with `total`/`last_page` still reflecting the full result set (`current_page` echoes back whatever was requested). When `sort` is omitted (or resolves to nothing sortable), results default to `id` ascending.
-
-A few more edge cases worth knowing:
-
-- **`last_page` is `0`, not `1`, for an empty result set** (`total: 0`), and `from`/`to` are both `0`.
-- **Filter values are matched literally.** Partial-match filters go through Yii's `like` operator, which escapes `%`, `_` and `\` — so `?title=100%` looks for the literal string, not a wildcard.
-- **An empty filter value is treated as absent.** `?title=` returns everything rather than matching `title = ''` or `NULL` (the repository applies filters with `andFilterWhere`, which skips empty operands).
-
-Example:
+Listing with pagination, sorting and a partial-match filter:
 
 ```bash
 curl "http://localhost:8084/users?first_name=jo&sort=-created_at&per_page=50&page=2" \

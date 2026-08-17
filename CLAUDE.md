@@ -9,7 +9,7 @@ Yii2 (basic template) REST API for users, albums, and photos. PHP 8.5, MySQL 8, 
 ## Where the documentation lives
 
 - **`README.md`** — the front page: what this is, how to start it, and what is worth looking at. Kept short on purpose.
-- **`docs/handbook.md`** — the long form: environment, subsystems, migrations, seeding, suites, CI/CD.
+- **`docs/handbook.md`** — the long form: environment, subsystems, migrations, seeding, suites, CI/CD. It deliberately **does not describe endpoints** — no tables of routes, validation limits, sortable attributes or response envelopes. Those live in `config/openapi.yaml`, which the contract gates hold to the code; a copy in markdown is a second source of truth that nothing checks, and it drifted within a day of being written. What the handbook keeps is what a schema cannot carry: why a route behaves the way it does, and the edge cases you would otherwise find by trying.
 - **`docs/adr/`** — one file per decision a reader would otherwise have to reverse-engineer from the code: what was chosen, what it cost, and what undoing it would take. **Add one when the code alone cannot explain *why*** — when the obvious alternative was rejected for a reason, or when the cost is paid somewhere other than where the benefit shows up. Reference them from code comments and from here (`see ADR 5`) rather than repeating the argument.
 - **`CLAUDE.md`** (this file) — the working agreement: what must be true of a change, not what the system does.
 
