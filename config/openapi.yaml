@@ -1063,11 +1063,33 @@ components:
         data:
           type: object
           properties:
-            message: { type: string, example: An error occurred during execution }
+            message: { type: string, description: 'Human-readable. A message the endpoint chose (e.g. a 409 naming the invariant it refused) is returned verbatim; otherwise it is the default wording for the status.', example: The requested resource was not found. }
+            error_code:
+              type: string
+              description: |
+                Machine-readable and stable — branch on this rather than on `message`.
+                Defaults to the status: `bad_request`, `unauthorized`, `forbidden`,
+                `not_found`, `method_not_allowed`, `conflict`, `unsupported_media_type`,
+                `validation_failed`, `too_many_requests`, `server_error`,
+                `service_unavailable`. Endpoints that can refuse for more than one
+                reason narrow it further: `auth.invalid_credentials`,
+                `refresh_token.invalid`, `refresh_token.reused`,
+                `refresh_token.expired`, `role.system_immutable`,
+                `role.escalation_denied`, `role.last_manager`.
+              example: not_found
             error:
               type: object
-              description: 'Details; only populated for validation errors, or with a stack trace when `YII_DEBUG`.'
-              additionalProperties: true
+              description: 'Field name → list of validation messages. Empty for anything that is not a validation failure — debug detail never appears here.'
+              additionalProperties:
+                type: array
+                items: { type: string }
+            debug:
+              type: object
+              description: 'Present only when the server runs with `YII_DEBUG`. Never sent in production.'
+              properties:
+                file: { type: string }
+                line: { type: integer }
+                trace: { type: array, items: { type: string } }
     ValidationErrorEnvelope:
       type: object
       required: [success, data, code]
@@ -1077,10 +1099,11 @@ components:
         data:
           type: object
           properties:
-            message: { type: string, example: An error occurred during execution }
+            message: { type: string, example: 'The request could not be processed — see `error` for the fields at fault.' }
+            error_code: { type: string, enum: [validation_failed], example: validation_failed }
             error:
               type: object
-              description: Field name → list of validation messages.
+              description: Field name → list of validation messages. Always populated for a 422.
               additionalProperties:
                 type: array
                 items: { type: string }

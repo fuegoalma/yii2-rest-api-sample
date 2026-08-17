@@ -11,6 +11,8 @@ use app\models\db\Role;
 use app\models\service\basic\BaseCrudService;
 use yii\db\ActiveRecord;
 use yii\helpers\ArrayHelper;
+use app\models\exception\ConflictException;
+use app\models\exception\ForbiddenException;
 use yii\web\ConflictHttpException;
 use yii\web\ForbiddenHttpException;
 use yii\web\NotFoundHttpException;
@@ -103,7 +105,7 @@ readonly class RoleService extends BaseCrudService implements RoleServiceInterfa
         $role = $this->findOrFail($id);
 
         if ($role->is_system) {
-            throw new ConflictHttpException('A system role cannot be deleted.');
+            throw new ConflictException('A system role cannot be deleted.', 'role.system_immutable');
         }
 
         $this->tx->run(function () use ($role): void {
@@ -138,7 +140,10 @@ readonly class RoleService extends BaseCrudService implements RoleServiceInterfa
             if (!$this->access->can(Permission::ROLE_MANAGE)
                 && $this->roles->anyGrants($changedIds, self::PRIVILEGED_PERMISSIONS)
             ) {
-                throw new ForbiddenHttpException('Only a role manager can grant or revoke privileged roles.');
+                throw new ForbiddenException(
+                    'Only a role manager can grant or revoke privileged roles.',
+                    'role.escalation_denied'
+                );
             }
 
             if ($this->roles->anyGrants($currentIds, [Permission::ROLE_MANAGE])
@@ -159,7 +164,7 @@ readonly class RoleService extends BaseCrudService implements RoleServiceInterfa
         if (!$this->access->can(Permission::ROLE_MANAGE)
             && $this->roles->userHasPermission($userId, Permission::ROLE_MANAGE)
         ) {
-            throw new ForbiddenHttpException('Only a role manager can modify this user.');
+            throw new ForbiddenException('Only a role manager can modify this user.', 'role.escalation_denied');
         }
     }
 
@@ -221,7 +226,7 @@ readonly class RoleService extends BaseCrudService implements RoleServiceInterfa
         );
 
         if ($holders === 0) {
-            throw new ConflictHttpException('The system would be left without a role manager.');
+            throw new ConflictException('The system would be left without a role manager.', 'role.last_manager');
         }
     }
 }

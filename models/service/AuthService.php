@@ -8,6 +8,7 @@ use app\models\contract\service\AuthServiceInterface;
 use app\models\db\User;
 use app\models\dto\TokenResponse;
 use yii\base\Exception;
+use app\models\exception\UnauthorizedException;
 use yii\web\UnauthorizedHttpException;
 
 readonly class AuthService implements AuthServiceInterface
@@ -29,7 +30,7 @@ readonly class AuthService implements AuthServiceInterface
         $user = $this->repository->findByEmail($email);
 
         if ($user === null || !$user->validatePassword($password)) {
-            throw new UnauthorizedHttpException('Invalid email or password.');
+            throw new UnauthorizedException('Invalid email or password.', 'auth.invalid_credentials');
         }
 
         return $this->issueTokens($user->id);

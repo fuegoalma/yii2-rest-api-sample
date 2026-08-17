@@ -6,6 +6,7 @@ use app\models\contract\repository\RefreshTokenRepositoryInterface;
 use app\models\db\RefreshToken;
 use Yii;
 use yii\base\Exception;
+use app\models\exception\UnauthorizedException;
 use yii\web\UnauthorizedHttpException;
 
 /**
@@ -67,17 +68,17 @@ readonly class RefreshTokenService
         $token = $this->repository->findByHash($this->hash($rawToken));
 
         if ($token === null) {
-            throw new UnauthorizedHttpException('Invalid refresh token.');
+            throw new UnauthorizedException('Invalid refresh token.', 'refresh_token.invalid');
         }
 
         if ($token->isRevoked()) {
             // a revoked token is being replayed — treat the family as compromised
             $this->repository->revokeFamily($token->family_id);
-            throw new UnauthorizedHttpException('Refresh token has been revoked.');
+            throw new UnauthorizedException('Refresh token has been revoked.', 'refresh_token.reused');
         }
 
         if ($token->isExpired()) {
-            throw new UnauthorizedHttpException('Refresh token has expired.');
+            throw new UnauthorizedException('Refresh token has expired.', 'refresh_token.expired');
         }
 
         $this->repository->revoke($token);

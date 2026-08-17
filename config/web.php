@@ -38,6 +38,9 @@ $config = [
         ],
         'errorHandler' => [
             'class' => 'app\components\JsonErrorHandler',
+            // the handler itself defaults to false, so a config nobody
+            // wrote cannot leak internals; here it follows the environment
+            'debugDetail' => YII_DEBUG,
         ],
         'log' => [
             'traceLevel' => YII_DEBUG ? 3 : 0,

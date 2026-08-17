@@ -2,6 +2,7 @@
 
 namespace app\components;
 
+use app\components\ApiErrorCatalog;
 use app\models\dto\BasicResponse;
 use app\models\dto\PaginationMeta;
 use yii\data\DataProviderInterface;
@@ -15,7 +16,16 @@ class ApiSerializer extends Serializer
         $status_code = Yii::$app->response->statusCode;
 
         if ($status_code >= 400) {
-            return BasicResponse::error('An error occurred during execution', (array) $data, $status_code)->toArray();
+            // Everything arriving here is a rejected form or model: `$data` is
+            // already `field => messages`. The wording comes from the catalog —
+            // there is no exception to have said anything better.
+            return BasicResponse::error(
+                ApiErrorCatalog::messageFor($status_code),
+                ApiErrorCatalog::codeFor($status_code),
+                (array) $data,
+                [],
+                $status_code
+            )->toArray();
         }
 
         if ($data instanceof DataProviderInterface) {

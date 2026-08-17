@@ -41,8 +41,11 @@ final class ResponseSchemaContractTest extends ContractTestCase
                 (new HealthCheckResult(true, ['database' => 'ok']))->toArray()
             ),
             // The error shape is decided by BasicResponse, not by whatever threw.
+            // `debug` is passed non-empty on purpose: it is omitted in
+            // production and the document marks it as such, but it is part of
+            // the shape and must be held to the document like the rest.
             'ErrorEnvelope' => static fn (): array => array_keys(
-                BasicResponse::error('irrelevant')->toArray()['data']
+                BasicResponse::error('irrelevant', 'error', [], ['file' => 'x'])->toArray()['data']
             ),
         ];
     }
@@ -113,7 +116,7 @@ final class ResponseSchemaContractTest extends ContractTestCase
                 BasicResponse::success()->toArray()
             ),
             'ErrorEnvelope' => static fn (): array => array_keys(
-                BasicResponse::error('irrelevant')->toArray()
+                BasicResponse::error('irrelevant', 'error')->toArray()
             ),
         ];
     }
