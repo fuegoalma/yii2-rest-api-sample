@@ -8,7 +8,7 @@ WEB := $(DC) exec -T web
         refresh-token-prune rbac-assign \
         test test-unit test-functional test-one test-contract build \
         coverage coverage-html \
-        cs-check cs-fix stan check audit hooks-install
+        cs-check cs-fix stan check audit hooks-install smoke
 
 help:
 	@echo "Available targets:"
@@ -41,6 +41,7 @@ help:
 	@echo "  check                cs-check + stan + coverage — what CI runs"
 	@echo "  audit                Report known advisories in the installed dependencies"
 	@echo "  hooks-install        Install the git hooks (commit-msg, pre-commit, pre-push)"
+	@echo "  smoke                Build the prod image and prove it is deployable"
 
 init:
 	./init.sh
@@ -154,3 +155,10 @@ audit:
 # Also run automatically after `composer install` (see composer.json scripts).
 hooks-install:
 	php vendor/bin/captainhook install --force --no-interaction
+
+# Builds the deployable image and exercises it against a real database — the
+# same script .github/workflows/cd.yml runs, so the two cannot drift. Uses the
+# host's docker directly: the thing under test *is* a container.
+smoke:
+	docker build --target prod -t yii2-rest-api:smoke .
+	./docker/smoke.sh yii2-rest-api:smoke

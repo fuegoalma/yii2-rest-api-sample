@@ -35,7 +35,7 @@
         "enabled": true,
         "actions": [
             {
-                "action": "docker compose exec -T web php vendor/bin/php-cs-fixer fix --dry-run --diff {$STAGED_FILES|of-type:php}",
+                "action": "docker compose exec -T web php vendor/bin/php-cs-fixer fix --dry-run --diff --config=.php-cs-fixer.dist.php {$STAGED_FILES|of-type:php}",
                 "conditions": [
                     {
                         "exec": "\\CaptainHook\\App\\Hook\\Condition\\FileStaged\\OfType",

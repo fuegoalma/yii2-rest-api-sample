@@ -1,0 +1,68 @@
+name: API documentation
+
+# Chained to a green CI on master, like CD: nothing is published from a commit
+# whose tests did not pass — and the contract gates are part of those tests, so
+# what gets published has been checked against the code rather than merely
+# committed alongside it.
+#
+# The application already serves /docs, but only where an instance is running.
+# This is the copy anyone can read: no server, no database, no credentials.
+on:
+  workflow_run:
+    workflows: ['CI']
+    types: [completed]
+    branches: [master]
+  workflow_dispatch:
+
+# Pages allows one deployment at a time; a newer commit supersedes the one in
+# flight rather than queueing behind it.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  publish:
+    name: Publish the OpenAPI document to GitHub Pages
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      # Redoc renders the document to a single self-contained HTML file, so the
+      # published page has no runtime dependency on a CDN staying up — unlike
+      # the Swagger UI the application serves, which is fine for a developer
+      # with the stack running and wrong for a page that has to keep working.
+      - name: Render the document
+        run: |
+          mkdir -p site
+          cp config/openapi.yaml site/openapi.yaml
+          npx --yes @redocly/cli@latest build-docs config/openapi.yaml \
+            --output site/index.html \
+            --title "Yii2 REST API"
+
+      # The same lint an editor would run, on the document that is about to be
+      # published. Advisory: a style warning from a linter we do not own must
+      # not stop the docs from being updated.
+      - name: Lint the document (advisory)
+        run: npx --yes @redocly/cli@latest lint config/openapi.yaml || true
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - id: deploy
+        uses: actions/deploy-pages@v4

@@ -58,6 +58,7 @@ paths:
     post:
       tags: [Auth]
       x-permission: []
+      operationId: authLogin
       summary: Log in with email and password
       description: Returns a fresh access + refresh token pair and starts a new token family (session). Wrong credentials → 401.
       security: []
@@ -85,6 +86,7 @@ paths:
     post:
       tags: [Auth]
       x-permission: []
+      operationId: authRegister
       summary: Self-register and log in
       description: Creates an account (assigned **no** role) and logs it straight in, returning a token pair. Duplicate email or a missing field → 422.
       security: []
@@ -110,6 +112,7 @@ paths:
     post:
       tags: [Auth]
       x-permission: []
+      operationId: authRefresh
       summary: Exchange a refresh token for a fresh pair
       description: |
         Refresh tokens are single-use and **rotate**: this revokes the presented
@@ -141,6 +144,7 @@ paths:
     post:
       tags: [Auth]
       x-permission: []
+      operationId: authLogout
       summary: Log out this device
       description: Revokes the presented token's **family** (one session/device). Best-effort and idempotent — an unknown token still returns 204.
       security: []
@@ -162,6 +166,7 @@ paths:
     post:
       tags: [Auth]
       x-permission: []
+      operationId: authLogoutAll
       summary: Log out all devices
       description: Revokes **every** family of the token's owner. Idempotent → 204.
       security: []
@@ -184,6 +189,7 @@ paths:
     get:
       tags: [Health]
       x-permission: []
+      operationId: healthIndex
       summary: Health check
       description: Public, unauthenticated, unthrottled. Runs `SELECT 1` against the database.
       security: []
@@ -206,6 +212,7 @@ paths:
     get:
       tags: [Docs]
       x-permission: []
+      operationId: docsIndex
       summary: Swagger UI
       description: |
         Renders this interactive documentation. Served by `DocsController`, which
@@ -225,6 +232,7 @@ paths:
     get:
       tags: [Docs]
       x-permission: []
+      operationId: docsSpec
       summary: Raw OpenAPI specification
       description: Serves this file (`config/openapi.yaml`) verbatim. Not wrapped in the JSON envelope.
       security: []
@@ -240,6 +248,7 @@ paths:
     get:
       tags: [Users]
       x-permission: []
+      operationId: usersMe
       summary: The authenticated user's profile
       description: Available to every authenticated user (never gated). Returns the profile, the user's albums and their role names.
       responses:
@@ -260,6 +269,7 @@ paths:
     get:
       tags: [Users]
       x-permission: []
+      operationId: usersMePermissions
       summary: The caller's roles and effective permissions
       description: For a client to build its UI from — role names plus the union of their role-granted permission names. Never gated.
       responses:
@@ -281,6 +291,7 @@ paths:
     get:
       tags: [Users]
       x-permission: [user.index.any]
+      operationId: usersIndex
       summary: List users
       description: 'Requires `user.index.any` (moderator+).'
       parameters:
@@ -315,6 +326,7 @@ paths:
     post:
       tags: [Users]
       x-permission: [user.create]
+      operationId: usersCreate
       summary: Create a user
       description: Requires `user.create` (admin+). The account is created with **no** role. Password is hashed server-side.
       requestBody:
@@ -341,6 +353,7 @@ paths:
     get:
       tags: [Users]
       x-permission: [user.view.any]
+      operationId: usersView
       summary: Get a user
       description: Requires `user.view.any` (moderator+) — ownership does **not** grant it. Always includes the user's albums.
       responses:
@@ -358,6 +371,7 @@ paths:
     put:
       tags: [Users]
       x-permission: [user.update.any]
+      operationId: usersUpdate
       x-permission-ownership: true
       summary: Update a user (partial)
       description: Requires ownership (own profile) or `user.update.any` (admin+). All fields optional. An admin cannot take over a role-manager's account (409).
@@ -383,6 +397,7 @@ paths:
     patch:
       tags: [Users]
       x-permission: [user.update.any]
+      operationId: usersUpdatePatch
       x-permission-ownership: true
       summary: Update a user (partial, alias of PUT)
       requestBody:
@@ -407,6 +422,7 @@ paths:
     delete:
       tags: [Users]
       x-permission: [user.delete.any]
+      operationId: usersDelete
       summary: Delete a user
       description: Requires `user.delete.any` (admin+). Blocked by the last-role-manager invariant (409).
       responses:
@@ -423,6 +439,7 @@ paths:
     get:
       tags: [Users]
       x-permission: [role.assign]
+      operationId: usersRoles
       summary: List a user's roles
       description: Requires `role.assign` (admin+).
       responses:
@@ -443,6 +460,7 @@ paths:
     put:
       tags: [Users]
       x-permission: [role.assign]
+      operationId: usersSetRoles
       summary: Replace a user's role set
       description: |
         Requires `role.assign` (admin+). Full replacement — an empty array revokes
@@ -476,6 +494,7 @@ paths:
     get:
       tags: [Albums]
       x-permission: []
+      operationId: albumsMy
       summary: The caller's own albums
       description: Available to every authenticated user. Soft-deleted albums are excluded.
       parameters:
@@ -496,6 +515,7 @@ paths:
     get:
       tags: [Albums]
       x-permission: [album.index.any]
+      operationId: albumsIndex
       summary: List all albums (review view)
       description: 'Requires `album.index.any` (moderator+). Soft-deleted albums are hidden unless requested via `?is_deleted=1` (the review queue).'
       parameters:
@@ -520,6 +540,7 @@ paths:
     post:
       tags: [Albums]
       x-permission: []
+      operationId: albumsCreate
       summary: Create an album
       description: A base ability of every authenticated user. The owner is forced to the caller — `user_id` cannot be set from the body.
       requestBody:
@@ -545,6 +566,7 @@ paths:
     get:
       tags: [Albums]
       x-permission: [album.view.any]
+      operationId: albumsView
       x-permission-ownership: true
       summary: Get an album with its photos and owner
       description: Requires ownership or `album.view.any` (moderator+). Returns a richer shape including the owner's name and the album's photos.
@@ -563,6 +585,7 @@ paths:
     put:
       tags: [Albums]
       x-permission: [album.update.any]
+      operationId: albumsUpdate
       x-permission-ownership: true
       summary: Update an album (partial)
       description: Requires ownership or `album.update.any` (moderator+). Only the title is editable.
@@ -587,6 +610,7 @@ paths:
     patch:
       tags: [Albums]
       x-permission: [album.update.any]
+      operationId: albumsUpdatePatch
       x-permission-ownership: true
       summary: Update an album (partial, alias of PUT)
       requestBody:
@@ -610,6 +634,7 @@ paths:
     delete:
       tags: [Albums]
       x-permission: [album.delete.any, album.soft-delete.any]
+      operationId: albumsDelete
       x-permission-ownership: true
       summary: Delete an album (permanent or soft)
       description: |
@@ -638,6 +663,7 @@ paths:
     post:
       tags: [Albums]
       x-permission: [album.restore]
+      operationId: albumsRestore
       summary: Restore a soft-deleted album
       description: Requires `album.restore` (admin+). Lifts the pseudo-deletion after review.
       responses:
@@ -663,6 +689,7 @@ paths:
     get:
       tags: [Photos]
       x-permission: [photo.view.any]
+      operationId: photosIndex
       x-permission-ownership: true
       summary: List an album's photos
       description: Requires ownership of the album or `photo.view.any` (moderator+). A missing album → 404.
@@ -697,6 +724,7 @@ paths:
     post:
       tags: [Photos]
       x-permission: [photo.create.any]
+      operationId: photosCreate
       x-permission-ownership: true
       summary: Upload a photo into an album
       description: |
@@ -740,6 +768,7 @@ paths:
     get:
       tags: [Photos]
       x-permission: [photo.view.any]
+      operationId: photosView
       x-permission-ownership: true
       summary: Get a photo
       description: Requires ownership (via the album) or `photo.view.any` (moderator+).
@@ -758,6 +787,7 @@ paths:
     put:
       tags: [Photos]
       x-permission: [photo.update.any]
+      operationId: photosUpdate
       x-permission-ownership: true
       summary: Update a photo (title only)
       description: Requires ownership or `photo.update.any` (moderator+). The album and the stored file are immutable — only the title can change.
@@ -782,6 +812,7 @@ paths:
     patch:
       tags: [Photos]
       x-permission: [photo.update.any]
+      operationId: photosUpdatePatch
       x-permission-ownership: true
       summary: Update a photo (title only, alias of PUT)
       requestBody:
@@ -805,6 +836,7 @@ paths:
     delete:
       tags: [Photos]
       x-permission: [photo.delete.any]
+      operationId: photosDelete
       x-permission-ownership: true
       summary: Delete a photo
       description: Requires ownership or `photo.delete.any` (moderator+). Removes the record and, for uploaded photos, the physical file.
@@ -820,6 +852,7 @@ paths:
     get:
       tags: [Roles]
       x-permission: [role.index]
+      operationId: rolesIndex
       summary: List roles
       description: |
         Requires `role.index` (admin+). Returns name + description; the permission
@@ -854,6 +887,7 @@ paths:
     post:
       tags: [Roles]
       x-permission: [role.manage]
+      operationId: rolesCreate
       summary: Compose a custom role
       description: Requires `role.manage` (super-admin). Built from catalog permissions; an unknown permission name → 422, a duplicate role name → 422.
       requestBody:
@@ -880,6 +914,7 @@ paths:
     get:
       tags: [Roles]
       x-permission: [role.view]
+      operationId: rolesView
       summary: Get a role with its permissions
       description: Requires `role.view` (super-admin). Includes the role's permission set.
       responses:
@@ -897,6 +932,7 @@ paths:
     put:
       tags: [Roles]
       x-permission: [role.manage]
+      operationId: rolesUpdate
       summary: Re-compose a role (partial)
       description: |
         Requires `role.manage` (super-admin). A system role can be re-composed but
@@ -923,6 +959,7 @@ paths:
     patch:
       tags: [Roles]
       x-permission: [role.manage]
+      operationId: rolesUpdatePatch
       summary: Re-compose a role (partial, alias of PUT)
       requestBody:
         required: true
@@ -946,6 +983,7 @@ paths:
     delete:
       tags: [Roles]
       x-permission: [role.manage]
+      operationId: rolesDelete
       summary: Delete a custom role
       description: Requires `role.manage` (super-admin). A system role cannot be deleted (409). Blocked by the last-role-manager invariant (409).
       responses:
@@ -961,6 +999,7 @@ paths:
     get:
       tags: [Permissions]
       x-permission: [permission.index]
+      operationId: permissionsIndex
       summary: List the permission catalog
       description: Requires `permission.index` (super-admin). Read-only — permissions are managed by migrations.
       responses:

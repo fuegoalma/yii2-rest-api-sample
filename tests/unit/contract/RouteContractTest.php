@@ -49,6 +49,40 @@ final class RouteContractTest extends ContractTestCase
     }
 
     /**
+     * `operationId` is the canonical machine name for an operation — what a
+     * generated client calls its method — so it has to be unique, and it has to
+     * still describe the route it names after a refactor moves one.
+     */
+    public function testEveryOperationHasAUniqueIdDerivedFromItsRoute(): void
+    {
+        $ids = [];
+        $wrong = [];
+
+        foreach ($this->spec()->operations() as $name => $operation) {
+            $id = $operation['operationId'] ?? null;
+            if ($id === null) {
+                $wrong[] = "$name has no operationId";
+                continue;
+            }
+
+            $ids[] = $id;
+
+            [$method, $path] = explode(' ', $name, 2);
+            $route = $this->routes()->routeFor($path, $method);
+            if ($route !== null && !str_starts_with($id, explode('/', $route, 2)[0])) {
+                $wrong[] = "$name is \"$id\" but routes to \"$route\"";
+            }
+        }
+
+        $this->assertSame([], $wrong, 'operationIds that do not describe their route');
+        $this->assertSame(
+            [],
+            array_values(array_diff_assoc($ids, array_unique($ids))),
+            'two operations share an operationId, so a generated client would lose one'
+        );
+    }
+
+    /**
      * A typo in a route string is something both set comparisons above would
      * happily agree on, because they compare paths and methods rather than
      * targets.

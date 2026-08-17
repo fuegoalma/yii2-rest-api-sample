@@ -43,12 +43,18 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      # `php --version` proves only that PHP starts. This boots the image against
+      # a real MySQL, runs the migrations inside it, and asks it the questions a
+      # caller would — health, the published spec, an anonymous 401, a
+      # register → create → list round trip, and the documented error shape.
+      #
+      # It is the same script as `make smoke`, so the two cannot drift. Writing
+      # it caught two defects the old check never could: console commands failed
+      # in the production image (the entry scripts hard-coded YII_ENV=dev, so it
+      # bootstrapped a debug module `--no-dev` had not installed), and every
+      # logged error dumped $_SERVER — JWT_SECRET included — into the log stream.
       - name: Smoke-test the image
-        run: |
-          docker run --rm --entrypoint php \
-            yii2-rest-api:${{ github.event.workflow_run.head_sha }} \
-            --version
-          echo "✅ Production image built and PHP runtime works."
+        run: ./docker/smoke.sh yii2-rest-api:${{ github.event.workflow_run.head_sha }}
 
   # 2. "Deploy" the built image. We don't run a real server (out of scope for
   #    this sample), so the release is simulated — but it goes through a proper
