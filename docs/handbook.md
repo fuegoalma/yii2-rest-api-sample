@@ -537,7 +537,7 @@ These mutations are **atomic and concurrency-safe**: each runs inside a DB trans
 
 ## API Endpoints
 
-> **Interactive docs:** a full OpenAPI 3.0 specification is served with **Swagger UI at [`/docs`](http://localhost:8084/docs)** (raw spec at [`/docs/openapi.yaml`](http://localhost:8084/docs/openapi.yaml)). The spec lives in [`config/openapi.yaml`](../config/openapi.yaml) — the single source of truth for request/response shapes and RBAC gates. The tables below are a quick reference.
+> **Interactive docs:** the document is published at **<https://fuegoalma.github.io/yii2-rest-api-sample/>** (nothing needs to be running), and served by the app itself as **Swagger UI at [`/docs`](http://localhost:8084/docs)** (raw spec at [`/docs/openapi.yaml`](http://localhost:8084/docs/openapi.yaml)). The spec lives in [`config/openapi.yaml`](../config/openapi.yaml) — the single source of truth for request/response shapes and RBAC gates. The tables below are a quick reference.
 
 All endpoints below require the `Authorization: Bearer <token>` header. The **Who can access** column summarises the RBAC gate — "base user" means any authenticated caller (see [Authorization](#authorization-rbac)).
 

@@ -3,6 +3,7 @@
 [![CI](https://github.com/fuegoalma/yii2-rest-api-sample/actions/workflows/ci.yml/badge.svg)](https://github.com/fuegoalma/yii2-rest-api-sample/actions/workflows/ci.yml)
 [![CD](https://github.com/fuegoalma/yii2-rest-api-sample/actions/workflows/cd.yml/badge.svg)](https://github.com/fuegoalma/yii2-rest-api-sample/actions/workflows/cd.yml)
 [![Security](https://github.com/fuegoalma/yii2-rest-api-sample/actions/workflows/security.yml/badge.svg)](https://github.com/fuegoalma/yii2-rest-api-sample/actions/workflows/security.yml)
+[![API docs](https://img.shields.io/badge/API_docs-live-2ea44f)](https://fuegoalma.github.io/yii2-rest-api-sample/)
 
 A REST API for **users, albums and photos**, built with Yii2 and PHP 8.5. JWT
 authentication on a two-token model, flat role-based access control, background
@@ -16,6 +17,12 @@ Everything runs in Docker. The whole toolchain is behind `make` — see
 make init && make setup     # first time: .env, containers, databases, migrations
 make check                  # every gate CI runs: style, static analysis, tests at 100% coverage
 ```
+
+**📖 [Read the API documentation](https://fuegoalma.github.io/yii2-rest-api-sample/)** — published from
+`config/openapi.yaml` on every green build, so it needs nothing running.
+([raw OpenAPI document](https://fuegoalma.github.io/yii2-rest-api-sample/openapi.yaml))
+
+With the stack up locally:
 
 - API — <http://localhost:8084>
 - Interactive docs (Swagger UI) — <http://localhost:8084/docs>
@@ -39,7 +46,8 @@ make check                  # every gate CI runs: style, static analysis, tests 
 - **[Handbook](docs/handbook.md)** — the environment, every subsystem, and how to run every gate.
 - **[Architecture decision records](docs/adr/README.md)** — what was chosen, what it cost, and what undoing it would take.
 - **[CLAUDE.md](CLAUDE.md)** — the working agreement for changes to this repository.
-- **`GET /docs`** — the interactive OpenAPI documentation, served by the app itself.
+- **[Published API reference](https://fuegoalma.github.io/yii2-rest-api-sample/)** — `config/openapi.yaml` rendered with Redoc, republished by [`pages.yml`](.github/workflows/pages.yml) after every green CI on `master`. Nothing to run.
+- **`GET /docs`** — the same document as Swagger UI, served by the app itself when the stack is running.
 
 ---
 
