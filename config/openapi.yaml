@@ -25,7 +25,8 @@ info:
     owns. Endpoint descriptions state the permission each action requires; a
     caller lacking it gets a `403`.
   license:
-    name: BSD-3-Clause
+    name: MIT
+    url: https://opensource.org/licenses/MIT
 
 servers:
   - url: http://localhost:8084
