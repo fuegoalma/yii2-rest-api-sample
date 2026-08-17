@@ -13,7 +13,7 @@ Everything runs in Docker. The whole toolchain is behind `make` — see
 `make help`.
 
 ```bash
-./init.sh && ./setup.sh     # first time: .env, containers, databases, migrations
+make init && make setup     # first time: .env, containers, databases, migrations
 make check                  # every gate CI runs: style, static analysis, tests at 100% coverage
 ```
 
@@ -60,7 +60,7 @@ Verify with `docker compose version` and `docker buildx version`.
 ## Getting started
 
 ```bash
-./init.sh     # creates .env from .env.example
+make init     # creates .env from .env.example
 ```
 
 Edit `.env` if the defaults do not suit — database credentials, `JWT_SECRET`
@@ -68,7 +68,7 @@ Edit `.env` if the defaults do not suit — database credentials, `JWT_SECRET`
 **production** when absent.
 
 ```bash
-./setup.sh    # starts Docker, installs dependencies, creates both databases, migrates
+make setup    # starts Docker, installs dependencies, creates both databases, migrates
 ```
 
 Then bootstrap the first administrator, since everything RBAC-driven needs an

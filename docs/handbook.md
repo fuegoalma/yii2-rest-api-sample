@@ -399,9 +399,9 @@ The project ships a two-stage GitHub Actions pipeline — the two badges at the 
 │   ├── unit/          # Unit tests
 │   ├── _support/      # Codeception helpers and base classes (BaseCest, BaseUnitTest)
 │   └── bin/           # coverage-check.php — the 100% coverage gate
-├── init.sh            # First-time project initialization
-├── setup.sh           # Database creation and migration runner
-└── Makefile           # Short aliases for docker compose exec commands (make help)
+├── init.sh            # First-time project initialization (`make init`)
+├── setup.sh           # Database creation and migration runner (`make setup`)
+└── Makefile           # The entry point for every command in this project (make help)
 ```
 
 ---
