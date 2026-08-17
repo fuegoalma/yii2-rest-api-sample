@@ -9,6 +9,7 @@ use yii\db\ActiveRecord;
  *
  * @property int $id
  * @property string $payload  the serialized {@see \app\models\contract\queue\JobInterface}
+ * @property string|null $correlation_id  the id of the request that enqueued it
  * @property int $attempts    how many times a worker has tried to run it
  * @property string $created_at
  */

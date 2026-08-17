@@ -42,7 +42,7 @@ class QueueTest extends BaseUnitTest
     {
         $runner = $this->recordingRunner();
 
-        (new DbQueue($runner))->push(new DeleteAlbumDirectoryJob('42'));
+        (new DbQueue($runner, $this->correlationId()))->push(new DeleteAlbumDirectoryJob('42'));
 
         $this->assertSame([], $runner->ran);
         $this->assertSame(1, (int) QueueJob::find()->count());
@@ -51,7 +51,7 @@ class QueueTest extends BaseUnitTest
     public function testDbQueueProcessesJobAndRemovesRow(): void
     {
         $runner = $this->recordingRunner();
-        $queue = new DbQueue($runner);
+        $queue = new DbQueue($runner, $this->correlationId());
         $queue->push(new DeleteAlbumDirectoryJob('42'));
 
         $this->assertSame(1, $queue->processPending());
@@ -61,9 +61,33 @@ class QueueTest extends BaseUnitTest
         $this->assertSame(0, (int) QueueJob::find()->count());
     }
 
+    /**
+     * The whole point of the column: `docker compose logs worker` and `logs web`
+     * are read together, and without the enqueueing request's id the worker's
+     * lines start a story of their own.
+     */
+    public function testDbQueueCarriesTheEnqueueingRequestsCorrelationId(): void
+    {
+        (new DbQueue($this->recordingRunner(), $this->correlationId('req-42')))
+            ->push(new DeleteAlbumDirectoryJob('42'));
+
+        $this->assertSame('req-42', QueueJob::find()->select('correlation_id')->scalar());
+    }
+
+    public function testTheWorkerAdoptsTheStoredCorrelationIdWhileRunningTheJob(): void
+    {
+        (new DbQueue($this->recordingRunner(), $this->correlationId('req-from-web')))
+            ->push(new DeleteAlbumDirectoryJob('42'));
+
+        $workerId = $this->correlationId('worker-own-id');
+        (new DbQueue($this->recordingRunner(), $workerId))->processPending();
+
+        $this->assertSame('req-from-web', $workerId->get());
+    }
+
     public function testDbQueueRetriesFailingJobThenDropsItAtMaxAttempts(): void
     {
-        $queue = new DbQueue($this->failingRunner(), maxAttempts: 2);
+        $queue = new DbQueue($this->failingRunner(), $this->correlationId(), maxAttempts: 2);
         $queue->push(new DeleteAlbumDirectoryJob('42'));
 
         // first drain: fails, attempt recorded, row kept for retry

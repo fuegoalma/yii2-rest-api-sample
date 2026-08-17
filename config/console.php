@@ -46,7 +46,9 @@ $config = [
         'log' => [
             'targets' => [
                 [
-                    'class' => 'yii\log\FileTarget',
+                    // same structured target as the web app: `docker compose logs worker`
+                    // and `logs web` are read together, so they must be the same shape
+                    'class' => 'app\components\log\JsonLogTarget',
                     'levels' => ['error', 'warning'],
                 ],
             ],

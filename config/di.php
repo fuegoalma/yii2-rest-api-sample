@@ -1,5 +1,6 @@
 <?php
 
+use app\components\CorrelationId;
 use app\components\DbTransactionRunner;
 use app\components\image\ImagickWebpEncoder;
 use app\components\JwtService;
@@ -15,6 +16,7 @@ use app\controllers\PhotosController;
 use app\controllers\RolesController;
 use app\controllers\UsersController;
 use app\models\contract\image\ImageEncoderInterface;
+use app\models\contract\CorrelationIdInterface;
 use app\models\contract\queue\JobRunnerInterface;
 use app\models\contract\queue\QueueInterface;
 use app\models\contract\repository\AlbumRepositoryInterface;
@@ -54,6 +56,18 @@ $params = require __DIR__ . '/params.php';
  * interface-typed constructor parameter receives.
  */
 return [
+    // One instance per process: the correlation id is the ambient "which
+    // request is this" of the current request or worker pass, so every consumer
+    // must see the same object — including after the worker adopts a job's id.
+    'singletons' => [
+        // An inbound X-Request-Id is honoured (and sanitised) so a caller can
+        // correlate from their side; the console has no request to ask, and
+        // generates one per invocation.
+        // Constructed with a generated id; a web request renews it from the
+        // caller's header (CorrelationIdBootstrap) and a queued job renews it
+        // from the id stored with the job (DbQueue).
+        CorrelationIdInterface::class => CorrelationId::class,
+    ],
     'definitions' => [
         // single source of JWT config: both the `jwt` application component
         // and constructor injections resolve through this definition

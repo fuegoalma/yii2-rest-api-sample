@@ -6,7 +6,7 @@ $db = require __DIR__ . '/db.php';
 $config = [
     'id' => 'basic',
     'basePath' => dirname(__DIR__),
-    'bootstrap' => ['log'],
+    'bootstrap' => ['log', 'app\\components\\CorrelationIdBootstrap'],
     'container' => require __DIR__ . '/di.php',
     'aliases' => [
         '@bower' => '@vendor/bower-asset',
@@ -46,7 +46,9 @@ $config = [
             'traceLevel' => YII_DEBUG ? 3 : 0,
             'targets' => [
                 [
-                    'class' => 'yii\log\FileTarget',
+                    // structured, on stderr, carrying the correlation id — see
+                    // the class docblock for why not a file under runtime/
+                    'class' => 'app\components\log\JsonLogTarget',
                     'levels' => ['error', 'warning'],
                 ],
             ],

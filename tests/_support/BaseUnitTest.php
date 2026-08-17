@@ -2,6 +2,8 @@
 
 namespace tests\unit;
 
+use app\components\CorrelationId;
+use app\models\contract\CorrelationIdInterface;
 use app\models\contract\service\TransactionRunnerInterface;
 use app\models\db\User;
 use Codeception\Test\Unit;
@@ -55,6 +57,15 @@ abstract class BaseUnitTest extends Unit
                 return $operation();
             }
         };
+    }
+
+    /**
+     * A correlation id with a known value, so a test can assert on what was
+     * recorded rather than on a random string.
+     */
+    protected function correlationId(string $id = 'test-correlation-id'): CorrelationIdInterface
+    {
+        return new CorrelationId($id);
     }
 
     /**

@@ -2,6 +2,7 @@
 
 namespace app\components\queue;
 
+use app\models\contract\CorrelationIdInterface;
 use app\models\contract\queue\JobInterface;
 use app\models\contract\queue\JobRunnerInterface;
 use app\models\contract\queue\QueueInterface;
@@ -28,6 +29,7 @@ class DbQueue implements QueueInterface
 
     public function __construct(
         private readonly JobRunnerInterface $runner,
+        private readonly CorrelationIdInterface $correlationId,
         private readonly int $maxAttempts = 3,
     ) {
     }
@@ -36,6 +38,9 @@ class DbQueue implements QueueInterface
     {
         $row = new QueueJob();
         $row->payload = serialize($job);
+        // the job inherits the id of the request that enqueued it, so the
+        // worker's log lines join that request's story instead of starting one
+        $row->correlation_id = $this->correlationId->get();
         $row->attempts = 0;
         $row->save(false);
     }
@@ -64,6 +69,8 @@ class DbQueue implements QueueInterface
     private function runOne(QueueJob $row): bool
     {
         try {
+            $this->correlationId->renew($row->correlation_id);
+
             /** @var JobInterface $job */
             $job = unserialize($row->payload, ['allowed_classes' => true]);
             $this->runner->run($job);

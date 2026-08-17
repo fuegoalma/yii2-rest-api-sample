@@ -25,6 +25,9 @@ $container['definitions'][\app\models\contract\queue\QueueInterface::class] =
 return [
     'id' => 'basic-tests',
     'basePath' => dirname(__DIR__),
+    // mirrors production: every response carries X-Request-Id, which is what
+    // CorrelationIdCest asserts
+    'bootstrap' => ['app\components\CorrelationIdBootstrap'],
     'container' => $container,
     'aliases' => [
         '@bower' => '@vendor/bower-asset',
