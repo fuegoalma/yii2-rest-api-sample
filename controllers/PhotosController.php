@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace app\controllers;
 
+use app\components\RequestSizeLimit;
 use app\controllers\basic\AlbumVisibilityTrait;
 use app\controllers\basic\ApiController;
 use app\models\contract\service\PhotoServiceInterface;
@@ -23,6 +24,22 @@ class PhotosController extends ApiController
     use AlbumVisibilityTrait;
 
     public $modelClass = Photo::class;
+
+    /**
+     * The only endpoint that takes a body PHP might refuse to parse, so the
+     * only one that needs the size guard — see {@see RequestSizeLimit} for why
+     * an oversized upload otherwise arrives looking like an empty request.
+     */
+    public function behaviors(): array
+    {
+        $behaviors = parent::behaviors();
+        $behaviors['requestSizeLimit'] = [
+            'class' => RequestSizeLimit::class,
+            'only' => ['create'],
+        ];
+
+        return $behaviors;
+    }
 
     /**
      * Photos are always listed within their album; there is no flat

@@ -734,6 +734,10 @@ paths:
         `jpg, jpeg, png, webp, gif, avif`. Every upload is converted to WebP
         quality 80, scaled to fit 500×500 preserving aspect ratio (never
         upscaled). A non-image passing the extension check → 422.
+
+        The file may be at most 10485760 bytes. A larger one is refused with
+        `413` and `error_code: payload.too_large` — not a `422`, because the
+        body is the problem and resending it unchanged cannot succeed.
       requestBody:
         required: true
         content:
@@ -761,6 +765,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
         '422': { $ref: '#/components/responses/ValidationError' }
 
   /photos/{id}:
@@ -1074,6 +1079,13 @@ components:
       content:
         application/json:
           schema: { $ref: '#/components/schemas/ValidationErrorEnvelope' }
+    PayloadTooLarge:
+      description: >
+        The request body exceeds the server limit (`error_code: payload.too_large`).
+        Distinct from `422`: the body itself is at fault, so resending it unchanged cannot succeed.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
     TooManyRequests:
       description: Rate limit exceeded (see the `Retry-After` header).
       headers:
