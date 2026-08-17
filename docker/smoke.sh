@@ -30,6 +30,13 @@ trap cleanup EXIT
 
 step() { printf '\n\033[1m→ %s\033[0m\n' "$1"; }
 
+# Generated per run rather than written down. Nothing here needs a fixed value —
+# the container is thrown away at the end of the script — and a literal that
+# looks like a credential is a literal a secret scanner has to be told to
+# ignore, which is a habit worth not starting.
+JWT_SECRET=$(openssl rand -hex 32)
+COOKIE_KEY=$(openssl rand -hex 16)
+
 step "Starting MySQL and the image under test"
 docker network create "$NETWORK" >/dev/null
 docker run -d --name "$DB" --network "$NETWORK" \
@@ -41,8 +48,8 @@ docker run -d --name "$DB" --network "$NETWORK" \
 docker run -d --name "$WEB" --network "$NETWORK" -p "${PORT}:80" \
     -e DB_HOST="$DB" -e DB_NAME=smoke -e DB_USER=root -e DB_PASSWORD=root \
     -e BASE_URL="$BASE" \
-    -e COOKIE_VALIDATION_KEY=smoke-cookie-validation-key-0123456789 \
-    -e JWT_SECRET=smoke-jwt-secret-at-least-32-characters-long \
+    -e COOKIE_VALIDATION_KEY="$COOKIE_KEY" \
+    -e JWT_SECRET="$JWT_SECRET" \
     -e JWT_TTL=3600 \
     -e DEFAULT_PASSWORD=123456 \
     -e LOGIN_RATE_LIMIT_ATTEMPTS=100 -e LOGIN_RATE_LIMIT_WINDOW=60 \

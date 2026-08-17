@@ -30,6 +30,22 @@ class JsonLogTarget extends Target
      */
     public string $stream = 'php://stderr';
 
+    /**
+     * Yii's `Target` appends a dump of $_GET/$_POST/$_SERVER to every logged
+     * error by default. In a container the environment *is* the configuration,
+     * so that dump writes JWT_SECRET, DB_PASSWORD and COOKIE_VALIDATION_KEY
+     * into the log stream on every failure.
+     *
+     * Overridden here rather than in `config/web.php` so it holds wherever this
+     * target is used, including a config nobody remembered to write. (It also
+     * belongs on the *target*: setting it on the `log` component is a
+     * `yii\log\Dispatcher` property that does not exist, and the application
+     * refuses to boot.)
+     *
+     * @var array
+     */
+    public $logVars = [];
+
     public function __construct(
         private readonly CorrelationIdInterface $correlationId,
         $config = []

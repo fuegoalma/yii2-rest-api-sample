@@ -44,11 +44,6 @@ $config = [
             'class' => 'yii\caching\FileCache',
         ],
         'log' => [
-            // Yii appends a dump of $_GET/$_POST/$_SERVER to every logged
-            // error by default. In a container the environment *is* the
-            // configuration, so that dump writes JWT_SECRET, DB_PASSWORD and
-            // COOKIE_VALIDATION_KEY into the log stream on every failure.
-            'logVars' => [],
             'targets' => [
                 [
                     // same structured target as the web app: `docker compose logs worker`

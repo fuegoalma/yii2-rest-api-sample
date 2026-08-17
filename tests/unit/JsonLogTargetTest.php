@@ -118,6 +118,16 @@ final class JsonLogTargetTest extends BaseUnitTest
         $this->assertNull($line['route']);
     }
 
+    /**
+     * Yii's default is to append $_GET/$_POST/$_SERVER to every logged error.
+     * In a container the environment *is* the configuration, so that default
+     * writes JWT_SECRET and DB_PASSWORD into the log stream on every failure.
+     */
+    public function testTheEnvironmentIsNeverAppendedToALoggedError(): void
+    {
+        $this->assertSame([], $this->target()->logVars);
+    }
+
     /** @return array<string, mixed> the single exported line, decoded */
     private function exportOne(mixed $text, int $level, string $category): array
     {

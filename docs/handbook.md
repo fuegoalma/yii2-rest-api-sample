@@ -439,8 +439,8 @@ Both return the same shape (register responds with `201`, login with `200`):
 {
     "success": true,
     "data": {
-        "access_token": "eyJ0eXAiOiJKV1Qi...",
-        "refresh_token": "eyJ0eXAiOiJKV1Qi...",
+        "access_token": "<a signed JWT>",
+        "refresh_token": "<an opaque random string, not a JWT>",
         "token_type": "Bearer",
         "expires_in": 3600
     },
