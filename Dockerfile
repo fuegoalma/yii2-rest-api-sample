@@ -49,6 +49,14 @@ RUN sed -i 's|DocumentRoot /var/www/html|DocumentRoot /var/www/html/web|g' \
 </Directory>\n' > /etc/apache2/conf-available/yii2.conf \
     && a2enconf yii2
 
+# PHP runtime configuration. The official image ships *no* php.ini, so without
+# this the runtime falls back to PHP's compiled-in defaults — display_errors
+# among them, which in production prints internals into the response body. The
+# production baseline is installed here and stage-specific files layer on top;
+# `zz-` sorts after the docker-php-ext-*.ini files so these win.
+COPY docker/php/app.ini /usr/local/etc/php/conf.d/zz-app.ini
+RUN mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
+
 # Composer (from the official composer image), available for both stages.
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
@@ -61,8 +69,14 @@ WORKDIR /var/www/html
 # fast and reproducible. Apache's default CMD (apache2-foreground) is inherited.
 FROM base AS dev
 
+# Visible errors, and an opcache that notices edits under the bind mount.
+COPY docker/php/dev.ini /usr/local/etc/php/conf.d/zzz-dev.ini
+
 # ---- prod: self-contained deployable image --------------------------------
 FROM base AS prod
+
+# Immutable code: opcache stops revalidating, caches get production sizes.
+COPY docker/php/prod.ini /usr/local/etc/php/conf.d/zzz-prod.ini
 
 # Install production dependencies first (better layer caching), no dev tooling.
 # --no-scripts skips Yii's postInstall (cookie-key generation) — the key comes

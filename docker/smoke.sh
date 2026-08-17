@@ -86,6 +86,17 @@ done
 step "GET /health reports the database is reachable"
 grep -q '"status":"ok"' <<< "$(curl -fsS "${BASE}/health")"
 
+# The image used to ship no php.ini at all, so the runtime ran on PHP's
+# compiled-in defaults and would have printed internals on a fatal error.
+step "The runtime is configured for production"
+PHP_SETTINGS=$(docker exec "$WEB" php -r \
+    'echo "ini=", (php_ini_loaded_file() ?: "NONE"),
+           " display_errors=", (ini_get("display_errors") ?: "0"),
+           " validate_timestamps=", ini_get("opcache.validate_timestamps");')
+grep -qv 'ini=NONE' <<< "$PHP_SETTINGS"
+grep -q 'display_errors=0' <<< "$PHP_SETTINGS"
+grep -q 'validate_timestamps=0' <<< "$PHP_SETTINGS"
+
 step "GET /docs/openapi.yaml serves the published spec"
 grep -q '^openapi:' <<< "$(curl -fsS "${BASE}/docs/openapi.yaml")"
 
