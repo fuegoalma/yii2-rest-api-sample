@@ -1,7 +1,12 @@
 {
     "name": "yiisoft/yii2-app-basic",
     "description": "Yii 2 Basic Project Template",
-    "keywords": ["yii2", "framework", "basic", "project template"],
+    "keywords": [
+        "yii2",
+        "framework",
+        "basic",
+        "project template"
+    ],
     "homepage": "https://www.yiiframework.com/",
     "type": "project",
     "license": "BSD-3-Clause",
@@ -36,11 +41,13 @@
         "codeception/module-db": "^3.2",
         "friendsofphp/php-cs-fixer": "^3.95",
         "phpstan/phpstan": "^2.2",
-        "symfony/yaml": "^8.1"
+        "symfony/yaml": "^8.1",
+        "captainhook/captainhook": "^5.29"
     },
     "config": {
         "allow-plugins": {
-            "yiisoft/yii2-composer" : true
+            "yiisoft/yii2-composer": true,
+            "captainhook/captainhook": false
         },
         "process-timeout": 1800,
         "fxp-asset": {
@@ -49,7 +56,8 @@
     },
     "scripts": {
         "post-install-cmd": [
-            "yii\\composer\\Installer::postInstall"
+            "yii\\composer\\Installer::postInstall",
+            "@php vendor/bin/captainhook install --force --skip-existing --no-interaction || true"
         ],
         "post-create-project-cmd": [
             "yii\\composer\\Installer::postCreateProject",

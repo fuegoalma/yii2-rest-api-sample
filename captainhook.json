@@ -1,0 +1,61 @@
+{
+    "commit-msg": {
+        "enabled": true,
+        "actions": [
+            {
+                "action": "\\CaptainHook\\App\\Hook\\Message\\Action\\Regex",
+                "options": {
+                    "regex": "#^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\\(.+\\))?!?: .+#",
+                    "error": "Conventional Commits: '<type>[(scope)][!]: <subject>'. Types: build, chore, ci, docs, feat, fix, perf, refactor, revert, style, test."
+                }
+            },
+            {
+                "action": "\\CaptainHook\\App\\Hook\\Message\\Action\\Rules",
+                "options": [
+                    "\\CaptainHook\\App\\Hook\\Message\\Rule\\MsgNotEmpty",
+                    [
+                        "\\CaptainHook\\App\\Hook\\Message\\Rule\\LimitSubjectLength",
+                        [
+                            72
+                        ]
+                    ],
+                    "\\CaptainHook\\App\\Hook\\Message\\Rule\\NoPeriodOnSubjectEnd",
+                    "\\CaptainHook\\App\\Hook\\Message\\Rule\\SeparateSubjectFromBodyWithBlankLine",
+                    [
+                        "\\CaptainHook\\App\\Hook\\Message\\Rule\\LimitBodyLineLength",
+                        [
+                            80
+                        ]
+                    ]
+                ]
+            }
+        ]
+    },
+    "pre-commit": {
+        "enabled": true,
+        "actions": [
+            {
+                "action": "docker compose exec -T web php vendor/bin/php-cs-fixer fix --dry-run --diff {$STAGED_FILES|of-type:php}",
+                "conditions": [
+                    {
+                        "exec": "\\CaptainHook\\App\\Hook\\Condition\\FileStaged\\OfType",
+                        "args": [
+                            "php"
+                        ]
+                    }
+                ]
+            }
+        ]
+    },
+    "pre-push": {
+        "enabled": true,
+        "actions": [
+            {
+                "action": "docker compose exec -T web php vendor/bin/phpstan analyse --no-progress --memory-limit=512M"
+            },
+            {
+                "action": "docker compose exec -T web php vendor/bin/codecept run"
+            }
+        ]
+    }
+}

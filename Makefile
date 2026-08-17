@@ -8,7 +8,7 @@ WEB := $(DC) exec -T web
         refresh-token-prune rbac-assign \
         test test-unit test-functional test-one test-contract build \
         coverage coverage-html \
-        cs-check cs-fix stan check
+        cs-check cs-fix stan check audit hooks-install
 
 help:
 	@echo "Available targets:"
@@ -39,6 +39,8 @@ help:
 	@echo "  cs-fix               Auto-fix PSR-12 code style violations"
 	@echo "  stan                 Run PHPStan static analysis"
 	@echo "  check                cs-check + stan + coverage — what CI runs"
+	@echo "  audit                Report known advisories in the installed dependencies"
+	@echo "  hooks-install        Install the git hooks (commit-msg, pre-commit, pre-push)"
 
 init:
 	./init.sh
@@ -139,3 +141,16 @@ stan:
 # Keep this list in step with .github/workflows/ci.yml — they must stay runnable
 # both ways.
 check: cs-check stan coverage
+
+# What .github/workflows/security.yml blocks on. Runtime dependencies only:
+# what ships is what has to be clean, and a dev-tool advisory with no upstream
+# fix would otherwise wedge every unrelated change.
+audit:
+	$(WEB) composer audit --locked --no-dev --no-interaction
+
+# Runs on the HOST, not in the container: git hooks are host processes, and the
+# hook scripts CaptainHook writes have to be executable where git runs them.
+# The heavy tools they call are still invoked through `docker compose exec`.
+# Also run automatically after `composer install` (see composer.json scripts).
+hooks-install:
+	php vendor/bin/captainhook install --force --no-interaction

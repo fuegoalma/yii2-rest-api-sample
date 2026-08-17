@@ -1,0 +1,69 @@
+name: Security
+
+# A different question from the gates in CI: those ask whether the code is well
+# formed and does what it says, this one asks what we are shipping alongside it
+# and whether anything secret has leaked into the history.
+#
+# CodeQL has no PHP analyzer, so the equivalent here is the supply chain plus a
+# secret scan — which is the risk that actually applies to this repository,
+# where a leaked JWT_SECRET would forge access tokens for every account.
+on:
+  push:
+    branches: [master]
+  pull_request:
+  schedule:
+    # Weekly: an advisory published against unchanged code is exactly what a
+    # commit-triggered run can never catch.
+    - cron: '0 6 * * 1'
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: Dependency advisories
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP 8.5
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          tools: composer:v2
+          coverage: none
+
+      # No install needed: `composer audit` reads composer.lock, and skipping
+      # the install keeps this job honest about what would actually ship.
+      #
+      # What ships is what has to be clean: an advisory against a runtime
+      # dependency fails the build.
+      - name: Audit runtime dependencies
+        run: composer audit --locked --no-dev --no-interaction
+
+      # Build-time tooling is reported but does not block. A static analyser
+      # that only ever reads our own source is a different risk from code
+      # running in production, and a transitive advisory with no upstream fix
+      # would otherwise wedge every unrelated pull request.
+      - name: Audit build tooling (advisory)
+        run: composer audit --locked --no-interaction || true
+
+  secrets:
+    name: Leaked secrets
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # gitleaks scans history, not just the tip — a secret deleted in a
+          # later commit is still published.
+          fetch-depth: 0
+
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

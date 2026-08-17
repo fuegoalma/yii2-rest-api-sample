@@ -1,0 +1,28 @@
+version: 2
+
+updates:
+  # Application dependencies. Grouped so a week's patches arrive as one pull
+  # request instead of a dozen — each still has to pass the same CI gates.
+  - package-ecosystem: composer
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      tooling:
+        patterns: ['friendsofphp/php-cs-fixer', 'phpstan/*', 'captainhook/*']
+      testing:
+        patterns: ['codeception/*', 'phpunit/*']
+
+  # The workflows pin actions by major version, so this is what keeps them from
+  # silently ageing onto a deprecated runner.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+
+  # The base images in the multi-stage Dockerfile (php:8.5-apache, composer:2).
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly

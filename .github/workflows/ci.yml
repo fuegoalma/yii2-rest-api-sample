@@ -72,6 +72,12 @@ jobs:
       - name: Install dependencies
         run: composer install --no-interaction --prefer-dist --no-progress
 
+      # --- supply chain: what ships has to be clean before anything else runs ---
+      # Keep in step with `make audit`. The full picture (dev tooling, secret
+      # scan, weekly cron) is .github/workflows/security.yml.
+      - name: Audit runtime dependencies
+        run: composer audit --locked --no-dev --no-interaction
+
       # --- static gates first: fast feedback, no database needed ---
       - name: Code style (PHP CS Fixer)
         run: vendor/bin/php-cs-fixer fix --dry-run --diff
