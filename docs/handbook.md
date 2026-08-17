@@ -632,6 +632,37 @@ change to `RateLimiter`, which depends on `yii\caching\CacheInterface`.
 
 ---
 
+## Indexes and what they are for
+
+Every index here was checked with `EXPLAIN` against seeded data (~1 600 albums, 64 000 photos)
+rather than assumed. Two results are worth writing down, because both contradict what the schema
+looks like at a glance:
+
+| Query | Index used | Rows examined |
+| --- | --- | --- |
+| `GET /albums/my` (`user_id` + `is_deleted = 0`) | `user_id` | 40 of 1 603 |
+| review queue (`?is_deleted=1`) | `idx_album_is_deleted` | 16 of 1 603 |
+| photos of one album | `album_id` | 40 |
+| `?title=` partial search | **none possible** | full scan |
+
+**`idx_album_is_deleted` looks like a useless index on a boolean and is not.** Selectivity runs the
+other way from the column's cardinality: soft-deleted albums are *rare*, so `is_deleted = 1` — the
+review queue, the query the index exists for — is exactly the selective case. For `is_deleted = 0`
+the optimizer gains nothing, and loses nothing either.
+
+**A composite `(user_id, is_deleted)` was measured and rejected.** With the albums-per-user counts
+this API produces, the optimizer prefers the narrower `user_id` index and ignores the composite when
+both are present. It would be an index carried, maintained on every write, and never chosen.
+
+**Partial search cannot be indexed and is not.** `?title=` becomes `LIKE '%term%'`, and a leading
+wildcard rules out a B-tree — `EXPLAIN` reports no possible key. That is a deliberate limit, not an
+oversight: `FULLTEXT` with `MATCH … AGAINST` would index it, but it matches whole words rather than
+substrings, so `?title=lbum` would stop working. At this scale the scan is cheaper than the change
+in behaviour; at a scale where it is not, the fix is a search index rather than a different SQL
+operator.
+
+---
+
 ## Authorization (RBAC)
 
 Authentication proves *who* you are; authorization decides *what* you may do. Access control here is **flat** — there is no role hierarchy or inheritance. A **role** is just a named set of permissions, a user may hold **several** roles, and their effective permissions are the **union** of all of them. A caller lacking a permission gets a `403`.
