@@ -19,8 +19,6 @@ use yii\web\IdentityInterface;
  * @property string $first_name
  * @property string $last_name
  * @property string $email
- * @property null|string $auth_key
- * @property null|string $access_token
  * @property string $password_hash
  * @property string $created_at
  * @property string $updated_at
@@ -48,7 +46,6 @@ class User extends ActiveRecord implements IdentityInterface, OwnableInterface
             [['email'], 'string', 'max' => 255],
             [['email'], 'email'],
             [['email'], 'unique'],
-            [['auth_key', 'access_token'], 'string', 'max' => 32],
             [['password_hash'], 'string', 'max' => 60],
         ];
     }
@@ -60,8 +57,6 @@ class User extends ActiveRecord implements IdentityInterface, OwnableInterface
             'first_name' => 'First Name',
             'last_name' => 'Last Name',
             'email' => 'Email',
-            'auth_key' => 'Auth Key',
-            'access_token' => 'Access Token',
             'password_hash' => 'Password Hash',
             'created_at' => 'Created At',
             'updated_at' => 'Updated At',
@@ -87,9 +82,20 @@ class User extends ActiveRecord implements IdentityInterface, OwnableInterface
         ];
     }
 
+    /**
+     * Required by {@see IdentityInterface}, unreachable here.
+     *
+     * Yii calls this only from `loginByCookie()` and `renewAuthStatus()`, which
+     * need `enableAutoLogin` and `enableSession` respectively — both false in
+     * config/web.php, because authentication is a stateless bearer token. There
+     * is no stored key to compare against, so nothing can match.
+     *
+     * Reviving session-based login means adding both the storage and a real
+     * comparison. Returning true here would authenticate anyone.
+     */
     public function validateAuthKey($authKey): bool
     {
-        return $this->auth_key === $authKey;
+        return false;
     }
 
     public function validatePassword(string $password): bool
@@ -129,9 +135,10 @@ class User extends ActiveRecord implements IdentityInterface, OwnableInterface
         return $this->id;
     }
 
+    /** @see validateAuthKey() — there is no auth key under stateless auth. */
     public function getAuthKey(): ?string
     {
-        return $this->auth_key;
+        return null;
     }
 
     /**

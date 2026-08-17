@@ -311,6 +311,11 @@ class UsersCest extends BaseCest
         ]);
     }
 
+    /**
+     * The password hash is the one server-managed field a client could hope to
+     * set: supplying it directly would mean choosing the stored credential
+     * without ever proving knowledge of a password.
+     */
     public function testCreateIgnoresServerManagedFields(FunctionalTester $I): void
     {
         $I->sendPost('/users', [
@@ -318,16 +323,12 @@ class UsersCest extends BaseCest
             'last_name'     => 'User',
             'email'         => 'sneaky.user@example.com',
             'password'      => 'secret123',
-            'auth_key'      => 'client-supplied-key',
-            'access_token'  => 'client-supplied-token',
             'password_hash' => '$2y$13$client-supplied-hash',
         ]);
 
         $I->seeResponseCodeIs(201);
 
         $row = $this->grabFromTable('user', ['first_name' => 'Sneaky']);
-        Assert::assertNull($row['auth_key']);
-        Assert::assertNull($row['access_token']);
         // the stored hash comes from 'password', never from the client-supplied hash
         Assert::assertNotSame('$2y$13$client-supplied-hash', $row['password_hash']);
         Assert::assertTrue(

@@ -22,21 +22,24 @@ class UserIdentityTest extends BaseUnitTest
         $this->assertSame(42, $user->getId());
     }
 
-    public function testGetAuthKeyReturnsTheStoredKey(): void
+    /**
+     * `IdentityInterface` demands these two, but only Yii's cookie and session
+     * paths ever call them, and both are switched off (`enableSession` and
+     * `enableAutoLogin` are false in config/web.php). There is no auth key to
+     * return and nothing that could present one, so they answer accordingly:
+     * no key, and never a match.
+     *
+     * The columns that used to back them are gone. Anything reviving
+     * session-based login has to add both the storage and a real comparison —
+     * a `validateAuthKey()` that returned true here would authenticate anyone.
+     */
+    public function testTheCookieSessionMembersAreInertUnderStatelessAuth(): void
     {
         $user = new User();
-        $user->auth_key = 'the-key';
 
-        $this->assertSame('the-key', $user->getAuthKey());
-    }
-
-    public function testValidateAuthKeyAcceptsOnlyTheStoredKey(): void
-    {
-        $user = new User();
-        $user->auth_key = 'the-key';
-
-        $this->assertTrue($user->validateAuthKey('the-key'));
-        $this->assertFalse($user->validateAuthKey('another-key'));
+        $this->assertNull($user->getAuthKey());
+        $this->assertFalse($user->validateAuthKey('any-key'));
+        $this->assertFalse($user->validateAuthKey(''));
     }
 
     public function testFindIdentityResolvesAPersistedUser(): void
