@@ -6,11 +6,13 @@ namespace app\models\service;
 
 use app\components\ImageStorage;
 use app\models\contract\repository\AlbumRepositoryInterface;
+use app\models\contract\queue\QueueInterface;
 use app\models\contract\repository\PhotoRepositoryInterface;
 use app\models\contract\service\PhotoServiceInterface;
 use app\models\db\Album;
 use app\models\db\Photo;
 use app\models\dto\SearchCriteria;
+use app\models\jobs\DeletePhotoFileJob;
 use app\models\service\basic\BaseCrudService;
 use yii\base\Exception as BaseException;
 use yii\data\ActiveDataProvider;
@@ -24,6 +26,7 @@ readonly class PhotoService extends BaseCrudService implements PhotoServiceInter
         PhotoRepositoryInterface $repository,
         private AlbumRepositoryInterface $albumRepository,
         private ImageStorage $imageStorage,
+        private QueueInterface $queue,
     ) {
         parent::__construct($repository);
     }
@@ -91,7 +94,14 @@ readonly class PhotoService extends BaseCrudService implements PhotoServiceInter
     }
 
     /**
-     * Deletes the record together with its stored image file.
+     * Deletes the record and hands its stored file to the queue.
+     *
+     * The file is not removed inline. Once the row is committed the deletion has
+     * happened as far as any caller can tell, so a filesystem error afterwards
+     * would answer 500 for an operation that succeeded — and a client retrying
+     * that 500 gets a 404. Queueing the cleanup lets the response say what is
+     * true and lets the file be retried; it is also the route the album teardown
+     * already takes, so there is one answer to "who removes the bytes".
      *
      * @throws NotFoundHttpException
      * @throws \Throwable
@@ -102,6 +112,6 @@ readonly class PhotoService extends BaseCrudService implements PhotoServiceInter
         $photo = $this->findOrFail($id);
 
         $this->repository->delete($photo);
-        $this->imageStorage->delete((string) $photo->album_id, $photo->file_name);
+        $this->queue->push(new DeletePhotoFileJob((string) $photo->album_id, (string) $photo->file_name));
     }
 }

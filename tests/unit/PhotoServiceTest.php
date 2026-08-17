@@ -5,10 +5,13 @@ declare(strict_types=1);
 namespace tests\unit;
 
 use app\components\ImageStorage;
+use app\models\contract\queue\JobInterface;
+use app\models\contract\queue\QueueInterface;
 use app\models\db\Photo;
 use app\models\dto\SearchCriteria;
 use app\models\contract\repository\AlbumRepositoryInterface;
 use app\models\contract\repository\PhotoRepositoryInterface;
+use app\models\jobs\DeletePhotoFileJob;
 use app\models\service\PhotoService;
 use PHPUnit\Framework\MockObject\Exception;
 use yii\base\Exception as BaseException;
@@ -23,6 +26,7 @@ class PhotoServiceTest extends BaseUnitTest
     private PhotoRepositoryInterface $photoRepository;
     private AlbumRepositoryInterface $albumRepository;
     private ImageStorage $imageStorage;
+    private QueueInterface $queue;
 
     /**
      * @throws Exception
@@ -33,10 +37,12 @@ class PhotoServiceTest extends BaseUnitTest
         $this->photoRepository = $this->createMock(PhotoRepositoryInterface::class);
         $this->albumRepository = $this->createMock(AlbumRepositoryInterface::class);
         $this->imageStorage = $this->createMock(ImageStorage::class);
+        $this->queue = $this->createMock(QueueInterface::class);
         $this->service = new PhotoService(
             $this->photoRepository,
             $this->albumRepository,
             $this->imageStorage,
+            $this->queue,
         );
     }
 
@@ -129,7 +135,19 @@ class PhotoServiceTest extends BaseUnitTest
      * @throws NotFoundHttpException
      * @throws \Throwable
      */
-    public function testDeleteRemovesRecordAndFile(): void
+    /**
+     * The row goes now, the file goes through the queue.
+     *
+     * Deleting the file inline made a filesystem error answer 500 for an
+     * operation that had already succeeded — the row was committed, so a client
+     * that retried got a 404 for something it had just been told failed. The
+     * queue lets the response be honest and the cleanup be retried, and it is
+     * the same route the album teardown already takes.
+     *
+     * @throws NotFoundHttpException
+     * @throws \Throwable
+     */
+    public function testDeleteRemovesTheRecordAndEnqueuesTheFile(): void
     {
         $photo = new Photo();
         $photo->id = 1;
@@ -139,7 +157,16 @@ class PhotoServiceTest extends BaseUnitTest
 
         $this->photoRepository->method('findById')->with(1)->willReturn($photo);
         $this->photoRepository->expects($this->once())->method('delete')->with($photo)->willReturn(true);
-        $this->imageStorage->expects($this->once())->method('delete')->with('5', 'p.webp');
+        // never inline — that is the whole point
+        $this->imageStorage->expects($this->never())->method('delete');
+
+        $this->queue->expects($this->once())
+            ->method('push')
+            ->with($this->callback(static function (JobInterface $job): bool {
+                return $job instanceof DeletePhotoFileJob
+                    && $job->subDir === '5'
+                    && $job->fileName === 'p.webp';
+            }));
 
         $this->service->delete(1);
     }
