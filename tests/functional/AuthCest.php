@@ -463,6 +463,34 @@ class AuthCest extends BaseCest
         $this->exhaustLoginAttempts($I, $maxAttempts);
     }
 
+    /**
+     * The rate limiter buckets by client IP, so whether `X-Forwarded-For` is
+     * believed decides whether the limit means anything. Yii only honours it
+     * from a host listed in `trustedHosts`, which is empty unless a deployment
+     * behind a proxy sets TRUSTED_PROXIES — so an arbitrary caller cannot mint
+     * a fresh budget for every attempt by rotating the header.
+     *
+     * @throws Exception
+     * @throws \yii\base\Exception
+     */
+    public function testRateLimitCannotBeSteppedAroundWithAForwardedForHeader(FunctionalTester $I): void
+    {
+        $this->createLoginUser();
+        $I->deleteHeader('Authorization');
+
+        $this->exhaustLoginAttempts($I, $this->maxLoginAttempts());
+
+        // a new "client address" on every request, if the header were believed
+        $I->haveHttpHeader('X-Forwarded-For', '203.0.113.' . random_int(1, 254));
+        $I->sendPost('/auth/login', [
+            'email'    => self::LOGIN_EMAIL,
+            'password' => self::LOGIN_PASSWORD,
+        ]);
+        $I->deleteHeader('X-Forwarded-For');
+
+        $I->seeResponseCodeIs(429);
+    }
+
     private function exhaustLoginAttempts(FunctionalTester $I, int $count): void
     {
         for ($i = 0; $i < $count; $i++) {

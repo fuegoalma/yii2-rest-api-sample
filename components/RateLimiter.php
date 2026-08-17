@@ -67,6 +67,15 @@ class RateLimiter extends ActionFilter
         return parent::afterAction($action, $result);
     }
 
+    /**
+     * The bucket is per action and per client address.
+     *
+     * `userIP` is only as trustworthy as the `trustedHosts` setting on the
+     * request component (see config/web.php): with none configured it is the
+     * peer address and `X-Forwarded-For` is ignored, which is what stops a
+     * caller resetting their own budget by rotating the header. Behind a proxy
+     * that address is the proxy's, and TRUSTED_PROXIES is what fixes it.
+     */
     private function cacheKey(Action $action): string
     {
         return implode(':', [self::class, $action->getUniqueId(), Yii::$app->request->userIP ?? 'unknown']);

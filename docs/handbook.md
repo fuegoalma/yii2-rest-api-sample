@@ -564,6 +564,29 @@ curl -i -X POST http://localhost:8084/auth/login \
 # Retry-After: 60
 ```
 
+### Which address counts as "the client"
+
+Everything above rests on `Yii::$app->request->userIP`, and that is a configuration decision, not a
+fact. Yii believes `X-Forwarded-For` only from a host listed in the request component's
+`trustedHosts`, which this application fills from **`TRUSTED_PROXIES`** (empty by default).
+
+| Deployment | `TRUSTED_PROXIES` | What the limiter counts |
+| --- | --- | --- |
+| Exposed directly | empty | the peer address — correct |
+| Behind a load balancer | **must list the balancer** | otherwise the balancer's own address: every caller shares one budget, and a single attacker locks out everybody |
+| Anything | never `0.0.0.0/0` | a header believed from anyone lets a caller reset their own limit by rotating it |
+
+The last row is covered by a test — `AuthCest::testRateLimitCannotBeSteppedAroundWithAForwardedForHeader`
+keeps a `429` in place across a rotating `X-Forwarded-For`, so widening this setting fails the build
+rather than quietly disabling the protection.
+
+### Known limit
+
+The counters live in the `cache` component, which is a `FileCache` — per container. Run more than
+one web container and each keeps its own tally, so the effective limit multiplies by the number of
+replicas. A shared store (Redis, Memcached) is a one-line change to the `cache` component and no
+change to `RateLimiter`, which depends on `yii\caching\CacheInterface`.
+
 ---
 
 ## Authorization (RBAC)
