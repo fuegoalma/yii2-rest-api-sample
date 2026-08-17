@@ -4,9 +4,20 @@ declare(strict_types=1);
 
 $baseUrl = getenv('BASE_URL') ?: 'http://localhost';
 
+// Origins a browser may call the API from. The default stays '*' — this is a
+// public, token-authenticated API with no cookies, so a wildcard costs nothing
+// — but it belongs in configuration rather than in a trait shared by every
+// controller, so a deployment that does put a browser secret nearby can narrow
+// it without touching code.
+$corsOrigins = array_values(array_filter(array_map(
+    'trim',
+    explode(',', (string) getenv('CORS_ALLOWED_ORIGINS'))
+))) ?: ['*'];
+
 return [
     'version' => '1.0.0',
     'base_url' => $baseUrl,
+    'cors_allowed_origins' => $corsOrigins,
     // filesystem base for uploaded photos; each album gets its own subdirectory
     'photo_upload_path' => '@webroot/uploads/albums',
     // Upload encoding. These are a published API contract (see the photo upload

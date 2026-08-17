@@ -47,11 +47,14 @@ trait ApiControllerTrait
             'application/json' => Response::FORMAT_JSON,
         ];
 
-        // setting up CORS
+        // setting up CORS. The origin list is read from params with no fallback
+        // here on purpose: a binding that has gone dead must fail loudly rather
+        // than silently restore a wildcard nobody chose (the rule ADR 10 states
+        // for the encoder's bounding box, applied to a security setting).
         $behaviors['corsFilter'] = [
             'class' => Cors::class,
             'cors' => [
-                'Origin' => ['*'],
+                'Origin' => Yii::$app->params['cors_allowed_origins'],
                 'Access-Control-Request-Method' => ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'],
                 'Access-Control-Request-Headers' => ['*'],
                 'Access-Control-Allow-Credentials' => false,

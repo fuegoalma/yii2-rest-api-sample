@@ -33,6 +33,38 @@ make sh        # open a shell inside the web container
 make rebuild   # rebuild the web image via Buildx (after editing the Dockerfile)
 ```
 
+### Startup order
+
+`db` declares a `healthcheck` and the other three services depend on it with `condition:
+service_healthy`. Plain `depends_on` waits only for the container to *start*, which for MySQL is
+several seconds before it accepts a connection — long enough for `web` and `worker` to come up
+against a database that is not there yet.
+
+### PHP configuration
+
+The official image ships **no `php.ini`**, so without one the runtime falls back to PHP's
+compiled-in defaults — `display_errors` among them. The `base` stage installs `php.ini-production`
+plus [`docker/php/app.ini`](../docker/php/app.ini) (`expose_php` off, 256M memory, 10M/12M upload
+limits), and each stage layers its own file on top:
+
+| | `dev` | `prod` |
+| --- | --- | --- |
+| `display_errors` | on — a fatal escaping Yii's handler should be visible | off |
+| `opcache.validate_timestamps` | 1 — code is bind-mounted and changes | 0 — code is baked in, so there is nothing to revalidate |
+| opcache / realpath cache sizes | defaults | sized for the full Yii tree |
+
+`docker/smoke.sh` asserts the production image loads an ini, hides errors and does not revalidate.
+
+### Database privileges
+
+`DB_USER` is the account the **application** connects with, and `setup.sh` creates it with rights on
+the two application databases only — no `CREATE USER`, no `GRANT`, no access to `mysql` or any other
+schema. Migrations run as this user, so DDL on those two databases is included; anything above that
+needs `DB_ROOT_PASSWORD`, which only `setup.sh` uses.
+
+Setting `DB_USER=root` keeps the older single-account behaviour, and `setup.sh` then skips creating a
+separate user.
+
 ---
 
 ## File Storage
@@ -85,7 +117,18 @@ the header, then repeat with `If-None-Match` and assert the `304` still carries 
 
 ## CORS
 
-Cross-origin requests are allowed from anywhere. The filter is attached to every REST controller by [`ApiControllerTrait`](../controllers/basic/ApiControllerTrait.php): `Origin: *`, all standard methods (`GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD`, `OPTIONS`), all request headers, credentials **off**, and a 24-hour preflight cache (`Access-Control-Max-Age: 86400`).
+The filter is attached to every REST controller by [`ApiControllerTrait`](../controllers/basic/ApiControllerTrait.php): all standard methods (`GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD`, `OPTIONS`), all request headers, credentials **off**, and a 24-hour preflight cache (`Access-Control-Max-Age: 86400`).
+
+The allowed origins come from **`CORS_ALLOWED_ORIGINS`** (comma-separated), which defaults to `*`.
+A wildcard is the right answer here — the API is token-authenticated and sets no cookies, so a
+browser reading it cross-origin still needs a token it does not have — but it is a per-deployment
+decision, so it lives in `config/params.php` rather than in a trait shared by every controller.
+`ApiControllerTrait` reads that param **without a fallback**: wiring that has gone dead must fail
+loudly rather than silently restore a wildcard nobody chose.
+
+Credentials stay off regardless. `Origin: *` with `Allow-Credentials: true` is a combination
+browsers reject anyway, and with a narrowed origin list it is the point at which a wildcard would
+stop being merely permissive.
 
 `OPTIONS` preflights are deliberately exempt from everything that could reject them:
 

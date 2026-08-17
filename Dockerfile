@@ -92,4 +92,11 @@ COPY . .
 RUN chown -R www-data:www-data runtime web/assets web/uploads \
     && chmod -R 775 runtime web/assets web/uploads
 
+# The application already answers /health with a real database check; this is
+# what makes an orchestrator act on it — a container whose PHP is up but whose
+# database is unreachable is not ready to take traffic, and without a
+# HEALTHCHECK nothing but a caller would ever find out.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD php -r 'exit(@file_get_contents("http://127.0.0.1/health") !== false ? 0 : 1);'
+
 EXPOSE 80
