@@ -88,6 +88,38 @@ class AuthServiceTest extends BaseUnitTest
     }
 
     /**
+     * Rejecting an unknown address without hashing anything makes the response
+     * time an oracle: a real account costs a bcrypt verify (~140 ms here), a
+     * made-up one returns in microseconds. That difference is measurable across
+     * the network and turns the login endpoint into an "is this person
+     * registered?" lookup — enumerable from many addresses, so the per-IP rate
+     * limit does not close it.
+     *
+     * The bound is deliberately far below one bcrypt round and far above a
+     * short-circuit, which is a gap of several orders of magnitude: the
+     * assertion is "work was done", not "exactly this much time".
+     */
+    public function testLoginSpendsTheSameWorkOnAnUnknownEmail(): void
+    {
+        $this->repositoryMock->method('findByEmail')->willReturn(null);
+
+        $started = microtime(true);
+
+        try {
+            $this->service->login('unknown@example.com', 'secret123');
+            $this->fail('an unknown email should not authenticate');
+        } catch (UnauthorizedHttpException) {
+            // expected — the timing is what is under test
+        }
+
+        $this->assertGreaterThan(
+            0.01,
+            microtime(true) - $started,
+            'login returned too quickly for an unknown email, leaking that the account does not exist'
+        );
+    }
+
+    /**
      * @throws \yii\base\Exception
      */
     public function testLoginThrowsUnauthorizedForWrongPassword(): void

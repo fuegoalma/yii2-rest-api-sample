@@ -31,7 +31,13 @@ readonly class AuthService implements AuthServiceInterface
     {
         $user = $this->repository->findByEmail($email);
 
-        if ($user === null || !$user->validatePassword($password)) {
+        if ($user === null) {
+            $this->burnPasswordHashingTime($password);
+
+            throw new UnauthorizedException('Invalid email or password.', 'auth.invalid_credentials');
+        }
+
+        if (!$user->validatePassword($password)) {
             throw new UnauthorizedException('Invalid email or password.', 'auth.invalid_credentials');
         }
 
@@ -83,6 +89,29 @@ readonly class AuthService implements AuthServiceInterface
     public function logoutAll(string $refreshToken): void
     {
         $this->refreshTokens->revokeAllSessions($refreshToken);
+    }
+
+    /**
+     * Does the work a real password check would have done, and throws the
+     * result away.
+     *
+     * Without this the two failure paths are told apart by a stopwatch: a
+     * registered address costs a bcrypt round, an unregistered one returns
+     * before the database has finished exhaling. The gap is orders of
+     * magnitude, measurable over a network, and it turns login into an "is this
+     * person registered?" lookup. The per-IP rate limit does not close it —
+     * enumeration spreads across addresses, and each address gets a fresh
+     * budget.
+     *
+     * Hashing rather than verifying against a stored dummy hash: both cost the
+     * same bcrypt rounds, and this way there is no hash literal in the source
+     * for a reader (or a secret scanner) to mistake for a credential.
+     *
+     * @throws Exception
+     */
+    private function burnPasswordHashingTime(string $password): void
+    {
+        User::getEncryptedPassword($password);
     }
 
     /**
