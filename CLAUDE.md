@@ -94,11 +94,11 @@ make build                # after changing Codeception modules
 make coverage             # run the suite with coverage and enforce the gate
 make coverage-html        # the same, then print the HTML report path
 
-# Code style (PSR-12, PHP CS Fixer)
+# Code style (PSR-12 + strict_types, PHP CS Fixer)
 make cs-check             # dry-run, shows violations/diff
 make cs-fix               # auto-fix
 
-# Static analysis (PHPStan, level 5, config in phpstan.neon.dist)
+# Static analysis (PHPStan, level 6, config in phpstan.neon.dist)
 make stan
 ```
 
@@ -232,4 +232,6 @@ Because the gates are green on a tree that already agrees, **prove a new gate bi
 
 **CD** — `.github/workflows/cd.yml` is chained to CI via `workflow_run` (triggers only after the **CI** workflow completes on `master`), so a red CI never deploys (and its badge stays neutral rather than red) — but the two jobs enforce that differently: `build-image` carries the explicit `if: github.event.workflow_run.conclusion == 'success'` guard, while `deploy` has no `if` of its own and is gated only indirectly via `needs: build-image` (a skipped or failed `build-image` skips `deploy` too). It has two jobs: `build-image` builds the `prod` stage of the multi-stage `Dockerfile` (`target: prod` — `composer install --no-dev --no-scripts` + baked app code, on top of the shared `base` stage) with buildx + GHA layer cache, then smoke-tests it with **`docker/smoke.sh`** — the same script `make smoke` runs, so the two cannot drift; `deploy` runs through a `production` GitHub Environment so it shows in the repo's Environments/Deployments tab, but the actual release is **simulated** (echoed steps) — this sample deliberately provisions no real server. The image is built with `push: false`/`load: true` (never pushed to a registry). The `prod` stage uses `--no-scripts` so Yii's `postInstall` (cookie-key generation) is skipped — `COOKIE_VALIDATION_KEY` comes from env at runtime instead — and only `yiisoft/yii2-composer` is in `allow-plugins`. Dev and prod share the `base` stage, so there is no runtime setup to keep in sync between compose and the image.
 
-PHPStan config is `phpstan.neon.dist` (level 5, scans `commands`/`components`/`config`/`controllers`/`models`). Two non-obvious settings make it green without false positives: `bootstrapFiles` + `scanFiles` both point at `vendor/yiisoft/yii2/Yii.php` so the global `Yii` class (a generic subclass of `BaseYii`) is both executed for its constants and reflected for its inherited static methods (`Yii::getAlias()` etc.); and `dynamicConstantNames` lists `YII_DEBUG`/`YII_ENV*` because `BaseYii` defines them as `false`/`'prod'` defaults, so without this PHPStan reports every `if (YII_DEBUG)` branch as dead code. PHPStan needs `--memory-limit=512M` (the web container's PHP caps at 128M). Fix real type errors rather than lowering the level or adding ignores.
+**Every PHP file declares `declare(strict_types=1)`** — the `declare_strict_types` fixer enforces it (the one risky rule the config enables), so a new file cannot skip it. Form request attributes are the deliberate exception to narrow typing: they are `public mixed $x = null` because they hold raw client input before any rule has run, and narrowing one would turn a rejected `?title[]=x` from a 422 naming the field into a TypeError inside `load()` — a 500. Narrow the type on whatever reads the value *after* validation.
+
+PHPStan config is `phpstan.neon.dist` (level 6, scans `commands`/`components`/`config`/`controllers`/`models`). Level 6 means **every `array` needs a value type** (`array<string, mixed>`, `string[]`, `list<int>`): declare it on the contract in `models/contract/` and the implementations inherit it. Two non-obvious settings make it green without false positives: `bootstrapFiles` + `scanFiles` both point at `vendor/yiisoft/yii2/Yii.php` so the global `Yii` class (a generic subclass of `BaseYii`) is both executed for its constants and reflected for its inherited static methods (`Yii::getAlias()` etc.); and `dynamicConstantNames` lists `YII_DEBUG`/`YII_ENV*` because `BaseYii` defines them as `false`/`'prod'` defaults, so without this PHPStan reports every `if (YII_DEBUG)` branch as dead code. PHPStan needs `--memory-limit=512M` (the web container's PHP caps at 128M). Fix real type errors rather than lowering the level or adding ignores.

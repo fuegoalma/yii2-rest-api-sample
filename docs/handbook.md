@@ -297,6 +297,16 @@ Prefer a functional test when the thing you're specifying *is* the integration �
 
 The project follows the [PSR-12](https://www.php-fig.org/psr/psr-12/) coding standard, enforced with [PHP CS Fixer](https://github.com/PHP-CS-Fixer/PHP-CS-Fixer) (configuration in `.php-cs-fixer.dist.php`).
 
+On top of PSR-12 the config enables one **risky** rule, `declare_strict_types`: every PHP file
+declares `declare(strict_types=1)`, and a new file that forgets it fails `make cs-check`. The rule
+is classified risky because it changes runtime behaviour — scalar arguments are no longer coerced
+at call sites inside the file — which is the point; the full suite is what proves nothing depended
+on the coercion.
+
+The config appends itself to its own finder. The `pre-commit` hook passes staged files explicitly
+rather than using the finder's paths, so without that line the hook would check a file `make
+cs-check` never saw.
+
 #### Check code style
 
 Shows the violations and a diff of what would be changed, without modifying any files:
@@ -317,11 +327,20 @@ make cs-fix
 
 ## Static Analysis
 
-The project is analysed with [PHPStan](https://phpstan.org/) (level 5, configuration in `phpstan.neon.dist`).
+The project is analysed with [PHPStan](https://phpstan.org/) (level 6, configuration in `phpstan.neon.dist`).
 
 ```bash
 make stan
 ```
+
+Level 6 adds the missing-type checks: every `array` must declare a value type
+(`array<string, mixed>`, `string[]`, `list<int>`) and every property must have one. Declare it on
+the contract in `models/contract/` and the implementations inherit it — that is why the whole tree
+needed no `ignoreErrors` entry.
+
+Level 6 is the practical ceiling on this stack rather than a compromise: levels 7–8 turn Yii's
+untyped `ActiveRecord` magic properties and `Yii::$app->…` component access into a flood of
+findings that say more about the framework's own annotations than about this code.
 
 ---
 
@@ -392,8 +411,8 @@ The project ships a two-stage GitHub Actions pipeline — the two badges at the 
 │   └── service/       # Service layer (business logic)
 ├── web/               # Document root: entry script, uploads/, default-images/
 ├── codeception.yml    # Test runner config (paths, modules, coverage scope)
-├── phpstan.neon.dist  # Static analysis config (level 5)
-├── .php-cs-fixer.dist.php # PSR-12 code style config
+├── phpstan.neon.dist  # Static analysis config (level 6)
+├── .php-cs-fixer.dist.php # PSR-12 + strict_types code style config
 ├── tests/
 │   ├── functional/    # Functional (integration) tests
 │   ├── unit/          # Unit tests
