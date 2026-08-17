@@ -20,6 +20,13 @@ interface UserRepositoryInterface extends ApiRepositoryInterface
      */
     public function batchInsert(array $data): void;
 
+    /**
+     * Narrowed from the generic contract's `?ActiveRecord`: consumers here read
+     * user-specific columns (`token_version`, `password_hash`), and a caller
+     * that has to down-cast the result is a caller the contract has failed.
+     */
+    public function findById(int $id): ?User;
+
     public function findByEmail(string $email): ?User;
 
     /**

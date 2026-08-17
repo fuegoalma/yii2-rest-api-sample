@@ -20,6 +20,7 @@ use yii\web\IdentityInterface;
  * @property string $last_name
  * @property string $email
  * @property string $password_hash
+ * @property int $token_version  bumped to withdraw every access token issued so far
  * @property string $created_at
  * @property string $updated_at
  *
@@ -119,17 +120,47 @@ class User extends ActiveRecord implements IdentityInterface, OwnableInterface
     }
 
     /**
-     * The token is a stateless JWT access token: the user is resolved from its
-     * `sub` claim, nothing is stored in the DB. Refresh tokens are opaque and
-     * never valid JWTs, so they can't authenticate here.
+     * The token is a stateless JWT access token: nothing about it is stored.
+     * Refresh tokens are opaque and never valid JWTs, so they can't authenticate
+     * here.
+     *
+     * The one piece of state consulted is `token_version`, and it is free: the
+     * row is being loaded anyway to resolve the `sub` claim. A token whose `ver`
+     * no longer matches the account was issued before a deliberate withdrawal
+     * (logout-all, a password reset) and is refused.
+     *
+     * A token carrying **no** `ver` claim is refused too. Reading a missing
+     * claim as version 0 would let a token minted before the column existed
+     * survive the very bump meant to end it.
      */
     public static function findIdentityByAccessToken($token, $type = null): User|IdentityInterface|null
     {
         /** @var JwtService $jwt */
         $jwt = Yii::$app->get('jwt');
-        $userId = $jwt->getUserId((string) $token);
+        $claims = $jwt->decode((string) $token);
 
-        return $userId === null ? null : static::findOne(['id' => $userId]);
+        if (!isset($claims['sub'], $claims['ver'])) {
+            return null;
+        }
+
+        return static::findOne([
+            'id' => (int) $claims['sub'],
+            'token_version' => (int) $claims['ver'],
+        ]);
+    }
+
+    /**
+     * Withdraws every access token issued so far, and returns the new version.
+     *
+     * `updateAllCounters` rather than a read-modify-write: two concurrent
+     * revocations must not settle on the same number, or the later one would
+     * leave the earlier one's tokens valid.
+     */
+    public static function bumpTokenVersion(int $userId): int
+    {
+        static::updateAllCounters(['token_version' => 1], ['id' => $userId]);
+
+        return (int) static::find()->select('token_version')->where(['id' => $userId])->scalar();
     }
 
     public function getId(): int

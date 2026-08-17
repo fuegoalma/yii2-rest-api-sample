@@ -41,7 +41,7 @@ readonly class AuthService implements AuthServiceInterface
             throw new UnauthorizedException('Invalid email or password.', 'auth.invalid_credentials');
         }
 
-        return $this->issueTokens($user->id);
+        return $this->issueTokens($user->id, (int) $user->token_version);
     }
 
     /**
@@ -62,7 +62,7 @@ readonly class AuthService implements AuthServiceInterface
             return $user;
         }
 
-        return $this->issueTokens($user->id);
+        return $this->issueTokens($user->id, (int) $user->token_version);
     }
 
     /**
@@ -75,8 +75,15 @@ readonly class AuthService implements AuthServiceInterface
     public function refresh(string $refreshToken): TokenResponse
     {
         $token = $this->refreshTokens->consume($refreshToken);
+        $user = $this->repository->findById($token->user_id);
 
-        return $this->issueTokens($token->user_id, $token->family_id);
+        // The account may have been closed, or every token withdrawn, since this
+        // refresh token was issued. Both are answered the same way.
+        if ($user === null) {
+            throw new UnauthorizedException('Invalid refresh token.', 'refresh_token.invalid');
+        }
+
+        return $this->issueTokens($token->user_id, (int) $user->token_version, $token->family_id);
     }
 
     /** Logs out the device the refresh token belongs to. */
@@ -85,10 +92,21 @@ readonly class AuthService implements AuthServiceInterface
         $this->refreshTokens->revokeSession($refreshToken);
     }
 
-    /** Logs out every device of the refresh token's owner. */
+    /**
+     * Logs out every device of the refresh token's owner — including the access
+     * tokens already handed out.
+     *
+     * Revoking the refresh families alone left every access token working until
+     * it expired, so "log out everywhere" was true of future requests only. The
+     * version bump is what makes it true now; ADR 1 covers the trade.
+     */
     public function logoutAll(string $refreshToken): void
     {
-        $this->refreshTokens->revokeAllSessions($refreshToken);
+        $userId = $this->refreshTokens->revokeAllSessions($refreshToken);
+
+        if ($userId !== null) {
+            User::bumpTokenVersion($userId);
+        }
     }
 
     /**
@@ -117,10 +135,10 @@ readonly class AuthService implements AuthServiceInterface
     /**
      * @throws Exception
      */
-    private function issueTokens(int $userId, ?string $familyId = null): TokenResponse
+    private function issueTokens(int $userId, int $tokenVersion, ?string $familyId = null): TokenResponse
     {
         return new TokenResponse(
-            access_token: $this->jwt->issue($userId),
+            access_token: $this->jwt->issue($userId, $tokenVersion),
             refresh_token: $this->refreshTokens->issue($userId, $familyId),
             token_type: 'Bearer',
             expires_in: $this->jwt->ttl,

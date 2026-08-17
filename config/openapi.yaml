@@ -169,7 +169,14 @@ paths:
       x-permission: []
       operationId: authLogoutAll
       summary: Log out all devices
-      description: Revokes **every** family of the token's owner. Idempotent → 204.
+      description: |
+        Revokes **every** family of the token's owner **and withdraws the access
+        tokens already issued to them**, by bumping the account's token version —
+        so it takes effect immediately rather than within `JWT_TTL`. Idempotent → 204.
+
+        `POST /auth/logout` deliberately does not do this: it ends one device,
+        and taking the other devices' access tokens with it would make the two
+        endpoints the same thing.
       security: []
       requestBody:
         required: true

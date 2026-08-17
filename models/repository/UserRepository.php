@@ -31,6 +31,14 @@ class UserRepository extends BaseRepository implements UserRepositoryInterface
         $this->batchInsertRows(['first_name', 'last_name', 'email', 'password_hash'], $data);
     }
 
+    public function findById(int $id): ?User
+    {
+        /** @var ?User $user */
+        $user = parent::findById($id);
+
+        return $user;
+    }
+
     public function findByEmail(string $email): ?User
     {
         return User::findOne(['email' => $email]);

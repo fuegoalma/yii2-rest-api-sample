@@ -23,18 +23,17 @@ class JwtServiceTest extends BaseUnitTest
 
     public function testIssueAndDecodeRoundTrip(): void
     {
-        $token = $this->jwt->issue(7);
+        $token = $this->jwt->issue(7, 3);
         $claims = $this->jwt->decode($token);
 
         $this->assertSame(7, $claims['sub']);
         $this->assertSame($claims['iat'] + 60, $claims['exp']);
-        $this->assertSame(7, $this->jwt->getUserId($token));
+        $this->assertSame(3, $claims['ver']);
     }
 
     public function testDecodeReturnsNullForMalformedToken(): void
     {
         $this->assertNull($this->jwt->decode('not-a-jwt'));
-        $this->assertNull($this->jwt->getUserId('not-a-jwt'));
     }
 
     public function testDecodeReturnsNullForExpiredToken(): void

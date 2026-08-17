@@ -119,13 +119,24 @@ readonly class RefreshTokenService
         }
     }
 
-    /** Ends every session of the token's owner (log out on all devices). */
-    public function revokeAllSessions(string $rawToken): void
+    /**
+     * Ends every session of the token's owner (log out on all devices).
+     *
+     * @return int|null the owner, so the caller can also withdraw their access
+     *                  tokens; null when the presented token is unknown, which
+     *                  keeps logout idempotent and silent about what exists
+     */
+    public function revokeAllSessions(string $rawToken): ?int
     {
         $token = $this->repository->findByHash($this->hash($rawToken));
-        if ($token !== null) {
-            $this->repository->revokeAllForUser($token->user_id);
+
+        if ($token === null) {
+            return null;
         }
+
+        $this->repository->revokeAllForUser($token->user_id);
+
+        return (int) $token->user_id;
     }
 
     /**

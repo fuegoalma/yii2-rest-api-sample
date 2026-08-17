@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace tests\functional;
 
+use app\models\db\User;
 use FunctionalTester;
 use tests\support\CreatesImageFixtures;
 use tests\support\RestoresGlobalState;
@@ -76,10 +77,16 @@ abstract class BaseCest
 
     /**
      * Issues a JWT for the given user and sends it with every request.
+     *
+     * The token carries the account's current `token_version`, exactly as the
+     * auth endpoints do — a token minted with the wrong one authenticates
+     * nothing, so this reads it rather than assuming zero.
      */
     protected function actingAs(FunctionalTester $I, int $userId): void
     {
-        $I->amBearerAuthenticated(Yii::$app->jwt->issue($userId));
+        $version = (int) User::find()->select('token_version')->where(['id' => $userId])->scalar();
+
+        $I->amBearerAuthenticated(Yii::$app->jwt->issue($userId, $version));
     }
 
     /**
