@@ -103,7 +103,29 @@ Resolving a handler by name is the one lookup that can only happen at run time, 
 - **`DbQueue`** (default) — persists jobs to the `queue_job` table; the long-running **`worker`** service (`yii queue/listen`) drains up to 100 pending jobs per pass continuously, sleeping only when idle and shutting down gracefully on `SIGTERM` (`docker stop`). `yii queue/run` drains once (handy for CI/manual runs).
 - **`SyncQueue`** — runs jobs in-process; bound in tests so they don't depend on a running worker.
 
-A job that throws is retried (logged as a warning each time) up to 3 attempts, then dropped with a logged error so one poison job can't wedge the queue.
+### Delivery
+
+Each row is **claimed** before it runs: a pass lists the due ids, then takes each one with a
+conditional `UPDATE queue_job SET reserved_at = NOW() WHERE id = ? AND <still due>`. Exactly one
+worker's update can match, so `docker compose up --scale worker=3` is safe and no transaction is
+needed to arbitrate. A claim lapses after `DbQueue::RESERVATION_TIMEOUT` (300 s), which is how a
+worker killed mid-job gives its rows back.
+
+That makes delivery **at-least-once**: a worker that dies after a job's side effect but before its
+row is deleted will run the job again. Handlers must tolerate a repeat.
+
+A job that throws is retried (logged as a warning each time) up to 3 attempts, each after an
+exponential backoff written to `available_at` — 5 s, doubling, capped at 300 s. The backoff is not
+cosmetic: the worker loop comes round every 3 s, so without it all three attempts are spent in under
+ten seconds and a fault that would have cleared never gets the chance.
+
+A job that exhausts its attempts moves to **`queue_job_failed`** ([`FailedQueueJob`](../models/db/FailedQueueJob.php))
+with its payload, correlation id and last error, so it can be inspected and replayed. Deleting it —
+which is what used to happen — left the work undone with only a log line to say it had existed.
+
+```sql
+SELECT id, attempts, last_error, failed_at FROM queue_job_failed ORDER BY failed_at DESC;
+```
 
 The first use case is permanently deleting an album: the rows go in a transaction, and each album's on-disk directory cleanup is enqueued (`DeleteAlbumDirectoryJob`, run by `DeleteAlbumDirectoryHandler`) rather than done inline, so a large delete never blocks the response and a failure is retried by the worker instead of aborting the teardown.
 

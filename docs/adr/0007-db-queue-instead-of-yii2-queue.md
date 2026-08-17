@@ -27,9 +27,27 @@ the container **by injection** rather than reading `Yii::$container`.
 - On a mainstream stack, `yii2-queue` would back the same `QueueInterface` and
   nothing above the seam would change. That is the whole point of the interface
   existing rather than services calling a driver.
-- We own the retry policy: a throwing job is retried to `maxAttempts` (3), each
-  attempt logged as a warning, then dropped with `Yii::error()` so one poison job
-  cannot wedge the queue.
+- **We own the delivery semantics, and that is the real cost.** A mature queue
+  ships them; ours had to grow them, and until it did, the driver was a plain
+  `SELECT ... LIMIT n` that every worker saw the same rows in. Three things now
+  make up for it:
+  - **A claim.** `reserved_at` is taken with a conditional
+    `UPDATE ... WHERE id = ? AND <still due>`, so exactly one worker can win a
+    row — the same idiom as `RefreshTokenRepository::consume()`. A claim expires
+    after `RESERVATION_TIMEOUT`, or a worker killed mid-job would strand its
+    jobs forever, which is worse than the double-run the claim prevents.
+  - **Backoff.** A failed job waits `available_at` out, doubling from 5s. Without
+    it all three attempts are spent inside one worker-loop delay, so a fault that
+    would have cleared in a minute never gets the chance.
+  - **A dead letter.** A job that exhausts its attempts moves to
+    `queue_job_failed` with its payload and last error, instead of being deleted
+    with only a log line — for `DeleteAlbumDirectoryJob` that difference is an
+    upload directory nobody will ever remove, and no record that it was meant to
+    be.
+
+  Delivery is **at-least-once**: a worker that dies after the job's side effect
+  but before the row is deleted will run it again once the reservation expires.
+  Handlers must tolerate that.
 - `ContainerJobRunner` is the only service-locator call in the application, and
   it is one class with the container passed in — so both drivers stay
   constructible in a test without mutating global state.
