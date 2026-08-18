@@ -33,6 +33,7 @@ use app\models\contract\repository\UserRepositoryInterface;
 use app\models\contract\service\AccessControlInterface;
 use app\models\contract\service\AlbumServiceInterface;
 use app\models\contract\service\PasswordServiceInterface;
+use app\models\contract\service\RbacAuditInterface;
 use app\models\contract\service\TransactionRunnerInterface;
 use app\models\contract\StopSignalInterface;
 use app\models\repository\PermissionRepository;
@@ -49,6 +50,7 @@ use app\models\service\HealthService;
 use app\models\service\PermissionService;
 use app\models\service\PhotoService;
 use app\models\service\PasswordService;
+use app\models\service\RbacAudit;
 use app\models\service\RefreshTokenService;
 use app\models\service\RoleService;
 use app\models\service\UserService;
@@ -124,6 +126,8 @@ return [
         PermissionRepositoryInterface::class => PermissionRepository::class,
         RefreshTokenRepositoryInterface::class => RefreshTokenRepository::class,
         PasswordResetTokenRepositoryInterface::class => PasswordResetTokenRepository::class,
+        // append-only record of who changed the authorization model
+        RbacAuditInterface::class => RbacAudit::class,
         // password change + recovery
         PasswordServiceInterface::class => PasswordService::class,
         // No mail server is provisioned here, so messages are written to the

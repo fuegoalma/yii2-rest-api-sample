@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace tests\unit;
 
 use app\models\contract\service\AccessControlInterface;
+use app\models\contract\service\RbacAuditInterface;
 use app\models\db\Permission;
 use app\models\db\Role;
 use app\models\contract\repository\RoleRepositoryInterface;
@@ -27,7 +28,14 @@ class RoleServiceTest extends BaseUnitTest
         parent::setUp();
         $this->rolesMock = $this->createMock(RoleRepositoryInterface::class);
         $this->accessMock = $this->createMock(AccessControlInterface::class);
-        $this->service = new RoleService($this->rolesMock, $this->accessMock, $this->immediateTx());
+        // the audit writer is deliberately a stub: it must never influence the
+        // outcome of a mutation, so these tests assert nothing about it
+        $this->service = new RoleService(
+            $this->rolesMock,
+            $this->accessMock,
+            $this->immediateTx(),
+            $this->createStub(RbacAuditInterface::class)
+        );
     }
 
     // ==================== create ====================

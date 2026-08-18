@@ -7,8 +7,10 @@ namespace app\models\service;
 use app\models\contract\repository\RoleRepositoryInterface;
 use app\models\contract\service\AccessControlInterface;
 use app\models\contract\service\RoleServiceInterface;
+use app\models\contract\service\RbacAuditInterface;
 use app\models\contract\service\TransactionRunnerInterface;
 use app\models\db\Permission;
+use app\models\db\RbacAudit;
 use app\models\db\Role;
 use app\models\service\basic\BaseCrudService;
 use yii\db\ActiveRecord;
@@ -38,6 +40,7 @@ readonly class RoleService extends BaseCrudService implements RoleServiceInterfa
         private RoleRepositoryInterface $roles,
         private AccessControlInterface $access,
         private TransactionRunnerInterface $tx,
+        private RbacAuditInterface $audit,
     ) {
         parent::__construct($roles);
     }
@@ -61,6 +64,13 @@ readonly class RoleService extends BaseCrudService implements RoleServiceInterfa
             /** @var Role $role */
             $role = parent::create($data);
             $this->syncPermissionsIfValid($role, $permissions);
+
+            if (!$role->hasErrors()) {
+                $this->audit->record(RbacAudit::ACTION_ROLE_CREATED, (int) $role->id, [
+                    'name' => $role->name,
+                    'permissions' => $permissions ?? [],
+                ]);
+            }
 
             return $role;
         });
@@ -96,6 +106,13 @@ readonly class RoleService extends BaseCrudService implements RoleServiceInterfa
             $role = parent::update($id, $data);
             $this->syncPermissionsIfValid($role, $permissions);
 
+            if (!$role->hasErrors()) {
+                $this->audit->record(RbacAudit::ACTION_ROLE_UPDATED, (int) $role->id, [
+                    'name' => $role->name,
+                    'permissions' => $permissions,
+                ]);
+            }
+
             return $role;
         });
     }
@@ -120,6 +137,9 @@ readonly class RoleService extends BaseCrudService implements RoleServiceInterfa
 
             // the FK cascades clean up role_permission and user_role rows
             $this->repository->delete($role);
+            $this->audit->record(RbacAudit::ACTION_ROLE_DELETED, (int) $role->id, [
+                'name' => $role->name,
+            ]);
         });
     }
 
@@ -160,6 +180,11 @@ readonly class RoleService extends BaseCrudService implements RoleServiceInterfa
             }
 
             $this->roles->setUserRoles($userId, $newIds);
+
+            $this->audit->record(RbacAudit::ACTION_ROLES_ASSIGNED, $userId, [
+                'granted' => array_values(array_diff($newIds, $currentIds)),
+                'revoked' => array_values(array_diff($currentIds, $newIds)),
+            ]);
 
             return $newRoles;
         });
