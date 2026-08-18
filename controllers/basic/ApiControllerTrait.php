@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace app\controllers\basic;
 
 use app\components\ApiSerializer;
+use app\components\ConditionalGet;
 use app\models\form\basic\ApiForm;
 use yii\filters\auth\HttpBearerAuth;
 use yii\filters\Cors;
@@ -61,6 +62,11 @@ trait ApiControllerTrait
                 'Access-Control-Max-Age' => 86400,
             ],
         ];
+
+        // Revalidation for read endpoints. Attached for every controller using
+        // this trait, but it only ever acts on a 200 from a GET, so the write
+        // and error paths are untouched.
+        $behaviors['conditionalGet'] = ConditionalGet::class;
 
         if ($requireAuth) {
             $behaviors['authenticator'] = [
