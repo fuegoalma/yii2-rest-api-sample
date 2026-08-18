@@ -1,0 +1,17 @@
+# Findings that were genuinely secrets and have been remediated.
+#
+# Format: <commit>:<path>:<rule-id>:<line>. One line per finding, each with the
+# remediation written next to it — an entry without a rotation behind it is just
+# a way of not looking.
+#
+# The Yii basic-template scaffold hard-codes a generated `cookieValidationKey`
+# in config/web.php, and the first commit here carried it in. 00e0bae moved the
+# setting to COOKIE_VALIDATION_KEY read from the environment, but a value that
+# has been published stays published: removing it in a later commit changes
+# nothing for anyone who can read the history.
+#
+# Remediated 2026-08-18 by rotating the key, which is what actually ends the
+# exposure. Rewriting the initial commit would change every SHA in the
+# repository — a far larger cost than retiring a value that only signs cookies
+# in an API that authenticates with bearer tokens.
+e37bcb9b43f0afa3e5a0d220866e5f6b843ef239:config/web.php:generic-api-key:17
