@@ -632,6 +632,41 @@ change to `RateLimiter`, which depends on `yii\caching\CacheInterface`.
 
 ---
 
+## Load testing
+
+`tests/load/api.js` is a [k6](https://k6.io/) scenario over the read paths a client actually polls.
+It runs against a **running stack**, not as part of `make check` — a number produced on a laptop
+that is also compiling something is not a number anybody should act on.
+
+```bash
+make load                      # 10 VUs, 30s
+make load vus=50 duration=2m
+```
+
+Measured on the dev stack (10 VUs, 20s, ~1 600 albums and 64 000 photos seeded):
+
+| | |
+| --- | --- |
+| Throughput | **824 req/s** |
+| Reads, p95 | **17.3 ms** |
+| Auth (bcrypt-bound), p95 | 346 ms |
+| Failed requests | **0 of 16 837** |
+
+The scenario **has thresholds**, and that is the point: a load test without them prints graphs, and
+graphs do not fail. Reads are held to p95 < 300 ms, auth to p95 < 1.5 s, request failures to under
+1%. The auth budget is separate on purpose — `AuthService` spends a deliberate bcrypt round on every
+attempt, including the ones that fail (see the timing-oracle fix), so holding it to the read budget
+would either fail honestly or push somebody to weaken the hash.
+
+The thresholds are the **published budget**, not the current measurement. A threshold set to what
+the machine happens to do today ratchets silently and never fails.
+
+The scenario also exercises the revalidation path from
+[ADR 13](adr/0013-conditional-get-saves-bandwidth-not-work.md), asserting the `304` under load —
+that path is where a polling client spends most of its requests.
+
+---
+
 ## Indexes and what they are for
 
 Every index here was checked with `EXPLAIN` against seeded data (~1 600 albums, 64 000 photos)

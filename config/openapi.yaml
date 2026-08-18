@@ -311,6 +311,38 @@ paths:
               schema:
                 $ref: '#/components/schemas/HealthEnvelope'
 
+  /metrics:
+    get:
+      tags: [Health]
+      x-permission: []
+      operationId: metricsIndex
+      summary: Prometheus scrape endpoint
+      description: |
+        Operational gauges in the Prometheus text exposition format. **Not** the
+        JSON envelope every other endpoint uses — Prometheus parses a specific
+        line format and would reject anything else.
+
+        Public and unauthenticated, like `/health`: a scraper is infrastructure
+        and has no account. That is acceptable only because nothing here is
+        per-user; a metric that leaked something would have to move behind the
+        network boundary.
+
+        Values are read from the database at scrape time rather than accumulated
+        in the process: PHP shares no memory between requests, so a counter would
+        report one container's slice.
+      security: []
+      responses:
+        '200':
+          description: Metrics in text exposition format.
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: |
+                  # HELP queue_jobs_pending Jobs waiting to be claimed by a worker.
+                  # TYPE queue_jobs_pending gauge
+                  queue_jobs_pending 0
+
   # ---------------------------------------------------------------- Docs
   /docs:
     get:

@@ -128,6 +128,11 @@ mutation: ## Run mutation testing (Infection) and enforce the MSI threshold
 	$(DC) exec -T web vendor/bin/infection --threads=$${threads:-4} --no-progress --no-interaction \
 		--initial-tests-php-options="-d pcov.enabled=1 -d pcov.directory=/var/www/html"
 
+load: ## Run the k6 load scenario against a running stack (vus=, duration=)
+	docker run --rm --network host -e BASE_URL=$${BASE_URL:-http://localhost:8084} \
+		-e VUS=$${vus:-10} -e DURATION=$${duration:-30s} \
+		-v $(PWD)/tests/load:/scripts grafana/k6 run /scripts/api.js
+
 coverage-html: coverage
 	@echo "HTML report: tests/_output/coverage/index.html"
 

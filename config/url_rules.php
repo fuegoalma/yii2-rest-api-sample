@@ -14,6 +14,8 @@ return [
     'GET docs' => 'docs/index',
     'GET docs/openapi.yaml' => 'docs/spec',
     'GET,OPTIONS health' => 'health/index',
+    // Prometheus scrape target; plain text, no envelope, no auth (see the controller)
+    'GET metrics' => 'metrics/index',
     'POST,OPTIONS auth/login' => 'auth/login',
     'POST,OPTIONS auth/register' => 'auth/register',
     'POST,OPTIONS auth/refresh' => 'auth/refresh',

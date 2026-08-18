@@ -14,6 +14,7 @@ use app\components\RateLimiter;
 use app\controllers\AlbumsController;
 use app\controllers\AuthController;
 use app\controllers\HealthController;
+use app\controllers\MetricsController;
 use app\controllers\PermissionsController;
 use app\controllers\PhotosController;
 use app\controllers\RolesController;
@@ -33,6 +34,7 @@ use app\models\contract\repository\UserRepositoryInterface;
 use app\models\contract\service\AccessControlInterface;
 use app\models\contract\service\AlbumServiceInterface;
 use app\models\contract\service\EmailVerificationInterface;
+use app\models\contract\service\MetricsInterface;
 use app\models\contract\service\PasswordServiceInterface;
 use app\models\contract\service\RbacAuditInterface;
 use app\models\contract\service\TransactionRunnerInterface;
@@ -51,6 +53,7 @@ use app\models\service\HealthService;
 use app\models\service\PermissionService;
 use app\models\service\PhotoService;
 use app\models\service\EmailVerificationService;
+use app\models\service\MetricsService;
 use app\models\service\PasswordService;
 use app\models\service\RbacAudit;
 use app\models\service\RefreshTokenService;
@@ -186,6 +189,9 @@ return [
         // referenced with Instance::of() (that only resolves container-managed
         // classes) — build the service from the live app component instead
         HealthService::class => static fn () => new HealthService(Yii::$app->db),
+        // same reason as HealthService: `db` is an app component, not a
+        // container definition, so Instance::of() cannot reach it
+        MetricsInterface::class => static fn (): MetricsInterface => new MetricsService(Yii::$app->db),
         // controllers get positional ($id, $module) args at creation time and the
         // container forbids mixing named and positional keys, so bind by position:
         // index 2 is the $service parameter, index 3 the access control (resource
@@ -232,6 +238,9 @@ return [
         ],
         HealthController::class => [
             '__construct()' => [2 => Instance::of(HealthService::class)],
+        ],
+        MetricsController::class => [
+            '__construct()' => [2 => Instance::of(MetricsInterface::class)],
         ],
     ],
 ];
