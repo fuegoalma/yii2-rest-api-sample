@@ -158,11 +158,12 @@ stan:
 	$(WEB) php vendor/bin/phpstan analyse --no-progress --memory-limit=512M
 
 # Every gate CI runs, in the same order and with the same commands, so a red
-# build is never the first time a problem is seen. `coverage` last: it is by far
-# the slowest, and there is no point paying for it while the style pass is red.
+# build is never the first time a problem is seen. The slow pair goes last, and
+# `mutation` after `coverage`: there is no sense asking whether the tests assert
+# anything until they pass and cover everything.
 # Keep this list in step with .github/workflows/ci.yml — they must stay runnable
 # both ways.
-check: cs-check stan coverage
+check: cs-check stan coverage mutation
 
 # What .github/workflows/security.yml blocks on. Runtime dependencies only:
 # what ships is what has to be clean, and a dev-tool advisory with no upstream
