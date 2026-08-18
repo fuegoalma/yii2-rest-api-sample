@@ -155,6 +155,34 @@ class ImagickWebpEncoderTest extends BaseUnitTest
         $probe->clear();
     }
 
+    /**
+     * getResourceLimit() always returns float, and "no limit" is reported as
+     * a value near PHP_INT_MAX — which a double cannot represent exactly. As
+     * of PHP 8.5, casting that value back to int with a bare `(int)` does not
+     * even saturate: it wraps to PHP_INT_MIN and raises a warning, which
+     * Yii's error handler turns into a thrown ErrorException. The Docker
+     * image's policy.xml caps every other resource with a finite value, so
+     * only TIME reproduces this here — a bare system ImageMagick (as on the
+     * CI runner, with no policy.xml at all) reports every resource this way.
+     * Setting it directly reproduces the bug without depending on either.
+     */
+    public function testRestoresAnUnrepresentableResourceLimitWithoutError(): void
+    {
+        $probe = new Imagick();
+        $original = $probe->getResourceLimit(Imagick::RESOURCETYPE_TIME);
+        Imagick::setResourceLimit(Imagick::RESOURCETYPE_TIME, PHP_INT_MAX);
+
+        try {
+            $blob = $this->encoder()->encode($this->imageFixture(10, 10));
+
+            $this->assertSame('WEBP', $this->read($blob)->getImageFormat());
+            $this->assertGreaterThan(0.0, $probe->getResourceLimit(Imagick::RESOURCETYPE_TIME));
+        } finally {
+            Imagick::setResourceLimit(Imagick::RESOURCETYPE_TIME, (int) $original);
+            $probe->clear();
+        }
+    }
+
     private function encoder(): ImagickWebpEncoder
     {
         return new ImagickWebpEncoder(500, 500, 80);

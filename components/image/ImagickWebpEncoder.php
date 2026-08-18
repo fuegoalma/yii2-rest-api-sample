@@ -101,8 +101,30 @@ final readonly class ImagickWebpEncoder implements ImageEncoderInterface
     private function restoreResourceLimits(array $previous): void
     {
         foreach ($previous as $type => $value) {
-            Imagick::setResourceLimit($type, (int) $value);
+            Imagick::setResourceLimit($type, $this->toRepresentableInt($value));
         }
+    }
+
+    /**
+     * getResourceLimit() always returns float, and ImageMagick reports "no
+     * limit" as a value near PHP_INT_MAX — one a double cannot represent
+     * exactly. A bare `(int)` cast of that value does not saturate; PHP 8.5
+     * wraps it to PHP_INT_MIN and raises a warning. Every value this encoder
+     * ever narrows is non-negative, so clamping the high end back to
+     * PHP_INT_MAX is enough to make setResourceLimit() see "no limit" again.
+     *
+     * The comparison has to be `>=`, not `>`: PHP_INT_MAX itself has no exact
+     * double representation, so `(float) PHP_INT_MAX` already rounds up to the
+     * same value ImageMagick reports for "no limit" — a strict `>` would never
+     * match and every value at that boundary would still overflow the cast.
+     */
+    private function toRepresentableInt(int|float $value): int
+    {
+        if (is_float($value) && $value >= (float) PHP_INT_MAX) {
+            return PHP_INT_MAX;
+        }
+
+        return (int) $value;
     }
 
     public function extension(): string
