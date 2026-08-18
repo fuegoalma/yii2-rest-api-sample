@@ -4,48 +4,30 @@ declare(strict_types=1);
 
 namespace tests\unit;
 
-use app\models\contract\queue\JobInterface;
+use app\components\ImageStorage;
 use app\models\jobs\DeleteAlbumDirectoryHandler;
 use app\models\jobs\DeleteAlbumDirectoryJob;
-use InvalidArgumentException;
-use League\Flysystem\FilesystemOperator;
 use PHPUnit\Framework\MockObject\Exception;
 
+/**
+ * Refusing a job this handler does not own is {@see BaseJobHandler}'s behaviour
+ * now, pinned once in {@see BaseJobHandlerTest}; what is specific here is which
+ * collaborator the work goes to.
+ */
 class DeleteAlbumDirectoryHandlerTest extends BaseUnitTest
 {
     /**
+     * Through {@see ImageStorage}, not the filesystem: that is where the key —
+     * and its traversal guard — is built.
+     *
      * @throws Exception
      */
     public function testDeletesTheDirectoryNamedByTheJob(): void
     {
-        $storage = $this->createMock(FilesystemOperator::class);
+        $storage = $this->createMock(ImageStorage::class);
         $storage->expects($this->once())->method('deleteDirectory')->with('42');
 
         (new DeleteAlbumDirectoryHandler($storage))->handle(new DeleteAlbumDirectoryJob('42'));
-    }
-
-    /**
-     * The driver resolves handlers by name from the job, so a mismatched pairing
-     * is a programming error and must not be silently applied to some other
-     * directory.
-     *
-     * @throws Exception
-     */
-    public function testRejectsAJobItDoesNotOwn(): void
-    {
-        $storage = $this->createMock(FilesystemOperator::class);
-        $storage->expects($this->never())->method('deleteDirectory');
-
-        $foreign = new class () implements JobInterface {
-            public function handlerClass(): string
-            {
-                return DeleteAlbumDirectoryHandler::class;
-            }
-        };
-
-        $this->expectException(InvalidArgumentException::class);
-
-        (new DeleteAlbumDirectoryHandler($storage))->handle($foreign);
     }
 
     public function testJobNamesItsHandler(): void

@@ -15,7 +15,7 @@ class ForgotPasswordForm extends ApiForm
     {
         return [
             [['email'], 'required'],
-            [['email'], 'string', 'max' => 254],
+            [['email'], 'string', 'max' => self::EMAIL_MAX],
             [['email'], 'email'],
         ];
     }

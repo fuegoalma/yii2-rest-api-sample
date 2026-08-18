@@ -7,8 +7,9 @@ namespace app\models\db;
 use yii\db\ActiveRecord;
 
 /**
- * A single-use password-reset token. Only the hash of the value handed to the
- * user is stored (see the migration).
+ * A single-use token, scoped by {@see $purpose} — a password reset or an email
+ * verification. Only the hash of the value handed to the user is stored (see the
+ * migration), so a leak of this table exposes nothing spendable.
  *
  * @property int $id
  * @property int $user_id

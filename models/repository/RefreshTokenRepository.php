@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace app\models\repository;
 
+use app\components\SqlTime;
 use app\models\contract\repository\RefreshTokenRepositoryInterface;
 use app\models\db\RefreshToken;
 use yii\db\Exception;
@@ -44,7 +45,7 @@ class RefreshTokenRepository implements RefreshTokenRepositoryInterface
      */
     public function consume(RefreshToken $token): bool
     {
-        $now = $this->now();
+        $now = SqlTime::now();
 
         $claimed = RefreshToken::updateAll(
             ['revoked_at' => $now],
@@ -82,7 +83,7 @@ class RefreshTokenRepository implements RefreshTokenRepositoryInterface
      */
     public function deleteExpired(): int
     {
-        return RefreshToken::deleteAll(['<', 'expires_at', $this->now()]);
+        return RefreshToken::deleteAll(['<', 'expires_at', SqlTime::now()]);
     }
 
     /**
@@ -91,13 +92,9 @@ class RefreshTokenRepository implements RefreshTokenRepositoryInterface
     private function revokeWhere(array $condition): void
     {
         RefreshToken::updateAll(
-            ['revoked_at' => $this->now()],
+            ['revoked_at' => SqlTime::now()],
             ['and', $condition, ['revoked_at' => null]]
         );
     }
 
-    private function now(): string
-    {
-        return date('Y-m-d H:i:s');
-    }
 }

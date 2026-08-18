@@ -18,10 +18,9 @@ class LoginForm extends ApiForm
     {
         return [
             [['email', 'password'], 'required'],
-            // see UserForm: an address longer than 254 characters cannot be valid
-            [['email'], 'string', 'max' => 254],
+            [['email'], 'string', 'max' => self::EMAIL_MAX],
             [['email'], 'email'],
-            [['password'], 'string', 'max' => 72],
+            [['password'], 'string', 'max' => self::PASSWORD_MAX],
         ];
     }
 }

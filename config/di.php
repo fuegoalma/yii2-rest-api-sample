@@ -23,6 +23,7 @@ use app\models\contract\image\ImageEncoderInterface;
 use app\models\contract\CorrelationIdInterface;
 use app\models\contract\queue\JobRunnerInterface;
 use app\models\contract\queue\QueueInterface;
+use app\models\contract\queue\QueueWorkerInterface;
 use app\models\contract\repository\AlbumRepositoryInterface;
 use app\models\contract\repository\PermissionRepositoryInterface;
 use app\models\contract\repository\PhotoRepositoryInterface;
@@ -151,6 +152,11 @@ return [
         // `worker` service (`yii queue/listen`). Tests override this with SyncQueue
         // (config/test.php) so they don't depend on a running worker.
         QueueInterface::class => DbQueue::class,
+        // The draining half, bound separately: SyncQueue implements only the push
+        // side, so the worker command must ask for the capability it uses rather
+        // than for "the queue" — and tests keep a real drain while pushes stay
+        // inline. Same driver either way.
+        QueueWorkerInterface::class => DbQueue::class,
         // a job names its handler as a string, so it can only be resolved at run
         // time; isolating that lookup here keeps the drivers free of the container
         JobRunnerInterface::class => static fn (): JobRunnerInterface

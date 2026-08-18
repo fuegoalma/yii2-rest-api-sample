@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace app\components\queue;
 
+use app\components\SqlTime;
 use app\models\contract\CorrelationIdInterface;
 use app\models\contract\queue\JobInterface;
 use app\models\contract\queue\JobRunnerInterface;
 use app\models\contract\queue\QueueInterface;
+use app\models\contract\queue\QueueWorkerInterface;
 use app\models\db\FailedQueueJob;
 use app\models\db\QueueJob;
 use Throwable;
@@ -25,11 +27,8 @@ use Yii;
  * which is resolved from the container at run time — and the table is written to
  * solely by {@see push()}, so it is trusted input.
  */
-class DbQueue implements QueueInterface
+class DbQueue implements QueueInterface, QueueWorkerInterface
 {
-    /** How many jobs one drain pass takes. The driver owns this — see QueueController. */
-    public const int DEFAULT_LIMIT = 100;
-
     /**
      * How long a claim is honoured before another worker may take the row.
      *
@@ -71,7 +70,7 @@ class DbQueue implements QueueInterface
      *
      * @return int number of jobs that completed successfully
      */
-    public function processPending(int $limit = self::DEFAULT_LIMIT): int
+    public function processPending(int $limit = QueueWorkerInterface::DEFAULT_LIMIT): int
     {
         $done = 0;
 
@@ -113,7 +112,7 @@ class DbQueue implements QueueInterface
     private function claim(int $id): ?QueueJob
     {
         $claimed = QueueJob::updateAll(
-            ['reserved_at' => $this->now()],
+            ['reserved_at' => SqlTime::now()],
             ['and', ['id' => $id], $this->dueCondition()]
         );
 
@@ -130,10 +129,10 @@ class DbQueue implements QueueInterface
     private function dueCondition(): array
     {
         return ['and',
-            ['<=', 'available_at', $this->now()],
+            ['<=', 'available_at', SqlTime::now()],
             ['or',
                 ['reserved_at' => null],
-                ['<', 'reserved_at', date('Y-m-d H:i:s', time() - self::RESERVATION_TIMEOUT)],
+                ['<', 'reserved_at', SqlTime::at(-self::RESERVATION_TIMEOUT)],
             ],
         ];
     }
@@ -175,7 +174,7 @@ class DbQueue implements QueueInterface
         // transient fault (a locked file, a database that is still starting)
         // exhausts the budget before it has had time to clear.
         $row->reserved_at = null;
-        $row->available_at = date('Y-m-d H:i:s', time() + $this->backoffFor($row->attempts));
+        $row->available_at = SqlTime::at($this->backoffFor($row->attempts));
         $row->save(false, ['attempts', 'last_error', 'reserved_at', 'available_at']);
     }
 
@@ -201,8 +200,4 @@ class DbQueue implements QueueInterface
         $row->delete();
     }
 
-    private function now(): string
-    {
-        return date('Y-m-d H:i:s');
-    }
 }

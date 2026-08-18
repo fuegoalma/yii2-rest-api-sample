@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace app\controllers;
 
 use app\controllers\basic\ApiController;
+use app\models\contract\service\RoleServiceInterface;
 use app\models\db\Permission;
 use app\models\db\Role;
 use app\models\form\basic\ApiForm;
@@ -19,6 +20,8 @@ use yii\db\ActiveRecord;
  * with `role.index` may list roles (name + description, e.g. for an admin's
  * assignment UI), `role.view` reveals a role's permission set, and every
  * mutation requires `role.manage`.
+ *
+ * @extends ApiController<RoleServiceInterface>
  */
 class RolesController extends ApiController
 {

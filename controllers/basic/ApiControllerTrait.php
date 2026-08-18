@@ -83,9 +83,13 @@ trait ApiControllerTrait
      * the response into a 422. Defaults to the request body, but index
      * endpoints pass the query params for their search forms.
      *
+     * Internal to {@see withValidatedForm()}, which is the one way in — so the
+     * status code and the error body can never be set by one caller and not the
+     * other.
+     *
      * @param array<string, mixed>|null $data null → the request body
      */
-    protected function validateRequest(ApiForm $form, ?array $data = null): bool
+    private function validateRequest(ApiForm $form, ?array $data = null): bool
     {
         $form->load($data ?? Yii::$app->request->bodyParams);
         if (!$form->validate()) {
@@ -93,5 +97,41 @@ trait ApiControllerTrait
             return false;
         }
         return true;
+    }
+
+    /**
+     * Runs $then only if the form validates, otherwise answers with the 422 body.
+     *
+     * This is the shape of every write action in the API, and it lives on the
+     * trait rather than on {@see ApiController} because the two controller
+     * hierarchies both need it: the REST resources extend `ApiController`, while
+     * `AuthController` and `PermissionsController` extend `yii\rest\Controller`
+     * directly and could otherwise only get here by copying the three lines.
+     *
+     * Generic in the form so the callback is handed back the concrete type it
+     * was written against, rather than the abstract one this signature accepts.
+     *
+     * @template TForm of ApiForm
+     *
+     * @param TForm $form
+     * @param callable(TForm): mixed $then
+     * @param array<string, mixed>|null $data null → the request body
+     */
+    protected function withValidatedForm(ApiForm $form, callable $then, ?array $data = null): mixed
+    {
+        return $this->validateRequest($form, $data) ? $then($form) : $form->getErrors();
+    }
+
+    /**
+     * The "it worked and there is nothing to say" answer.
+     *
+     * One place, because 204 has a rule attached — the body must be empty — and
+     * nine hand-written copies are nine chances to return something alongside it.
+     */
+    protected function noContent(): null
+    {
+        Yii::$app->response->statusCode = 204;
+
+        return null;
     }
 }

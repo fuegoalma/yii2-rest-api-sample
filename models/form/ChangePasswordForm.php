@@ -20,7 +20,8 @@ class ChangePasswordForm extends ApiForm
     {
         return [
             [['current_password', 'password'], 'required'],
-            [['current_password', 'password'], 'string', 'min' => 6, 'max' => 72],
+            [['current_password', 'password'], 'string',
+                'min' => self::PASSWORD_MIN, 'max' => self::PASSWORD_MAX],
         ];
     }
 }

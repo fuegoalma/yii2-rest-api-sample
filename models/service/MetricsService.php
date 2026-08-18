@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace app\models\service;
 
+use app\components\SqlTime;
 use app\models\contract\service\MetricsInterface;
 use app\models\db\FailedQueueJob;
 use app\models\db\OneTimeToken;
@@ -59,7 +60,7 @@ readonly class MetricsService implements MetricsInterface
                 'type' => 'gauge',
                 'value' => (int) OneTimeToken::find()
                     ->where(['used_at' => null])
-                    ->andWhere(['>', 'expires_at', date('Y-m-d H:i:s')])
+                    ->andWhere(['>', 'expires_at', SqlTime::now()])
                     ->count('*', $this->db),
             ],
         ];

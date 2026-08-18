@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace tests\unit;
 
+use app\components\ImageStorage;
 use app\components\queue\ContainerJobRunner;
 use app\models\jobs\DeleteAlbumDirectoryJob;
-use League\Flysystem\FilesystemOperator;
 use PHPUnit\Framework\MockObject\Exception;
 use yii\di\Container;
 
@@ -22,11 +22,14 @@ class ContainerJobRunnerTest extends BaseUnitTest
      */
     public function testResolvesTheJobsHandlerAndRunsIt(): void
     {
-        $storage = $this->createMock(FilesystemOperator::class);
+        $storage = $this->createMock(ImageStorage::class);
         $storage->expects($this->once())->method('deleteDirectory')->with('42');
 
+        // only what the handler asks for: this is a test of the lookup, not of
+        // storage, so the container gets the collaborator rather than the parts
+        // ImageStorage would otherwise be built from
         $container = new Container();
-        $container->set(FilesystemOperator::class, static fn (): FilesystemOperator => $storage);
+        $container->set(ImageStorage::class, static fn (): ImageStorage => $storage);
 
         (new ContainerJobRunner($container))->run(new DeleteAlbumDirectoryJob('42'));
     }

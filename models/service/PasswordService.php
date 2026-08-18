@@ -13,7 +13,7 @@ use app\models\db\OneTimeToken;
 use app\models\db\User;
 use app\models\exception\UnauthorizedException;
 use app\models\jobs\SendEmailJob;
-use Yii;
+use app\models\service\basic\OneTimeTokenFlow;
 use yii\base\Exception;
 use yii\web\UnauthorizedHttpException;
 
@@ -28,17 +28,21 @@ use yii\web\UnauthorizedHttpException;
  */
 readonly class PasswordService implements PasswordServiceInterface
 {
-    private const int TOKEN_LENGTH = 64;
-
     /**
      * $ttl (seconds) comes from PASSWORD_RESET_TTL via config/di.php and carries
      * no default here — the rule ADR 10 states for every config-driven value.
+     *
+     * The token mechanics live in {@see OneTimeTokenFlow}, shared with email
+     * verification; what stays here is what is specific to a password: the
+     * wording of the message, and the session teardown in
+     * {@see applyNewPassword()}.
      */
     public function __construct(
         private UserRepositoryInterface $users,
         private OneTimeTokenRepositoryInterface $tokens,
         private RefreshTokenRepositoryInterface $refreshTokens,
         private QueueInterface $queue,
+        private OneTimeTokenFlow $oneTimeTokens,
         private int $ttl,
     ) {
     }
@@ -87,16 +91,11 @@ readonly class PasswordService implements PasswordServiceInterface
             return;
         }
 
-        $this->tokens->invalidateAllForUser($user->id, OneTimeToken::PURPOSE_PASSWORD_RESET);
-
-        $raw = Yii::$app->security->generateRandomString(self::TOKEN_LENGTH);
-
-        $token = new OneTimeToken();
-        $token->user_id = $user->id;
-        $token->token_hash = $this->hash($raw);
-        $token->purpose = OneTimeToken::PURPOSE_PASSWORD_RESET;
-        $token->expires_at = date('Y-m-d H:i:s', time() + $this->ttl);
-        $this->tokens->add($token);
+        $raw = $this->oneTimeTokens->issue(
+            $user->id,
+            OneTimeToken::PURPOSE_PASSWORD_RESET,
+            $this->ttl
+        );
 
         $this->queue->push(new SendEmailJob(
             $user->email,
@@ -113,27 +112,9 @@ readonly class PasswordService implements PasswordServiceInterface
      */
     public function reset(string $rawToken, string $newPassword): void
     {
-        $token = $this->tokens->findByHash($this->hash($rawToken), OneTimeToken::PURPOSE_PASSWORD_RESET);
-
-        if ($token === null || $token->isUsed()) {
-            throw new UnauthorizedException('Invalid password reset token.', 'password_reset.invalid');
-        }
-
-        if ($token->isExpired()) {
-            throw new UnauthorizedException('Password reset token has expired.', 'password_reset.expired');
-        }
-
-        // whoever wins this claim performs the reset; a second request with the
-        // same token finds it spent
-        if (!$this->tokens->consume($token)) {
-            throw new UnauthorizedException('Invalid password reset token.', 'password_reset.invalid');
-        }
-
-        $user = $this->users->findById($token->user_id);
-
-        if ($user === null) {
-            throw new UnauthorizedException('Invalid password reset token.', 'password_reset.invalid');
-        }
+        // whoever wins the claim inside redeem() performs the reset; a second
+        // request with the same token finds it spent
+        $user = $this->oneTimeTokens->redeem($rawToken, OneTimeToken::PURPOSE_PASSWORD_RESET);
 
         $this->applyNewPassword($user, $newPassword);
     }
@@ -161,10 +142,5 @@ readonly class PasswordService implements PasswordServiceInterface
             intdiv($this->ttl, 60),
             $rawToken
         );
-    }
-
-    private function hash(string $rawToken): string
-    {
-        return hash('sha256', $rawToken);
     }
 }

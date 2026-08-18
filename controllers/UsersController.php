@@ -22,6 +22,9 @@ use app\models\form\UserSearchForm;
 use app\models\form\UserUpdateForm;
 use Yii;
 
+/**
+ * @extends ApiController<ApiServiceInterface>
+ */
 class UsersController extends ApiController
 {
     public $modelClass = User::class;
@@ -76,21 +79,18 @@ class UsersController extends ApiController
      */
     public function actionChangePassword(): mixed
     {
-        $form = new ChangePasswordForm();
+        return $this->withValidatedForm(
+            new ChangePasswordForm(),
+            function (ChangePasswordForm $form): null {
+                $this->passwords->change(
+                    $this->currentUserId(),
+                    (string) $form->current_password,
+                    (string) $form->password
+                );
 
-        if (!$this->validateRequest($form)) {
-            return $form->getErrors();
-        }
-
-        $this->passwords->change(
-            $this->currentUserId(),
-            (string) $form->current_password,
-            (string) $form->password
+                return $this->noContent();
+            }
         );
-
-        Yii::$app->response->statusCode = 204;
-
-        return null;
     }
 
     /**
@@ -101,9 +101,8 @@ class UsersController extends ApiController
     public function actionResendVerification(): mixed
     {
         $this->verification->send($this->currentUserId());
-        Yii::$app->response->statusCode = 204;
 
-        return null;
+        return $this->noContent();
     }
 
     /**
@@ -126,12 +125,12 @@ class UsersController extends ApiController
         $this->access->requirePermission(Permission::ROLE_ASSIGN);
         $this->service->findOrFail($id);
 
-        $form = new RoleAssignForm();
-        if (!$this->validateRequest($form)) {
-            return $form->getErrors();
-        }
-
-        return $this->rolesToArray($this->roleService->assignRoles($id, $form->roles));
+        return $this->withValidatedForm(
+            new RoleAssignForm(),
+            fn (RoleAssignForm $form) => $this->rolesToArray(
+                $this->roleService->assignRoles($id, $form->roles)
+            )
+        );
     }
 
     public function actionUpdate(int $id): mixed

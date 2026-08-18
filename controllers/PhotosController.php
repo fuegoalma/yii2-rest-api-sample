@@ -19,6 +19,9 @@ use yii\data\ActiveDataProvider;
 use yii\db\ActiveRecord;
 use yii\web\UploadedFile;
 
+/**
+ * @extends ApiController<PhotoServiceInterface>
+ */
 class PhotosController extends ApiController
 {
     use AlbumVisibilityTrait;
@@ -53,7 +56,7 @@ class PhotosController extends ApiController
 
         return $this->handleIndex(
             $this->searchForm(),
-            fn (SearchCriteria $criteria) => $this->photoService()->getByAlbum($albumId, $criteria)
+            fn (SearchCriteria $criteria) => $this->service->getByAlbum($albumId, $criteria)
         );
     }
 
@@ -67,7 +70,7 @@ class PhotosController extends ApiController
 
         return $this->handleWrite(
             $form,
-            fn () => $this->photoService()->createInAlbum($albumId, (string) $form->title, $form->file),
+            fn () => $this->service->createInAlbum($albumId, (string) $form->title, $form->file),
             201
         );
     }
@@ -81,7 +84,7 @@ class PhotosController extends ApiController
      */
     private function requireAlbumAccess(int $albumId, string $ability): void
     {
-        $album = $this->photoService()->findAlbumOrFail($albumId);
+        $album = $this->service->findAlbumOrFail($albumId);
         $this->requireVisibleAlbum($album);
         $this->access->requireOn($ability, $album);
     }
@@ -116,10 +119,4 @@ class PhotosController extends ApiController
         return new PhotoUpdateForm();
     }
 
-    private function photoService(): PhotoServiceInterface
-    {
-        /** @var PhotoServiceInterface $service */
-        $service = $this->service;
-        return $service;
-    }
 }

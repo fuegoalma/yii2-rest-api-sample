@@ -15,7 +15,7 @@ class VerifyEmailForm extends ApiForm
     {
         return [
             [['token'], 'required'],
-            [['token'], 'string', 'max' => 64],
+            [['token'], 'string', 'max' => self::TOKEN_MAX],
         ];
     }
 }

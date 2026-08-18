@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace app\models\repository;
 
+use app\components\SqlTime;
 use app\models\contract\repository\OneTimeTokenRepositoryInterface;
 use app\models\db\OneTimeToken;
 use yii\db\Exception;
@@ -31,7 +32,7 @@ class OneTimeTokenRepository implements OneTimeTokenRepositoryInterface
      */
     public function consume(OneTimeToken $token): bool
     {
-        $now = $this->now();
+        $now = SqlTime::now();
 
         $claimed = OneTimeToken::updateAll(
             ['used_at' => $now],
@@ -50,13 +51,9 @@ class OneTimeTokenRepository implements OneTimeTokenRepositoryInterface
     public function invalidateAllForUser(int $userId, string $purpose): void
     {
         OneTimeToken::updateAll(
-            ['used_at' => $this->now()],
+            ['used_at' => SqlTime::now()],
             ['and', ['user_id' => $userId, 'purpose' => $purpose], ['used_at' => null]]
         );
     }
 
-    private function now(): string
-    {
-        return date('Y-m-d H:i:s');
-    }
 }

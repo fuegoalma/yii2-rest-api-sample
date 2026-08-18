@@ -18,7 +18,6 @@ use yii\helpers\ArrayHelper;
 use app\models\exception\ConflictException;
 use app\models\exception\ForbiddenException;
 use yii\web\ConflictHttpException;
-use yii\web\ForbiddenHttpException;
 use yii\web\NotFoundHttpException;
 
 /**
@@ -136,7 +135,7 @@ readonly class RoleService extends BaseCrudService implements RoleServiceInterfa
             $this->assertNotLastManageSource(excludeRoleId: (int) $role->id);
 
             // the FK cascades clean up role_permission and user_role rows
-            $this->repository->delete($role);
+            $this->roles->delete($role);
             $this->audit->record(RbacAudit::ACTION_ROLE_DELETED, (int) $role->id, [
                 'name' => $role->name,
             ]);

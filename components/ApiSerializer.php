@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace app\components;
 
-use app\components\ApiErrorCatalog;
 use app\models\dto\BasicResponse;
 use app\models\dto\PaginationMeta;
 use yii\data\DataProviderInterface;

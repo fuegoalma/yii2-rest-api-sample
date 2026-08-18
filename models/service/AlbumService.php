@@ -36,7 +36,7 @@ readonly class AlbumService extends BaseCrudService implements AlbumServiceInter
         $criteria = ($criteria ?? new SearchCriteria())
             ->withScope(['user_id' => $userId, 'is_deleted' => 0]);
 
-        return $this->repository->getAllDP($criteria);
+        return $this->albums->getAllDP($criteria);
     }
 
     /**
@@ -124,7 +124,7 @@ readonly class AlbumService extends BaseCrudService implements AlbumServiceInter
 
         $album->is_deleted = 1;
         $album->delete_reason = $reason;
-        $this->repository->save($album);
+        $this->albums->save($album);
     }
 
     /**
@@ -138,7 +138,7 @@ readonly class AlbumService extends BaseCrudService implements AlbumServiceInter
 
         $album->is_deleted = 0;
         $album->delete_reason = null;
-        $this->repository->save($album);
+        $this->albums->save($album);
 
         return $album;
     }

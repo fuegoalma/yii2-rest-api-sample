@@ -9,8 +9,8 @@ use app\models\contract\repository\OneTimeTokenRepositoryInterface;
 use app\models\contract\repository\RefreshTokenRepositoryInterface;
 use app\models\contract\repository\UserRepositoryInterface;
 use app\models\db\OneTimeToken;
-use app\models\db\User;
 use app\models\jobs\SendEmailJob;
+use app\models\service\basic\OneTimeTokenFlow;
 use app\models\service\PasswordService;
 use PHPUnit\Framework\MockObject\Exception;
 use yii\web\UnauthorizedHttpException;
@@ -18,6 +18,12 @@ use yii\web\UnauthorizedHttpException;
 /**
  * The branches `PasswordCest` cannot reach through HTTP: races and torn state.
  * The happy paths and their session consequences are covered end to end there.
+ *
+ * The token mechanics themselves belong to {@see OneTimeTokenFlow} and are
+ * pinned in {@see OneTimeTokenFlowTest}; the real flow is wired here over the
+ * same mocked repositories, because what these tests assert is the *consequence*
+ * a refusal has for this service's own collaborators — a reset that did not
+ * happen must not end anybody's sessions, which the flow cannot see.
  */
 class PasswordServiceTest extends BaseUnitTest
 {
@@ -42,6 +48,7 @@ class PasswordServiceTest extends BaseUnitTest
             $this->tokens,
             $this->refreshTokens,
             $this->queue,
+            new OneTimeTokenFlow($this->users, $this->tokens),
             600
         );
     }

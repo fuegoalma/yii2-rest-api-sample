@@ -8,6 +8,7 @@ use app\models\contract\queue\QueueInterface;
 use app\models\contract\repository\OneTimeTokenRepositoryInterface;
 use app\models\contract\repository\UserRepositoryInterface;
 use app\models\db\OneTimeToken;
+use app\models\service\basic\OneTimeTokenFlow;
 use app\models\service\EmailVerificationService;
 use PHPUnit\Framework\MockObject\Exception;
 use yii\web\UnauthorizedHttpException;
@@ -15,6 +16,10 @@ use yii\web\UnauthorizedHttpException;
 /**
  * The branches EmailVerificationCest cannot reach through HTTP: a lost claim
  * race, and an account that disappears mid-flow.
+ *
+ * The real {@see OneTimeTokenFlow} is wired over the mocked repositories rather
+ * than stubbed, so these stay tests of what this service does with the outcome —
+ * the token rules themselves are pinned once in {@see OneTimeTokenFlowTest}.
  */
 class EmailVerificationServiceTest extends BaseUnitTest
 {
@@ -32,8 +37,8 @@ class EmailVerificationServiceTest extends BaseUnitTest
         $this->tokens = $this->createMock(OneTimeTokenRepositoryInterface::class);
         $this->service = new EmailVerificationService(
             $this->users,
-            $this->tokens,
             $this->createMock(QueueInterface::class),
+            new OneTimeTokenFlow($this->users, $this->tokens),
             600
         );
     }

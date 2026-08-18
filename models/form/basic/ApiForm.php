@@ -19,6 +19,21 @@ use yii\base\Model;
  */
 abstract class ApiForm extends Model
 {
+    /**
+     * 254, not 255: RFC 5321 caps local-part + domain at 253, which
+     * yii\validators\EmailValidator enforces — so a 255-character address can
+     * never be valid, and capping at 255 would document a length the API cannot
+     * actually accept.
+     */
+    protected const int EMAIL_MAX = 254;
+
+    /** bcrypt truncates beyond 72 bytes, so a longer password is a longer lie */
+    protected const int PASSWORD_MIN = 6;
+    protected const int PASSWORD_MAX = 72;
+
+    /** the length {@see \app\models\service\basic\HashesRawTokens} generates */
+    protected const int TOKEN_MAX = 64;
+
     /** @var string[] attribute names actually present in the request body */
     private array $loadedAttributes = [];
 

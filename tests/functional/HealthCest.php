@@ -8,7 +8,6 @@ use app\models\contract\service\HealthServiceInterface;
 use app\models\dto\HealthCheckResult;
 use app\models\service\HealthService;
 use FunctionalTester;
-use Yii;
 
 class HealthCest extends BaseCest
 {

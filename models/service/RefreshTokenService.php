@@ -4,9 +4,10 @@ declare(strict_types=1);
 
 namespace app\models\service;
 
+use app\components\SqlTime;
 use app\models\contract\repository\RefreshTokenRepositoryInterface;
 use app\models\db\RefreshToken;
-use Yii;
+use app\models\service\basic\HashesRawTokens;
 use yii\base\Exception;
 use app\models\exception\UnauthorizedException;
 use yii\web\UnauthorizedHttpException;
@@ -22,7 +23,7 @@ use yii\web\UnauthorizedHttpException;
  */
 readonly class RefreshTokenService
 {
-    private const int TOKEN_LENGTH = 64;
+    use HashesRawTokens;
 
     /**
      * $ttl (seconds) comes from JWT_REFRESH_TTL via config/di.php and carries
@@ -44,13 +45,13 @@ readonly class RefreshTokenService
      */
     public function issue(int $userId, ?string $familyId = null): string
     {
-        $raw = $this->randomString();
+        $raw = $this->randomToken();
 
         $token = new RefreshToken();
         $token->user_id = $userId;
-        $token->token_hash = $this->hash($raw);
-        $token->family_id = $familyId ?? $this->randomString();
-        $token->expires_at = date('Y-m-d H:i:s', time() + $this->ttl);
+        $token->token_hash = $this->hashToken($raw);
+        $token->family_id = $familyId ?? $this->randomToken();
+        $token->expires_at = SqlTime::at($this->ttl);
 
         $this->repository->add($token);
 
@@ -67,7 +68,7 @@ readonly class RefreshTokenService
      */
     public function consume(string $rawToken): RefreshToken
     {
-        $token = $this->repository->findByHash($this->hash($rawToken));
+        $token = $this->repository->findByHash($this->hashToken($rawToken));
 
         if ($token === null) {
             throw new UnauthorizedException('Invalid refresh token.', 'refresh_token.invalid');
@@ -113,7 +114,7 @@ readonly class RefreshTokenService
      */
     public function revokeSession(string $rawToken): void
     {
-        $token = $this->repository->findByHash($this->hash($rawToken));
+        $token = $this->repository->findByHash($this->hashToken($rawToken));
         if ($token !== null) {
             $this->repository->revokeFamily($token->family_id);
         }
@@ -128,7 +129,7 @@ readonly class RefreshTokenService
      */
     public function revokeAllSessions(string $rawToken): ?int
     {
-        $token = $this->repository->findByHash($this->hash($rawToken));
+        $token = $this->repository->findByHash($this->hashToken($rawToken));
 
         if ($token === null) {
             return null;
@@ -147,18 +148,5 @@ readonly class RefreshTokenService
     public function pruneExpired(): int
     {
         return $this->repository->deleteExpired();
-    }
-
-    /**
-     * @throws Exception
-     */
-    private function randomString(): string
-    {
-        return Yii::$app->security->generateRandomString(self::TOKEN_LENGTH);
-    }
-
-    private function hash(string $rawToken): string
-    {
-        return hash('sha256', $rawToken);
     }
 }

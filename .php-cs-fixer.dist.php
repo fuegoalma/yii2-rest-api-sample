@@ -36,5 +36,9 @@ return (new PhpCsFixer\Config())
     ->setRules([
         '@PSR12' => true,
         'declare_strict_types' => true,
+        // An import nothing uses is a claim about a dependency the file does not
+        // have. @PSR12 does not cover it, so it went unnoticed until an audit
+        // read every `use` line by hand; this is what stops it recurring.
+        'no_unused_imports' => true,
     ])
     ->setFinder($finder);

@@ -16,8 +16,8 @@ class ResetPasswordForm extends ApiForm
     {
         return [
             [['token', 'password'], 'required'],
-            [['token'], 'string', 'max' => 64],
-            [['password'], 'string', 'min' => 6, 'max' => 72],
+            [['token'], 'string', 'max' => self::TOKEN_MAX],
+            [['password'], 'string', 'min' => self::PASSWORD_MIN, 'max' => self::PASSWORD_MAX],
         ];
     }
 }

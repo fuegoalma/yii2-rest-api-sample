@@ -5,28 +5,28 @@ declare(strict_types=1);
 namespace app\models\jobs;
 
 use app\models\contract\MailerInterface;
-use app\models\contract\queue\JobHandlerInterface;
 use app\models\contract\queue\JobInterface;
-use InvalidArgumentException;
+use app\models\jobs\basic\BaseJobHandler;
 
 /**
  * Hands a {@see SendEmailJob} to whatever transport is bound.
+ *
+ * @extends BaseJobHandler<SendEmailJob>
  */
-readonly class SendEmailHandler implements JobHandlerInterface
+readonly class SendEmailHandler extends BaseJobHandler
 {
     public function __construct(
         private MailerInterface $mailer,
     ) {
     }
 
-    public function handle(JobInterface $job): void
+    protected function jobClass(): string
     {
-        if (!$job instanceof SendEmailJob) {
-            throw new InvalidArgumentException(
-                'Expected ' . SendEmailJob::class . ', got ' . $job::class
-            );
-        }
+        return SendEmailJob::class;
+    }
 
+    protected function run(JobInterface $job): void
+    {
         $this->mailer->send($job->to, $job->subject, $job->body);
     }
 }

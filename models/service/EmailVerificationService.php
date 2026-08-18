@@ -4,14 +4,13 @@ declare(strict_types=1);
 
 namespace app\models\service;
 
+use app\components\SqlTime;
 use app\models\contract\queue\QueueInterface;
-use app\models\contract\repository\OneTimeTokenRepositoryInterface;
 use app\models\contract\repository\UserRepositoryInterface;
 use app\models\contract\service\EmailVerificationInterface;
 use app\models\db\OneTimeToken;
-use app\models\exception\UnauthorizedException;
 use app\models\jobs\SendEmailJob;
-use Yii;
+use app\models\service\basic\OneTimeTokenFlow;
 use yii\base\Exception;
 use yii\web\UnauthorizedHttpException;
 
@@ -29,11 +28,11 @@ use yii\web\UnauthorizedHttpException;
  *
  * The token machinery is the password reset's, scoped by `purpose` — same hash,
  * same expiry, same single-use claim, so a second copy of it does not exist.
+ * It lives in {@see OneTimeTokenFlow}; what is left here is what verifying an
+ * address actually means, which is one column and one message.
  */
 readonly class EmailVerificationService implements EmailVerificationInterface
 {
-    private const int TOKEN_LENGTH = 64;
-
     /**
      * $ttl (seconds) comes from EMAIL_VERIFICATION_TTL via config/di.php and
      * carries no default here (ADR 10). Longer than a password reset: this is
@@ -42,8 +41,8 @@ readonly class EmailVerificationService implements EmailVerificationInterface
      */
     public function __construct(
         private UserRepositoryInterface $users,
-        private OneTimeTokenRepositoryInterface $tokens,
         private QueueInterface $queue,
+        private OneTimeTokenFlow $oneTimeTokens,
         private int $ttl,
     ) {
     }
@@ -59,16 +58,11 @@ readonly class EmailVerificationService implements EmailVerificationInterface
             return;
         }
 
-        $this->tokens->invalidateAllForUser($userId, OneTimeToken::PURPOSE_EMAIL_VERIFICATION);
-
-        $raw = Yii::$app->security->generateRandomString(self::TOKEN_LENGTH);
-
-        $token = new OneTimeToken();
-        $token->user_id = $userId;
-        $token->purpose = OneTimeToken::PURPOSE_EMAIL_VERIFICATION;
-        $token->token_hash = $this->hash($raw);
-        $token->expires_at = date('Y-m-d H:i:s', time() + $this->ttl);
-        $this->tokens->add($token);
+        $raw = $this->oneTimeTokens->issue(
+            $userId,
+            OneTimeToken::PURPOSE_EMAIL_VERIFICATION,
+            $this->ttl
+        );
 
         $this->queue->push(new SendEmailJob(
             $user->email,
@@ -87,35 +81,9 @@ readonly class EmailVerificationService implements EmailVerificationInterface
      */
     public function verify(string $rawToken): void
     {
-        $token = $this->tokens->findByHash(
-            $this->hash($rawToken),
-            OneTimeToken::PURPOSE_EMAIL_VERIFICATION
-        );
+        $user = $this->oneTimeTokens->redeem($rawToken, OneTimeToken::PURPOSE_EMAIL_VERIFICATION);
 
-        if ($token === null || $token->isUsed()) {
-            throw new UnauthorizedException('Invalid verification token.', 'email_verification.invalid');
-        }
-
-        if ($token->isExpired()) {
-            throw new UnauthorizedException('Verification token has expired.', 'email_verification.expired');
-        }
-
-        if (!$this->tokens->consume($token)) {
-            throw new UnauthorizedException('Invalid verification token.', 'email_verification.invalid');
-        }
-
-        $user = $this->users->findById($token->user_id);
-
-        if ($user === null) {
-            throw new UnauthorizedException('Invalid verification token.', 'email_verification.invalid');
-        }
-
-        $user->email_verified_at = date('Y-m-d H:i:s');
+        $user->email_verified_at = SqlTime::now();
         $user->save(false, ['email_verified_at']);
-    }
-
-    private function hash(string $rawToken): string
-    {
-        return hash('sha256', $rawToken);
     }
 }
