@@ -1,10 +1,13 @@
 <?php
 
+declare(strict_types=1);
+
 namespace tests\unit;
 
 use app\components\image\ImagickWebpEncoder;
 use app\models\contract\image\ImageEncoderInterface;
 use Imagick;
+use ReflectionMethod;
 use Yii;
 use yii\base\Exception;
 
@@ -111,6 +114,74 @@ class ImagickWebpEncoderTest extends BaseUnitTest
         $this->expectExceptionMessage('The uploaded file is not a valid image.');
 
         $this->encoder()->encode($this->notAnImageFixture());
+    }
+
+    /**
+     * A decoded bitmap is allocated by ImageMagick's C library, outside PHP's
+     * `memory_limit`, so a small file can still cost a lot of RAM. ImageMagick's
+     * own policy.xml caps it, but at values sized for a general-purpose image
+     * tool — a gigabyte of memory and 256 megapixels — which is far more than an
+     * endpoint whose every output is 500×500 has any use for.
+     */
+    public function testRefusesAnImageBeyondItsResourceLimits(): void
+    {
+        $this->expectException(Exception::class);
+        $this->expectExceptionMessage('The uploaded file is not a valid image.');
+
+        $this->encoder()->encode($this->oversizedImageFixture());
+    }
+
+    /**
+     * The limits are process-wide, so an encoder that left them narrowed would
+     * silently constrain every other user of Imagick in the process. This is
+     * also what lets the fixture above be created at all.
+     */
+    public function testItLeavesTheProcessResourceLimitsAsItFoundThem(): void
+    {
+        $probe = new Imagick();
+        $before = $probe->getResourceLimit(Imagick::RESOURCETYPE_WIDTH);
+
+        $this->encoder()->encode($this->imageFixture(10, 10));
+
+        $this->assertSame($before, $probe->getResourceLimit(Imagick::RESOURCETYPE_WIDTH));
+
+        // and a failed decode must restore them too — that path throws
+        try {
+            $this->encoder()->encode($this->notAnImageFixture());
+        } catch (Exception) {
+            // expected; the assertion is what the finally block left behind
+        }
+
+        $this->assertSame($before, $probe->getResourceLimit(Imagick::RESOURCETYPE_WIDTH));
+        $probe->clear();
+    }
+
+    /**
+     * Every other limit here describes one decode — pixels, dimensions, cache
+     * size — but the time resource is a budget the *process* accumulates, and
+     * whether writing it restarts that clock is a property of the ImageMagick
+     * build. On one that does not restart it, a per-decode ceiling becomes a
+     * ceiling on all image work this process will ever do, and every upload
+     * after it fails as an invalid image. That is not hypothetical: it is what
+     * turned CI red while the container's policy.xml (which reports the time
+     * limit as 0) kept it invisible here, so this asserts the limit is left
+     * alone rather than trusting the ambient default to stay friendly.
+     */
+    public function testItDoesNotTouchTheProcessWideTimeBudget(): void
+    {
+        // Asserted on the declared ceilings rather than on the process after a
+        // decode: encode() restores whatever it narrowed, so from the outside
+        // "never touched it" and "narrowed it and put it back" are the same
+        // observation. The damage happens while the decode is in flight, and
+        // this is the only place it can be seen without a seam that exists
+        // solely to be looked through.
+        $limits = new ReflectionMethod(ImagickWebpEncoder::class, 'limits');
+
+        $this->assertArrayNotHasKey(
+            Imagick::RESOURCETYPE_TIME,
+            $limits->invoke($this->encoder()),
+            'the encoder narrowed the cumulative time budget, which it must never do'
+        );
     }
 
     private function encoder(): ImagickWebpEncoder

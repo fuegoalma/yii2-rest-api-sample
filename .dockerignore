@@ -23,7 +23,7 @@
 # here (docker/cron/entrypoint.sh + crontab).
 !docker
 
-!LICENSE.md
+!LICENSE
 !README.md
 
 # These directories must exist in the image — the prod stage chowns them — but

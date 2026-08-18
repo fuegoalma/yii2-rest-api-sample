@@ -1,12 +1,16 @@
 <?php
 
+declare(strict_types=1);
+
 namespace app\models\service;
 
 use app\models\contract\repository\RoleRepositoryInterface;
 use app\models\contract\service\AccessControlInterface;
 use app\models\contract\service\RoleServiceInterface;
+use app\models\contract\service\RbacAuditInterface;
 use app\models\contract\service\TransactionRunnerInterface;
 use app\models\db\Permission;
+use app\models\db\RbacAudit;
 use app\models\db\Role;
 use app\models\service\basic\BaseCrudService;
 use yii\db\ActiveRecord;
@@ -14,7 +18,6 @@ use yii\helpers\ArrayHelper;
 use app\models\exception\ConflictException;
 use app\models\exception\ForbiddenException;
 use yii\web\ConflictHttpException;
-use yii\web\ForbiddenHttpException;
 use yii\web\NotFoundHttpException;
 
 /**
@@ -36,6 +39,7 @@ readonly class RoleService extends BaseCrudService implements RoleServiceInterfa
         private RoleRepositoryInterface $roles,
         private AccessControlInterface $access,
         private TransactionRunnerInterface $tx,
+        private RbacAuditInterface $audit,
     ) {
         parent::__construct($roles);
     }
@@ -46,6 +50,8 @@ readonly class RoleService extends BaseCrudService implements RoleServiceInterfa
     }
 
     /**
+     * @param array<string, mixed> $data
+     *
      * @throws \yii\db\Exception
      */
     public function create(array $data): ActiveRecord
@@ -58,11 +64,20 @@ readonly class RoleService extends BaseCrudService implements RoleServiceInterfa
             $role = parent::create($data);
             $this->syncPermissionsIfValid($role, $permissions);
 
+            if (!$role->hasErrors()) {
+                $this->audit->record(RbacAudit::ACTION_ROLE_CREATED, (int) $role->id, [
+                    'name' => $role->name,
+                    'permissions' => $permissions ?? [],
+                ]);
+            }
+
             return $role;
         });
     }
 
     /**
+     * @param array<string, mixed> $data
+     *
      * @throws NotFoundHttpException
      * @throws ConflictHttpException
      * @throws \yii\db\Exception
@@ -90,6 +105,13 @@ readonly class RoleService extends BaseCrudService implements RoleServiceInterfa
             $role = parent::update($id, $data);
             $this->syncPermissionsIfValid($role, $permissions);
 
+            if (!$role->hasErrors()) {
+                $this->audit->record(RbacAudit::ACTION_ROLE_UPDATED, (int) $role->id, [
+                    'name' => $role->name,
+                    'permissions' => $permissions,
+                ]);
+            }
+
             return $role;
         });
     }
@@ -113,7 +135,10 @@ readonly class RoleService extends BaseCrudService implements RoleServiceInterfa
             $this->assertNotLastManageSource(excludeRoleId: (int) $role->id);
 
             // the FK cascades clean up role_permission and user_role rows
-            $this->repository->delete($role);
+            $this->roles->delete($role);
+            $this->audit->record(RbacAudit::ACTION_ROLE_DELETED, (int) $role->id, [
+                'name' => $role->name,
+            ]);
         });
     }
 
@@ -154,6 +179,11 @@ readonly class RoleService extends BaseCrudService implements RoleServiceInterfa
             }
 
             $this->roles->setUserRoles($userId, $newIds);
+
+            $this->audit->record(RbacAudit::ACTION_ROLES_ASSIGNED, $userId, [
+                'granted' => array_values(array_diff($newIds, $currentIds)),
+                'revoked' => array_values(array_diff($currentIds, $newIds)),
+            ]);
 
             return $newRoles;
         });
@@ -197,7 +227,9 @@ readonly class RoleService extends BaseCrudService implements RoleServiceInterfa
      * permission-name list (null when the request did not send it at all,
      * so partial updates leave the set untouched).
      *
-     * @return array{0: array, 1: ?string[]}
+     * @param array<string, mixed> $data
+     *
+     * @return array{0: array<string, mixed>, 1: ?string[]}
      */
     private function extractPermissions(array $data): array
     {

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace app\models\repository;
 
 use app\models\contract\repository\RoleRepositoryInterface;
@@ -17,6 +19,7 @@ class RoleRepository extends BaseRepository implements RoleRepositoryInterface
         return Role::class;
     }
 
+    /** @return string[] */
     protected function viewRelations(): array
     {
         return ['permissions'];

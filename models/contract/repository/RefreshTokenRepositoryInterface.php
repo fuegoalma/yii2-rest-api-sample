@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace app\models\contract\repository;
 
 use app\models\db\RefreshToken;
@@ -20,9 +22,14 @@ interface RefreshTokenRepositoryInterface
     public function add(RefreshToken $token): void;
 
     /**
-     * @throws Exception
+     * Claims a token for rotation: revokes it, but only if it was still active.
+     * Implementations must decide this atomically — two concurrent refreshes of
+     * the same token must not both succeed.
+     *
+     * @return bool true if this call revoked the token, false if it was already
+     *              spent — which the caller must treat as reuse
      */
-    public function revoke(RefreshToken $token): void;
+    public function consume(RefreshToken $token): bool;
 
     /** Revokes every still-active token in a family (one login session). */
     public function revokeFamily(string $familyId): void;

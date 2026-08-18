@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace app\models\form;
 
 use app\models\db\Permission;
@@ -16,9 +18,9 @@ abstract class RoleForm extends ApiForm
 {
     use ValidatesKnownNames;
 
-    public $name;
-    public $description;
-    public $permissions;
+    public mixed $name = null;
+    public mixed $description = null;
+    public mixed $permissions = null;
 
     public function rules(): array
     {

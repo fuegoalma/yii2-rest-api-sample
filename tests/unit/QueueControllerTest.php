@@ -1,9 +1,11 @@
 <?php
 
+declare(strict_types=1);
+
 namespace tests\unit;
 
 use app\commands\QueueController;
-use app\components\queue\DbQueue;
+use app\models\contract\queue\QueueWorkerInterface;
 use app\models\contract\StopSignalInterface;
 use PHPUnit\Framework\MockObject\Exception;
 use RuntimeException;
@@ -19,7 +21,7 @@ class QueueControllerTest extends BaseUnitTest
      */
     public function testListenDrainsTheQueueUntilItIsAskedToStop(): void
     {
-        $queue = $this->createMock(DbQueue::class);
+        $queue = $this->createMock(QueueWorkerInterface::class);
         $queue->expects($this->exactly(2))->method('processPending')->willReturn(5);
 
         $this->controller($queue, $this->stopAfter(2))->actionListen(0);
@@ -30,7 +32,7 @@ class QueueControllerTest extends BaseUnitTest
      */
     public function testListenSleepsWhenTheQueueIsEmpty(): void
     {
-        $queue = $this->createMock(DbQueue::class);
+        $queue = $this->createMock(QueueWorkerInterface::class);
         // 0 processed sends the loop down the sleep branch; delay 0 keeps it instant
         $queue->expects($this->once())->method('processPending')->willReturn(0);
 
@@ -45,7 +47,7 @@ class QueueControllerTest extends BaseUnitTest
      */
     public function testListenSurvivesAJobThatThrows(): void
     {
-        $queue = $this->createMock(DbQueue::class);
+        $queue = $this->createMock(QueueWorkerInterface::class);
         $queue->expects($this->exactly(2))
             ->method('processPending')
             ->willThrowException(new RuntimeException('db is down'));
@@ -58,7 +60,7 @@ class QueueControllerTest extends BaseUnitTest
      */
     public function testListenStartsListeningForSignalsBeforeLooping(): void
     {
-        $queue = $this->createMock(DbQueue::class);
+        $queue = $this->createMock(QueueWorkerInterface::class);
         $signal = $this->createMock(StopSignalInterface::class);
         $signal->expects($this->once())->method('listen');
         $signal->method('shouldStop')->willReturn(true);
@@ -74,7 +76,7 @@ class QueueControllerTest extends BaseUnitTest
      */
     public function testRunDrainsOnceAndReportsTheCount(): void
     {
-        $queue = $this->createMock(DbQueue::class);
+        $queue = $this->createMock(QueueWorkerInterface::class);
         $queue->expects($this->once())->method('processPending')->with(50)->willReturn(3);
 
         $controller = new class ('queue', Yii::$app, $queue, $this->createMock(StopSignalInterface::class)) extends QueueController {
@@ -97,10 +99,10 @@ class QueueControllerTest extends BaseUnitTest
      */
     public function testRunDefaultsToTheDriversBatchLimit(): void
     {
-        $queue = $this->createMock(DbQueue::class);
+        $queue = $this->createMock(QueueWorkerInterface::class);
         $queue->expects($this->once())
             ->method('processPending')
-            ->with(DbQueue::DEFAULT_LIMIT)
+            ->with(QueueWorkerInterface::DEFAULT_LIMIT)
             ->willReturn(0);
 
         $controller = new class ('queue', Yii::$app, $queue, $this->createMock(StopSignalInterface::class)) extends QueueController {
@@ -108,6 +110,32 @@ class QueueControllerTest extends BaseUnitTest
         };
 
         $controller->actionRun();
+    }
+
+    /**
+     * The worker is driven through the drain contract, not through the DB
+     * driver: a queue backed by something else has to be substitutable here, and
+     * while the command named `DbQueue` it could not be. Also what keeps the
+     * command off `DbQueue`'s push side, which it has no business calling.
+     *
+     * @throws Exception
+     */
+    public function testDrainsThroughAnyImplementationOfTheWorkerContract(): void
+    {
+        $queue = new class () implements QueueWorkerInterface {
+            public int $drained = 0;
+
+            public function processPending(int $limit = QueueWorkerInterface::DEFAULT_LIMIT): int
+            {
+                $this->drained++;
+
+                return 0;
+            }
+        };
+
+        $this->controller($queue, $this->stopAfter(2))->actionListen(0);
+
+        $this->assertSame(2, $queue->drained);
     }
 
     /**
@@ -133,7 +161,7 @@ class QueueControllerTest extends BaseUnitTest
         };
     }
 
-    private function controller(DbQueue $queue, StopSignalInterface $signal): QueueController
+    private function controller(QueueWorkerInterface $queue, StopSignalInterface $signal): QueueController
     {
         return new QueueController('queue', Yii::$app, $queue, $signal);
     }

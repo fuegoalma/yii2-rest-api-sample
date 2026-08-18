@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace app\models\db;
 
 use app\components\JwtService;
@@ -17,9 +19,9 @@ use yii\web\IdentityInterface;
  * @property string $first_name
  * @property string $last_name
  * @property string $email
- * @property null|string $auth_key
- * @property null|string $access_token
  * @property string $password_hash
+ * @property string|null $email_verified_at
+ * @property int $token_version  bumped to withdraw every access token issued so far
  * @property string $created_at
  * @property string $updated_at
  *
@@ -46,7 +48,6 @@ class User extends ActiveRecord implements IdentityInterface, OwnableInterface
             [['email'], 'string', 'max' => 255],
             [['email'], 'email'],
             [['email'], 'unique'],
-            [['auth_key', 'access_token'], 'string', 'max' => 32],
             [['password_hash'], 'string', 'max' => 60],
         ];
     }
@@ -58,14 +59,13 @@ class User extends ActiveRecord implements IdentityInterface, OwnableInterface
             'first_name' => 'First Name',
             'last_name' => 'Last Name',
             'email' => 'Email',
-            'auth_key' => 'Auth Key',
-            'access_token' => 'Access Token',
             'password_hash' => 'Password Hash',
             'created_at' => 'Created At',
             'updated_at' => 'Updated At',
         ];
     }
 
+    /** @return array<int|string, string|callable> */
     public function fields(): array // API fields
     {
         return [
@@ -73,9 +73,13 @@ class User extends ActiveRecord implements IdentityInterface, OwnableInterface
             'first_name',
             'last_name',
             'email',
+            'created_at',
+            'updated_at',
+            'email_verified' => fn () => $this->email_verified_at !== null,
         ];
     }
 
+    /** @return list<string> */
     public function extraFields(): array
     {
         return [
@@ -83,9 +87,20 @@ class User extends ActiveRecord implements IdentityInterface, OwnableInterface
         ];
     }
 
+    /**
+     * Required by {@see IdentityInterface}, unreachable here.
+     *
+     * Yii calls this only from `loginByCookie()` and `renewAuthStatus()`, which
+     * need `enableAutoLogin` and `enableSession` respectively — both false in
+     * config/web.php, because authentication is a stateless bearer token. There
+     * is no stored key to compare against, so nothing can match.
+     *
+     * Reviving session-based login means adding both the storage and a real
+     * comparison. Returning true here would authenticate anyone.
+     */
     public function validateAuthKey($authKey): bool
     {
-        return $this->auth_key === $authKey;
+        return false;
     }
 
     public function validatePassword(string $password): bool
@@ -107,17 +122,47 @@ class User extends ActiveRecord implements IdentityInterface, OwnableInterface
     }
 
     /**
-     * The token is a stateless JWT access token: the user is resolved from its
-     * `sub` claim, nothing is stored in the DB. Refresh tokens are opaque and
-     * never valid JWTs, so they can't authenticate here.
+     * The token is a stateless JWT access token: nothing about it is stored.
+     * Refresh tokens are opaque and never valid JWTs, so they can't authenticate
+     * here.
+     *
+     * The one piece of state consulted is `token_version`, and it is free: the
+     * row is being loaded anyway to resolve the `sub` claim. A token whose `ver`
+     * no longer matches the account was issued before a deliberate withdrawal
+     * (logout-all, a password reset) and is refused.
+     *
+     * A token carrying **no** `ver` claim is refused too. Reading a missing
+     * claim as version 0 would let a token minted before the column existed
+     * survive the very bump meant to end it.
      */
     public static function findIdentityByAccessToken($token, $type = null): User|IdentityInterface|null
     {
         /** @var JwtService $jwt */
         $jwt = Yii::$app->get('jwt');
-        $userId = $jwt->getUserId((string) $token);
+        $claims = $jwt->decode((string) $token);
 
-        return $userId === null ? null : static::findOne(['id' => $userId]);
+        if (!isset($claims['sub'], $claims['ver'])) {
+            return null;
+        }
+
+        return static::findOne([
+            'id' => (int) $claims['sub'],
+            'token_version' => (int) $claims['ver'],
+        ]);
+    }
+
+    /**
+     * Withdraws every access token issued so far, and returns the new version.
+     *
+     * `updateAllCounters` rather than a read-modify-write: two concurrent
+     * revocations must not settle on the same number, or the later one would
+     * leave the earlier one's tokens valid.
+     */
+    public static function bumpTokenVersion(int $userId): int
+    {
+        static::updateAllCounters(['token_version' => 1], ['id' => $userId]);
+
+        return (int) static::find()->select('token_version')->where(['id' => $userId])->scalar();
     }
 
     public function getId(): int
@@ -125,9 +170,10 @@ class User extends ActiveRecord implements IdentityInterface, OwnableInterface
         return $this->id;
     }
 
+    /** @see validateAuthKey() — there is no auth key under stateless auth. */
     public function getAuthKey(): ?string
     {
-        return $this->auth_key;
+        return null;
     }
 
     /**

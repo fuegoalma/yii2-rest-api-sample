@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace app\models\db;
 
 use app\models\contract\OwnableInterface;
@@ -63,6 +65,7 @@ class Album extends ActiveRecord implements OwnableInterface
         ];
     }
 
+    /** @return array<int|string, string|callable> */
     public function fields(): array // API fields
     {
         return [
@@ -70,6 +73,8 @@ class Album extends ActiveRecord implements OwnableInterface
             'title',
             'is_deleted' => fn () => (bool) $this->is_deleted,
             'delete_reason',
+            'created_at',
+            'updated_at',
         ];
     }
 

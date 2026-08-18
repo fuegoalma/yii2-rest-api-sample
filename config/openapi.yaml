@@ -25,7 +25,8 @@ info:
     owns. Endpoint descriptions state the permission each action requires; a
     caller lacking it gets a `403`.
   license:
-    name: BSD-3-Clause
+    name: MIT
+    url: https://opensource.org/licenses/MIT
 
 servers:
   - url: http://localhost:8084
@@ -168,7 +169,14 @@ paths:
       x-permission: []
       operationId: authLogoutAll
       summary: Log out all devices
-      description: Revokes **every** family of the token's owner. Idempotent → 204.
+      description: |
+        Revokes **every** family of the token's owner **and withdraws the access
+        tokens already issued to them**, by bumping the account's token version —
+        so it takes effect immediately rather than within `JWT_TTL`. Idempotent → 204.
+
+        `POST /auth/logout` deliberately does not do this: it ends one device,
+        and taking the other devices' access tokens with it would make the two
+        endpoints the same thing.
       security: []
       requestBody:
         required: true
@@ -179,6 +187,102 @@ paths:
       responses:
         '204':
           description: All the owner's sessions revoked.
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /auth/forgot-password:
+    post:
+      tags: [Auth]
+      x-permission: []
+      operationId: authForgotPassword
+      summary: Request a password-reset token
+      description: |
+        Emails a single-use token to the address, if it belongs to an account.
+
+        **Always answers 204**, registered or not. Answering differently would
+        make this an account-enumeration oracle, which `POST /auth/login` takes
+        deliberate trouble to avoid being.
+
+        A new request invalidates any token issued earlier, so only the newest
+        one works.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForgotPasswordRequest'
+      responses:
+        '204':
+          description: Request accepted (whether or not the address is registered).
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /auth/reset-password:
+    post:
+      tags: [Auth]
+      x-permission: []
+      operationId: authResetPassword
+      summary: Set a new password with a reset token
+      description: |
+        Spends the token from `POST /auth/forgot-password` and stores the new
+        password.
+
+        **Every session of the account ends**: refresh families are revoked and
+        the access tokens already issued are withdrawn. No token pair is returned
+        — log in with the new password.
+
+        Unknown or already-spent token → 401 `password_reset.invalid`; expired →
+        401 `password_reset.expired`.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResetPasswordRequest'
+      responses:
+        '204':
+          description: Password changed and every session ended.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /auth/verify-email:
+    post:
+      tags: [Auth]
+      x-permission: []
+      operationId: authVerifyEmail
+      summary: Confirm an email address
+      description: |
+        Spends the token sent on registration and marks the address verified.
+
+        **Public**: the token is the proof, and requiring a session as well
+        would break opening the link in a different browser.
+
+        Verification is **recorded, not enforced** — an unverified account is
+        fully usable, and `email_verified` on the user shape is there so a
+        client can prompt. Unknown or spent token → 401
+        `email_verification.invalid`; expired → 401 `email_verification.expired`.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyEmailRequest'
+      responses:
+        '204':
+          description: Address confirmed.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '422':
           $ref: '#/components/responses/ValidationError'
         '429':
@@ -206,6 +310,38 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HealthEnvelope'
+
+  /metrics:
+    get:
+      tags: [Health]
+      x-permission: []
+      operationId: metricsIndex
+      summary: Prometheus scrape endpoint
+      description: |
+        Operational gauges in the Prometheus text exposition format. **Not** the
+        JSON envelope every other endpoint uses — Prometheus parses a specific
+        line format and would reject anything else.
+
+        Public and unauthenticated, like `/health`: a scraper is infrastructure
+        and has no account. That is acceptable only because nothing here is
+        per-user; a metric that leaked something would have to move behind the
+        network boundary.
+
+        Values are read from the database at scrape time rather than accumulated
+        in the process: PHP shares no memory between requests, so a counter would
+        report one container's slice.
+      security: []
+      responses:
+        '200':
+          description: Metrics in text exposition format.
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: |
+                  # HELP queue_jobs_pending Jobs waiting to be claimed by a worker.
+                  # TYPE queue_jobs_pending gauge
+                  queue_jobs_pending 0
 
   # ---------------------------------------------------------------- Docs
   /docs:
@@ -432,6 +568,53 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+
+  /users/me/password:
+    put:
+      tags: [Users]
+      x-permission: []
+      operationId: usersChangePassword
+      summary: Change your own password
+      description: |
+        Changes the **caller's** password; there is no id in the route, so this
+        cannot be used against another account.
+
+        The current password is required even though the caller is
+        authenticated: a bearer token left on a shared machine should not be
+        enough to take the account over for good. Wrong current password → 401
+        `auth.invalid_credentials`.
+
+        **Every session ends**, including the caller's own — log in again with
+        the new password.
+      responses:
+        '204':
+          description: Password changed and every session ended.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+
+  /users/me/resend-verification:
+    post:
+      tags: [Users]
+      x-permission: []
+      operationId: usersResendVerification
+      summary: Re-send your verification message
+      description: |
+        Issues a fresh token for the **caller's own** address and retires any
+        earlier one. Idempotent, and a no-op once the address is already
+        verified — so it cannot be used to spray mail at a confirmed address.
+      responses:
+        '204':
+          description: Message queued (or already verified, in which case nothing was sent).
+        '401':
+          $ref: '#/components/responses/Unauthorized'
 
   /users/{id}/roles:
     parameters:
@@ -733,6 +916,10 @@ paths:
         `jpg, jpeg, png, webp, gif, avif`. Every upload is converted to WebP
         quality 80, scaled to fit 500×500 preserving aspect ratio (never
         upscaled). A non-image passing the extension check → 422.
+
+        The file may be at most 10485760 bytes. A larger one is refused with
+        `413` and `error_code: payload.too_large` — not a `422`, because the
+        body is the problem and resending it unchanged cannot succeed.
       requestBody:
         required: true
         content:
@@ -760,6 +947,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
         '422': { $ref: '#/components/responses/ValidationError' }
 
   /photos/{id}:
@@ -1044,7 +1232,7 @@ components:
     albumSort:
       name: sort
       in: query
-      description: 'Comma-separated, `-` prefix = descending. Allowed: `id`, `user_id`, `title`, `created_at`, `updated_at`. Defaults to `id` ascending when omitted or when it resolves to no whitelisted field.'
+      description: 'Comma-separated, `-` prefix = descending. Allowed: `id`, `title`, `created_at`, `updated_at`. Defaults to `id` ascending when omitted or when it resolves to no whitelisted field.'
       schema: { type: string }
 
   responses:
@@ -1073,6 +1261,13 @@ components:
       content:
         application/json:
           schema: { $ref: '#/components/schemas/ValidationErrorEnvelope' }
+    PayloadTooLarge:
+      description: >
+        The request body exceeds the server limit (`error_code: payload.too_large`).
+        Distinct from `422`: the body itself is at fault, so resending it unchanged cannot succeed.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
     TooManyRequests:
       description: Rate limit exceeded (see the `Retry-After` header).
       headers:
@@ -1114,7 +1309,7 @@ components:
                 reason narrow it further: `auth.invalid_credentials`,
                 `refresh_token.invalid`, `refresh_token.reused`,
                 `refresh_token.expired`, `role.system_immutable`,
-                `role.escalation_denied`, `role.last_manager`.
+                `role.escalation_denied`, `role.last_manager`, `password_reset.invalid`, `password_reset.expired`, `email_verification.invalid`, `email_verification.expired`.
               example: not_found
             error:
               type: object
@@ -1207,6 +1402,28 @@ components:
                     database: { type: string, enum: [ok, error], example: ok }
 
     # -- Users -------------------------------------------------------
+    ForgotPasswordRequest:
+      type: object
+      required: [email]
+      properties:
+        email: { type: string, format: email, maxLength: 254, example: john@example.com }
+    ResetPasswordRequest:
+      type: object
+      required: [token, password]
+      properties:
+        token: { type: string, maxLength: 64, example: 8f3ac91b7d2e4a6c }
+        password: { type: string, minLength: 6, maxLength: 72, example: brand-new-secret }
+    VerifyEmailRequest:
+      type: object
+      required: [token]
+      properties:
+        token: { type: string, maxLength: 64, example: 8f3ac91b7d2e4a6c }
+    ChangePasswordRequest:
+      type: object
+      required: [current_password, password]
+      properties:
+        current_password: { type: string, minLength: 6, maxLength: 72, example: secret123 }
+        password: { type: string, minLength: 6, maxLength: 72, example: brand-new-secret }
     User:
       type: object
       properties:
@@ -1214,6 +1431,9 @@ components:
         first_name: { type: string, example: John }
         last_name: { type: string, example: Doe }
         email: { type: string, format: email, example: john@example.com }
+        created_at: { type: string, format: date-time, example: '2026-02-28 20:11:48' }
+        updated_at: { type: string, format: date-time, example: '2026-02-28 20:11:48' }
+        email_verified: { type: boolean, example: false, description: 'Whether the address has been proven. Recorded, not enforced — an unverified account is fully usable.' }
     UserWithAlbums:
       allOf:
         - $ref: '#/components/schemas/User'
@@ -1265,6 +1485,8 @@ components:
         title: { type: string, example: Vacation 2025 }
         is_deleted: { type: boolean, example: false }
         delete_reason: { type: string, nullable: true, example: null }
+        created_at: { type: string, format: date-time, example: '2026-02-28 20:11:48' }
+        updated_at: { type: string, format: date-time, example: '2026-02-28 20:11:48' }
     AlbumView:
       type: object
       description: Richer single-album shape — includes the owner's name and the album's photos.
@@ -1315,6 +1537,7 @@ components:
           type: string
           nullable: true
           example: http://localhost:8084/uploads/albums/5/8f3ac91b.webp
+        created_at: { type: string, format: date-time, example: '2026-02-28 20:11:48' }
     PhotoUpdateRequest:
       type: object
       description: Only the title may change.

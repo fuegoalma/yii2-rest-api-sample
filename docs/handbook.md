@@ -33,6 +33,38 @@ make sh        # open a shell inside the web container
 make rebuild   # rebuild the web image via Buildx (after editing the Dockerfile)
 ```
 
+### Startup order
+
+`db` declares a `healthcheck` and the other three services depend on it with `condition:
+service_healthy`. Plain `depends_on` waits only for the container to *start*, which for MySQL is
+several seconds before it accepts a connection — long enough for `web` and `worker` to come up
+against a database that is not there yet.
+
+### PHP configuration
+
+The official image ships **no `php.ini`**, so without one the runtime falls back to PHP's
+compiled-in defaults — `display_errors` among them. The `base` stage installs `php.ini-production`
+plus [`docker/php/app.ini`](../docker/php/app.ini) (`expose_php` off, 256M memory, 10M/12M upload
+limits), and each stage layers its own file on top:
+
+| | `dev` | `prod` |
+| --- | --- | --- |
+| `display_errors` | on — a fatal escaping Yii's handler should be visible | off |
+| `opcache.validate_timestamps` | 1 — code is bind-mounted and changes | 0 — code is baked in, so there is nothing to revalidate |
+| opcache / realpath cache sizes | defaults | sized for the full Yii tree |
+
+`docker/smoke.sh` asserts the production image loads an ini, hides errors and does not revalidate.
+
+### Database privileges
+
+`DB_USER` is the account the **application** connects with, and `setup.sh` creates it with rights on
+the two application databases only — no `CREATE USER`, no `GRANT`, no access to `mysql` or any other
+schema. Migrations run as this user, so DDL on those two databases is included; anything above that
+needs `DB_ROOT_PASSWORD`, which only `setup.sh` uses.
+
+Setting `DB_USER=root` keeps the older single-account behaviour, and `setup.sh` then skips creating a
+separate user.
+
 ---
 
 ## File Storage
@@ -58,11 +90,45 @@ FilesystemOperator::class => static fn () => new Filesystem(
 
 The `league/flysystem-aws-s3-v3` adapter is already installed, so switching to (or adding a CDN in front of) object storage is config-only. Tests override the `photo_upload_path` param to point at `@runtime` (see [`config/test.php`](../config/test.php)) so uploads never hit the web root.
 
+### Caching
+
+Stored images are served by Apache as plain files — the application never sees those requests — so
+the freshness policy is stated in [`web/.htaccess`](../web/.htaccess):
+
+| Path | `Cache-Control` |
+| --- | --- |
+| `/uploads/albums/**` | `public, max-age=31536000, immutable` |
+| `/default-images/**` | `public, max-age=86400` |
+
+An upload can carry the maximum lifetime because its URL is immutable **by construction**:
+`ImageStorage` names every file with a 40-character random string, and `PhotoUpdateForm` accepts a
+title change only, so nothing can replace the bytes behind an existing URL. Seeded demo images keep
+fixed names and a release can change them, so they revalidate daily.
+
+That precondition is load-bearing — a future "replace this photo's file" feature must mint a new
+file name, or clients will hold stale bytes for a year. See
+[ADR 12](adr/0012-immutable-cache-for-uploaded-images.md).
+
+Because no PHP test starts Apache, the policy is verified in
+[`docker/smoke.sh`](../docker/smoke.sh) against the production image: upload through the API, assert
+the header, then repeat with `If-None-Match` and assert the `304` still carries it.
+
 ---
 
 ## CORS
 
-Cross-origin requests are allowed from anywhere. The filter is attached to every REST controller by [`ApiControllerTrait`](../controllers/basic/ApiControllerTrait.php): `Origin: *`, all standard methods (`GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD`, `OPTIONS`), all request headers, credentials **off**, and a 24-hour preflight cache (`Access-Control-Max-Age: 86400`).
+The filter is attached to every REST controller by [`ApiControllerTrait`](../controllers/basic/ApiControllerTrait.php): all standard methods (`GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD`, `OPTIONS`), all request headers, credentials **off**, and a 24-hour preflight cache (`Access-Control-Max-Age: 86400`).
+
+The allowed origins come from **`CORS_ALLOWED_ORIGINS`** (comma-separated), which defaults to `*`.
+A wildcard is the right answer here — the API is token-authenticated and sets no cookies, so a
+browser reading it cross-origin still needs a token it does not have — but it is a per-deployment
+decision, so it lives in `config/params.php` rather than in a trait shared by every controller.
+`ApiControllerTrait` reads that param **without a fallback**: wiring that has gone dead must fail
+loudly rather than silently restore a wildcard nobody chose.
+
+Credentials stay off regardless. `Origin: *` with `Allow-Credentials: true` is a combination
+browsers reject anyway, and with a narrowed origin list it is the point at which a wildcard would
+stop being merely permissive.
 
 `OPTIONS` preflights are deliberately exempt from everything that could reject them:
 
@@ -80,7 +146,29 @@ Resolving a handler by name is the one lookup that can only happen at run time, 
 - **`DbQueue`** (default) — persists jobs to the `queue_job` table; the long-running **`worker`** service (`yii queue/listen`) drains up to 100 pending jobs per pass continuously, sleeping only when idle and shutting down gracefully on `SIGTERM` (`docker stop`). `yii queue/run` drains once (handy for CI/manual runs).
 - **`SyncQueue`** — runs jobs in-process; bound in tests so they don't depend on a running worker.
 
-A job that throws is retried (logged as a warning each time) up to 3 attempts, then dropped with a logged error so one poison job can't wedge the queue.
+### Delivery
+
+Each row is **claimed** before it runs: a pass lists the due ids, then takes each one with a
+conditional `UPDATE queue_job SET reserved_at = NOW() WHERE id = ? AND <still due>`. Exactly one
+worker's update can match, so `docker compose up --scale worker=3` is safe and no transaction is
+needed to arbitrate. A claim lapses after `DbQueue::RESERVATION_TIMEOUT` (300 s), which is how a
+worker killed mid-job gives its rows back.
+
+That makes delivery **at-least-once**: a worker that dies after a job's side effect but before its
+row is deleted will run the job again. Handlers must tolerate a repeat.
+
+A job that throws is retried (logged as a warning each time) up to 3 attempts, each after an
+exponential backoff written to `available_at` — 5 s, doubling, capped at 300 s. The backoff is not
+cosmetic: the worker loop comes round every 3 s, so without it all three attempts are spent in under
+ten seconds and a fault that would have cleared never gets the chance.
+
+A job that exhausts its attempts moves to **`queue_job_failed`** ([`FailedQueueJob`](../models/db/FailedQueueJob.php))
+with its payload, correlation id and last error, so it can be inspected and replayed. Deleting it —
+which is what used to happen — left the work undone with only a log line to say it had existed.
+
+```sql
+SELECT id, attempts, last_error, failed_at FROM queue_job_failed ORDER BY failed_at DESC;
+```
 
 The first use case is permanently deleting an album: the rows go in a transaction, and each album's on-disk directory cleanup is enqueued (`DeleteAlbumDirectoryJob`, run by `DeleteAlbumDirectoryHandler`) rather than done inline, so a large delete never blocks the response and a failure is retried by the worker instead of aborting the teardown.
 
@@ -253,7 +341,7 @@ A few things worth knowing:
 - **pcov is disabled by default** (`pcov.enabled=0`), so `make test` and `make test-one` — the inner TDD loop — run at full speed. Only `make coverage` turns it on, for that process alone.
 - **Both suites must run in a single `codecept run`.** Coverage from unit and functional is merged at the end of the run, so running the suites separately makes the second report overwrite the first and halves the number.
 - **`config/`, `migrations/`, `web/` and `tests/` are out of scope**, as are the interfaces in `models/contract/` — a file with no executable lines counts as 0/0 and neither helps nor hurts the total.
-- **Genuinely unreachable code** is marked with `@codeCoverageIgnore` **and a comment explaining why it cannot be reached**. Unreachable is a high bar: it means unreachable by construction, not merely inconvenient to test. See `RefreshTokenRepository::revoke()` for the shape of an acceptable justification.
+- **Genuinely unreachable code** is marked with `@codeCoverageIgnore` **and a comment explaining why it cannot be reached**. Unreachable is a high bar: it means unreachable by construction, not merely inconvenient to test. See `RolesController::accessResource()` for the shape of an acceptable justification.
 - Don't add `@covers` / `#[CoversClass]` annotations — Codeception treats them as strict, silently narrowing what a test is credited with covering.
 
 ---
@@ -297,6 +385,16 @@ Prefer a functional test when the thing you're specifying *is* the integration �
 
 The project follows the [PSR-12](https://www.php-fig.org/psr/psr-12/) coding standard, enforced with [PHP CS Fixer](https://github.com/PHP-CS-Fixer/PHP-CS-Fixer) (configuration in `.php-cs-fixer.dist.php`).
 
+On top of PSR-12 the config enables one **risky** rule, `declare_strict_types`: every PHP file
+declares `declare(strict_types=1)`, and a new file that forgets it fails `make cs-check`. The rule
+is classified risky because it changes runtime behaviour — scalar arguments are no longer coerced
+at call sites inside the file — which is the point; the full suite is what proves nothing depended
+on the coercion.
+
+The config appends itself to its own finder. The `pre-commit` hook passes staged files explicitly
+rather than using the finder's paths, so without that line the hook would check a file `make
+cs-check` never saw.
+
 #### Check code style
 
 Shows the violations and a diff of what would be changed, without modifying any files:
@@ -317,11 +415,20 @@ make cs-fix
 
 ## Static Analysis
 
-The project is analysed with [PHPStan](https://phpstan.org/) (level 5, configuration in `phpstan.neon.dist`).
+The project is analysed with [PHPStan](https://phpstan.org/) (level 6, configuration in `phpstan.neon.dist`).
 
 ```bash
 make stan
 ```
+
+Level 6 adds the missing-type checks: every `array` must declare a value type
+(`array<string, mixed>`, `string[]`, `list<int>`) and every property must have one. Declare it on
+the contract in `models/contract/` and the implementations inherit it — that is why the whole tree
+needed no `ignoreErrors` entry.
+
+Level 6 is the practical ceiling on this stack rather than a compromise: levels 7–8 turn Yii's
+untyped `ActiveRecord` magic properties and `Yii::$app->…` component access into a flood of
+findings that say more about the framework's own annotations than about this code.
 
 ---
 
@@ -392,8 +499,8 @@ The project ships a two-stage GitHub Actions pipeline — the two badges at the 
 │   └── service/       # Service layer (business logic)
 ├── web/               # Document root: entry script, uploads/, default-images/
 ├── codeception.yml    # Test runner config (paths, modules, coverage scope)
-├── phpstan.neon.dist  # Static analysis config (level 5)
-├── .php-cs-fixer.dist.php # PSR-12 code style config
+├── phpstan.neon.dist  # Static analysis config (level 6)
+├── .php-cs-fixer.dist.php # PSR-12 + strict_types code style config
 ├── tests/
 │   ├── functional/    # Functional (integration) tests
 │   ├── unit/          # Unit tests
@@ -499,6 +606,95 @@ curl -i -X POST http://localhost:8084/auth/login \
 # HTTP/1.1 429 Too Many Requests
 # Retry-After: 60
 ```
+
+### Which address counts as "the client"
+
+Everything above rests on `Yii::$app->request->userIP`, and that is a configuration decision, not a
+fact. Yii believes `X-Forwarded-For` only from a host listed in the request component's
+`trustedHosts`, which this application fills from **`TRUSTED_PROXIES`** (empty by default).
+
+| Deployment | `TRUSTED_PROXIES` | What the limiter counts |
+| --- | --- | --- |
+| Exposed directly | empty | the peer address — correct |
+| Behind a load balancer | **must list the balancer** | otherwise the balancer's own address: every caller shares one budget, and a single attacker locks out everybody |
+| Anything | never `0.0.0.0/0` | a header believed from anyone lets a caller reset their own limit by rotating it |
+
+The last row is covered by a test — `AuthCest::testRateLimitCannotBeSteppedAroundWithAForwardedForHeader`
+keeps a `429` in place across a rotating `X-Forwarded-For`, so widening this setting fails the build
+rather than quietly disabling the protection.
+
+### Known limit
+
+The counters live in the `cache` component, which is a `FileCache` — per container. Run more than
+one web container and each keeps its own tally, so the effective limit multiplies by the number of
+replicas. A shared store (Redis, Memcached) is a one-line change to the `cache` component and no
+change to `RateLimiter`, which depends on `yii\caching\CacheInterface`.
+
+---
+
+## Load testing
+
+`tests/load/api.js` is a [k6](https://k6.io/) scenario over the read paths a client actually polls.
+It runs against a **running stack**, not as part of `make check` — a number produced on a laptop
+that is also compiling something is not a number anybody should act on.
+
+```bash
+make load                      # 10 VUs, 30s
+make load vus=50 duration=2m
+```
+
+Measured on the dev stack (10 VUs, 20s, ~1 600 albums and 64 000 photos seeded):
+
+| | |
+| --- | --- |
+| Throughput | **824 req/s** |
+| Reads, p95 | **17.3 ms** |
+| Auth (bcrypt-bound), p95 | 346 ms |
+| Failed requests | **0 of 16 837** |
+
+The scenario **has thresholds**, and that is the point: a load test without them prints graphs, and
+graphs do not fail. Reads are held to p95 < 300 ms, auth to p95 < 1.5 s, request failures to under
+1%. The auth budget is separate on purpose — `AuthService` spends a deliberate bcrypt round on every
+attempt, including the ones that fail (see the timing-oracle fix), so holding it to the read budget
+would either fail honestly or push somebody to weaken the hash.
+
+The thresholds are the **published budget**, not the current measurement. A threshold set to what
+the machine happens to do today ratchets silently and never fails.
+
+The scenario also exercises the revalidation path from
+[ADR 13](adr/0013-conditional-get-saves-bandwidth-not-work.md), asserting the `304` under load —
+that path is where a polling client spends most of its requests.
+
+---
+
+## Indexes and what they are for
+
+Every index here was checked with `EXPLAIN` against seeded data (~1 600 albums, 64 000 photos)
+rather than assumed. Two results are worth writing down, because both contradict what the schema
+looks like at a glance:
+
+| Query | Index used | Rows examined |
+| --- | --- | --- |
+| `GET /albums/my` (`user_id` + `is_deleted = 0`) | `user_id` | 40 of 1 603 |
+| review queue (`?is_deleted=1`) | `idx_album_is_deleted` | 16 of 1 603 |
+| photos of one album | `album_id` | 40 |
+| `?title=` partial search | **none possible** | full scan |
+
+**`idx_album_is_deleted` looks like a useless index on a boolean and is not.** Selectivity runs the
+other way from the column's cardinality: soft-deleted albums are *rare*, so `is_deleted = 1` — the
+review queue, the query the index exists for — is exactly the selective case. For `is_deleted = 0`
+the optimizer gains nothing, and loses nothing either.
+
+**A composite `(user_id, is_deleted)` was measured and rejected.** With the albums-per-user counts
+this API produces, the optimizer prefers the narrower `user_id` index and ignores the composite when
+both are present. It would be an index carried, maintained on every write, and never chosen.
+
+**Partial search cannot be indexed and is not.** `?title=` becomes `LIKE '%term%'`, and a leading
+wildcard rules out a B-tree — `EXPLAIN` reports no possible key. That is a deliberate limit, not an
+oversight: `FULLTEXT` with `MATCH … AGAINST` would index it, but it matches whole words rather than
+substrings, so `?title=lbum` would stop working. At this scale the scan is cheaper than the change
+in behaviour; at a scale where it is not, the fix is a search index rather than a different SQL
+operator.
 
 ---
 

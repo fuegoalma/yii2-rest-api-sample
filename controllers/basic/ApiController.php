@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace app\controllers\basic;
 
 use app\models\contract\service\AccessControlInterface;
@@ -12,17 +14,37 @@ use yii\db\ActiveRecord;
 use yii\rest\ActiveController;
 use Yii;
 
+/**
+ * Generic in its service so a subclass gets its own contract back from
+ * `$this->service` without a cast.
+ *
+ * The base can only promise `ApiServiceInterface` — that is all its own generic
+ * actions need — but `AlbumsController` and `PhotosController` also call methods
+ * that only their service declares. They each used to carry a private accessor
+ * whose whole body was a down-cast; naming the service type as a parameter says
+ * the same thing once, to the type checker rather than to the reader.
+ *
+ * @template TService of ApiServiceInterface
+ */
 abstract class ApiController extends ActiveController
 {
     use ApiControllerTrait;
 
+    /** @var TService */
+    protected readonly ApiServiceInterface $service;
+
+    /**
+     * @param TService $service
+     */
     public function __construct(
         $id,
         $module,
-        protected readonly ApiServiceInterface $service,
+        ApiServiceInterface $service,
         protected readonly AccessControlInterface $access,
         $config = []
     ) {
+        $this->service = $service;
+
         parent::__construct($id, $module, $config);
     }
 
@@ -45,6 +67,10 @@ abstract class ApiController extends ActiveController
         return $actions;
     }
 
+    /**
+     * @return ActiveDataProvider|array<string, string[]> the list, or the
+     *         search form's errors when the query params are rejected
+     */
     public function actionIndex(): ActiveDataProvider|array
     {
         $this->requireCollectionAccess('index');
@@ -55,6 +81,9 @@ abstract class ApiController extends ActiveController
         );
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     public function actionView(int $id): array
     {
         $model = $this->service->findOrFail($id);
@@ -90,8 +119,8 @@ abstract class ApiController extends ActiveController
         $this->requireMemberAccess('delete', $this->service->findOrFail($id));
 
         $this->service->delete($id);
-        Yii::$app->response->statusCode = 204;
-        return null;
+
+        return $this->noContent();
     }
 
     /**
@@ -145,36 +174,36 @@ abstract class ApiController extends ActiveController
      * params (a failure becomes a 422 with the errors), then fetch the list.
      *
      * @param callable(SearchCriteria): ActiveDataProvider $fetch
+     *
+     * @return ActiveDataProvider|array<string, string[]>
      */
     protected function handleIndex(SearchForm $form, callable $fetch): ActiveDataProvider|array
     {
-        if (!$this->validateRequest($form, Yii::$app->request->queryParams)) {
-            return $form->getErrors();
-        }
-
-        return $fetch($form->criteria());
+        return $this->withValidatedForm(
+            $form,
+            fn (SearchForm $validated) => $fetch($validated->criteria()),
+            Yii::$app->request->queryParams
+        );
     }
 
     /**
      * Shared write-action flow: validate the form request, run the service
      * operation, and turn validation errors (form or model) into a 422.
      *
-     * @param callable(array): \yii\db\ActiveRecord $operation
+     * @param callable(array<string, mixed>): \yii\db\ActiveRecord $operation
      */
     protected function handleWrite(ApiForm $form, callable $operation, int $successCode): mixed
     {
-        if (!$this->validateRequest($form)) {
-            return $form->getErrors();
-        }
+        return $this->withValidatedForm($form, function (ApiForm $validated) use ($operation, $successCode) {
+            $model = $operation($validated->validatedData());
 
-        $model = $operation($form->validatedData());
+            if ($model->hasErrors()) {
+                Yii::$app->response->statusCode = 422;
+                return $model->getErrors();
+            }
 
-        if ($model->hasErrors()) {
-            Yii::$app->response->statusCode = 422;
-            return $model->getErrors();
-        }
-
-        Yii::$app->response->statusCode = $successCode;
-        return $model;
+            Yii::$app->response->statusCode = $successCode;
+            return $model;
+        });
     }
 }

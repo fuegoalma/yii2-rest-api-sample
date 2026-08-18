@@ -21,6 +21,15 @@ family**, forcing a re-login.
 Revocation is a soft `revoked_at` timestamp. Rows are kept rather than deleted,
 because a deleted row cannot be recognised as a replay.
 
+**The database decides who spent the token**, not the application.
+`RefreshTokenRepository::consume()` is a conditional update —
+`SET revoked_at = NOW() WHERE id = ? AND revoked_at IS NULL` — and the caller
+branches on whether it matched a row. This is the part that has to be atomic:
+two simultaneous refreshes both pass `findByHash()` while the row is still
+active, so a read-then-save would let both rotate and neither would look like
+reuse. The claim collapses replay and a lost race into one answer, because they
+are the same evidence: one token value presented twice.
+
 ## Consequences
 
 - **A client must serialise its refreshes.** Two concurrent refreshes with the

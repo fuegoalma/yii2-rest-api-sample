@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace tests\unit\contract;
 
 use app\models\form\AlbumSearchForm;
@@ -77,6 +79,54 @@ final class SearchFormContractTest extends ContractTestCase
             $this->invokeProtected($form, 'exactAttributes'),
             $formClass . '::exactAttributes() vs the exact-match parameters of GET ' . $path
         );
+    }
+
+    /**
+     * Sorting by a field the response does not carry is a dead end for a
+     * client: the order is real, but nothing in the payload explains it, so a
+     * list sorted by `created_at` looks arbitrarily shuffled. It is also the
+     * quiet half of a schema change — dropping a field from `fields()` leaves
+     * the sortable whitelist behind, and neither the response-schema gate nor
+     * the sortable-attribute gate above notices, because each is still
+     * internally consistent.
+     *
+     * @param class-string<SearchForm> $formClass
+     *
+     * @dataProvider sortableAgainstResponse
+     */
+    public function testEverySortableAttributeIsVisibleInTheResponse(
+        string $formClass,
+        string $path,
+        string $schema
+    ): void {
+        $visible = $this->spec()->propertyNames($schema);
+        $sortable = $this->invokeProtected(new $formClass(), 'sortableAttributes');
+
+        $this->assertGreaterThan(0, count($sortable), $formClass . ' declares nothing sortable');
+
+        $this->assertSame(
+            [],
+            array_values(array_diff($sortable, $visible)),
+            $formClass . '::sortableAttributes() offers fields the ' . $schema
+                . ' schema of GET ' . $path . ' does not return'
+        );
+    }
+
+    /**
+     * Split from {@see searchForms()} because a resource's list item is not
+     * always the schema its search form belongs to, and the mapping should be
+     * stated rather than guessed.
+     *
+     * @return array<string, array{class-string<SearchForm>, string, string}>
+     */
+    public static function sortableAgainstResponse(): array
+    {
+        return [
+            'users' => [UserSearchForm::class, '/users', 'User'],
+            'albums' => [AlbumSearchForm::class, '/albums', 'Album'],
+            'photos' => [PhotoSearchForm::class, '/albums/{albumId}/photos', 'Photo'],
+            'roles' => [RoleSearchForm::class, '/roles', 'Role'],
+        ];
     }
 
     /**

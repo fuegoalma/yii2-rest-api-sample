@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace tests\support;
 
 use Imagick;
@@ -32,6 +34,21 @@ trait CreatesImageFixtures
         $image->clear();
 
         return $path;
+    }
+
+    /**
+     * An image wider than the encoder will decode, at a size a test can afford.
+     *
+     * A decompression bomb is dangerous because of its *decoded* area, not its
+     * file size, and reproducing one honestly by area (a 20000×20000 square) is
+     * a gigabyte of RAM in the test itself. One long thin strip trips the same
+     * dimension ceiling for 170k pixels. It is created before the encoder
+     * narrows the limits, which is possible only because the encoder puts them
+     * back after each decode.
+     */
+    protected function oversizedImageFixture(): string
+    {
+        return $this->imageFixture(17000, 10);
     }
 
     /**

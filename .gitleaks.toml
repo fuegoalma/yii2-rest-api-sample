@@ -1,0 +1,40 @@
+# Gitleaks configuration.
+#
+# The default rule set stays on — this file only records what is *not* a secret,
+# and why. Every entry below is a value published on purpose: a documented
+# response example, a throwaway credential for a container that lives as long as
+# one CI job, or a test fixture that exists to satisfy a length guard.
+#
+# A value that really did leak does NOT belong here. It goes in .gitleaksignore,
+# per finding, after it has been rotated — because an allowlist regex broad
+# enough to hide one real secret hides every future secret shaped like it, and
+# the scan then reports "clean" for the rest of the repository's life.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Sample and throwaway values that are published deliberately"
+
+# Match against the whole line rather than the captured secret: these are
+# recognisable by their surrounding context (a JSON example, an `-e` flag), not
+# by the bytes gitleaks decided to quote.
+regexTarget = "line"
+
+regexes = [
+  # README.md / docs/handbook.md / the retired docs/api/API.md — auth response
+  # examples with the token truncated after the header. There is no signature
+  # in them, so there is nothing to verify even where the base64 decodes.
+  '''eyJ[A-Za-z0-9_-]{4,}\.\.\.''',
+
+  # .github/workflows/ci.yml (and docker/smoke.sh before it switched to
+  # `openssl rand`): the secret for a MySQL/app container that is destroyed
+  # with the job. It is deliberately a readable sentence — a random-looking
+  # value here would be indistinguishable from one worth protecting, which is
+  # exactly the confusion this scan exists to prevent.
+  '''jwt-secret-at-least-32-characters-long''',
+
+  # tests/unit/ConfigDrivenDefaultsTest.php — the argument only exists to get
+  # past JwtService's >= 32 character guard so the *missing TTL* can be asserted.
+  '''a-secret-that-is-long-enough-for-hs256''',
+]

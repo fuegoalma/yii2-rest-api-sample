@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace tests\unit;
 
 use app\components\ImageStorage;
@@ -102,6 +104,35 @@ class ImageStorageTest extends BaseUnitTest
         $filesystem->expects($this->never())->method('delete');
 
         (new ImageStorage($filesystem, $this->encoder()))->delete('42', 'photo.webp');
+    }
+
+    /**
+     * An album's whole directory goes through here too, so that building a
+     * storage key stays this class's job alone — the delete-directory job used
+     * to reach past it, straight to the filesystem.
+     *
+     * @throws MockException
+     */
+    public function testDeleteDirectoryRemovesTheAlbumDirectory(): void
+    {
+        $filesystem = $this->createMock(FilesystemOperator::class);
+        $filesystem->expects($this->once())->method('deleteDirectory')->with('42');
+
+        (new ImageStorage($filesystem, $this->encoder()))->deleteDirectory('42');
+    }
+
+    /**
+     * The same `basename()` normalisation the file key gets: a traversal in the
+     * directory name must not let a delete climb out of the upload root.
+     *
+     * @throws MockException
+     */
+    public function testDeleteDirectoryCannotEscapeTheUploadRoot(): void
+    {
+        $filesystem = $this->createMock(FilesystemOperator::class);
+        $filesystem->expects($this->once())->method('deleteDirectory')->with('42');
+
+        (new ImageStorage($filesystem, $this->encoder()))->deleteDirectory('../../42');
     }
 
     // ==================== helpers ====================

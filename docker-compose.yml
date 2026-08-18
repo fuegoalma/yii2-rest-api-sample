@@ -11,6 +11,9 @@ services:
     volumes:
       - ./:/var/www/html
     working_dir: /var/www/html
+    depends_on:
+      db:
+        condition: service_healthy
     networks:
       - yii-network
 
@@ -29,7 +32,8 @@ services:
     working_dir: /var/www/html
     entrypoint: ["sh", "/var/www/html/docker/cron/entrypoint.sh"]
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     networks:
       - yii-network
 
@@ -50,7 +54,8 @@ services:
     entrypoint: ["php", "yii", "queue/listen"]
     restart: unless-stopped
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     networks:
       - yii-network
 
@@ -59,12 +64,26 @@ services:
     env_file:
       - .env
     environment:
-      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+      # Falls back to DB_PASSWORD so an .env written before DB_ROOT_PASSWORD
+      # existed keeps working; new ones set it explicitly (see .env.example).
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-${DB_PASSWORD}}
       MYSQL_DATABASE: ${DB_NAME}
     ports:
       - "3307:3306"
     volumes:
       - db-data:/var/lib/mysql
+    # Without this the other services' `depends_on` only waits for the container
+    # to *start*, which for MySQL is several seconds before it accepts a
+    # connection — so `make up` raced the database on every cold boot.
+    # `$$` reaches the container's own environment rather than being substituted
+    # by Compose, so the credentials come from MYSQL_ROOT_PASSWORD above and are
+    # never spelled out here.
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
     networks:
       - yii-network
 
@@ -78,7 +97,8 @@ services:
       PMA_PASSWORD: 
       UPLOAD_LIMIT: 100M
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     networks:
       - yii-network
 

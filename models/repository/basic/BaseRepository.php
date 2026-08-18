@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace app\models\repository\basic;
 
 use app\models\contract\repository\ApiRepositoryInterface;
@@ -26,6 +28,8 @@ abstract class BaseRepository implements ApiRepositoryInterface
 
     /**
      * Relations to eager-load in findById()
+     *
+     * @return string[]
      */
     protected function viewRelations(): array
     {
@@ -96,7 +100,7 @@ abstract class BaseRepository implements ApiRepositoryInterface
      * is not atomic; callers must be able to tolerate a partial delete (i.e.
      * safely retry).
      *
-     * @param array|string $condition a non-empty query-builder WHERE condition
+     * @param array<mixed>|string $condition a non-empty query-builder WHERE condition
      * @return int total number of rows deleted
      */
     protected function deleteInBatches(array|string $condition, int $batchSize = self::DELETE_BATCH_SIZE): int
@@ -122,6 +126,9 @@ abstract class BaseRepository implements ApiRepositoryInterface
     }
 
     /**
+     * @param string[] $columns column names, in the order the rows list them
+     * @param list<list<mixed>> $rows positional values, one inner list per row
+     *
      * @throws Exception
      */
     protected function batchInsertRows(array $columns, array $rows): void

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace tests\functional;
 
 use app\components\RateLimiter;
@@ -415,6 +417,59 @@ class AuthCest extends BaseCest
         $I->seeResponseCodeIs(401);
     }
 
+    /**
+     * "Log out all devices" used to mean "stop issuing new access tokens": the
+     * refresh families went, but every access token already handed out kept
+     * working until it expired — up to JWT_TTL, an hour by default. For the one
+     * situation the endpoint exists for, that is the wrong hour to be wrong in.
+     *
+     * @throws Exception
+     * @throws \yii\base\Exception
+     */
+    public function testLogoutAllWithdrawsAccessTokensAlreadyIssued(FunctionalTester $I): void
+    {
+        $this->createLoginUser();
+        $I->deleteHeader('Authorization');
+
+        $tokens = $this->login($I);
+        $I->amBearerAuthenticated($tokens['access_token']);
+
+        // the token works before the logout
+        $I->sendGet('/users/me');
+        $I->seeResponseCodeIs(200);
+
+        $I->sendPost('/auth/logout-all', ['refresh_token' => $tokens['refresh_token']]);
+        $I->seeResponseCodeIs(204);
+
+        // and is refused after it, without waiting for it to expire
+        $I->amBearerAuthenticated($tokens['access_token']);
+        $I->sendGet('/users/me');
+        $I->seeResponseCodeIs(401);
+    }
+
+    /**
+     * Logging out one device must not disturb the others — the version bump
+     * belongs to logout-all alone.
+     *
+     * @throws Exception
+     * @throws \yii\base\Exception
+     */
+    public function testLogoutLeavesOtherDevicesAccessTokensAlone(FunctionalTester $I): void
+    {
+        $this->createLoginUser();
+        $I->deleteHeader('Authorization');
+
+        $phone = $this->login($I);
+        $laptop = $this->login($I);
+
+        $I->sendPost('/auth/logout', ['refresh_token' => $phone['refresh_token']]);
+        $I->seeResponseCodeIs(204);
+
+        $I->amBearerAuthenticated($laptop['access_token']);
+        $I->sendGet('/users/me');
+        $I->seeResponseCodeIs(200);
+    }
+
     // ==================== RATE LIMITING ====================
 
     /**
@@ -459,6 +514,34 @@ class AuthCest extends BaseCest
 
         // the successful login above reset the counter: a full set of attempts is available again
         $this->exhaustLoginAttempts($I, $maxAttempts);
+    }
+
+    /**
+     * The rate limiter buckets by client IP, so whether `X-Forwarded-For` is
+     * believed decides whether the limit means anything. Yii only honours it
+     * from a host listed in `trustedHosts`, which is empty unless a deployment
+     * behind a proxy sets TRUSTED_PROXIES — so an arbitrary caller cannot mint
+     * a fresh budget for every attempt by rotating the header.
+     *
+     * @throws Exception
+     * @throws \yii\base\Exception
+     */
+    public function testRateLimitCannotBeSteppedAroundWithAForwardedForHeader(FunctionalTester $I): void
+    {
+        $this->createLoginUser();
+        $I->deleteHeader('Authorization');
+
+        $this->exhaustLoginAttempts($I, $this->maxLoginAttempts());
+
+        // a new "client address" on every request, if the header were believed
+        $I->haveHttpHeader('X-Forwarded-For', '203.0.113.' . random_int(1, 254));
+        $I->sendPost('/auth/login', [
+            'email'    => self::LOGIN_EMAIL,
+            'password' => self::LOGIN_PASSWORD,
+        ]);
+        $I->deleteHeader('X-Forwarded-For');
+
+        $I->seeResponseCodeIs(429);
     }
 
     private function exhaustLoginAttempts(FunctionalTester $I, int $count): void
@@ -585,6 +668,29 @@ class AuthCest extends BaseCest
         $this->createLoginUser();
 
         return $this->loginExistingUserAndGrabRefreshToken($I);
+    }
+
+    /**
+     * Logs in and returns both tokens, for tests that need the access token as
+     * well as the refresh one.
+     *
+     * @return array{access_token: string, refresh_token: string}
+     */
+    private function login(FunctionalTester $I): array
+    {
+        $I->deleteHeader('Authorization');
+        $I->sendPost('/auth/login', [
+            'email'    => self::LOGIN_EMAIL,
+            'password' => self::LOGIN_PASSWORD,
+        ]);
+        $I->seeResponseCodeIs(200);
+
+        $data = json_decode($I->grabResponse(), true)['data'] ?? [];
+
+        return [
+            'access_token' => (string) ($data['access_token'] ?? ''),
+            'refresh_token' => (string) ($data['refresh_token'] ?? ''),
+        ];
     }
 
     private function loginExistingUserAndGrabRefreshToken(FunctionalTester $I): string

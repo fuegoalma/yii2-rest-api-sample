@@ -1,7 +1,10 @@
 <?php
 
+declare(strict_types=1);
+
 namespace app\controllers;
 
+use app\components\RequestSizeLimit;
 use app\controllers\basic\AlbumVisibilityTrait;
 use app\controllers\basic\ApiController;
 use app\models\contract\service\PhotoServiceInterface;
@@ -16,6 +19,9 @@ use yii\data\ActiveDataProvider;
 use yii\db\ActiveRecord;
 use yii\web\UploadedFile;
 
+/**
+ * @extends ApiController<PhotoServiceInterface>
+ */
 class PhotosController extends ApiController
 {
     use AlbumVisibilityTrait;
@@ -23,8 +29,26 @@ class PhotosController extends ApiController
     public $modelClass = Photo::class;
 
     /**
+     * The only endpoint that takes a body PHP might refuse to parse, so the
+     * only one that needs the size guard — see {@see RequestSizeLimit} for why
+     * an oversized upload otherwise arrives looking like an empty request.
+     */
+    public function behaviors(): array
+    {
+        $behaviors = parent::behaviors();
+        $behaviors['requestSizeLimit'] = [
+            'class' => RequestSizeLimit::class,
+            'only' => ['create'],
+        ];
+
+        return $behaviors;
+    }
+
+    /**
      * Photos are always listed within their album; there is no flat
      * photo collection (the route always supplies an album id).
+     *
+     * @return ActiveDataProvider|array<string, string[]>
      */
     public function actionIndex(int $albumId = 0): ActiveDataProvider|array
     {
@@ -32,7 +56,7 @@ class PhotosController extends ApiController
 
         return $this->handleIndex(
             $this->searchForm(),
-            fn (SearchCriteria $criteria) => $this->photoService()->getByAlbum($albumId, $criteria)
+            fn (SearchCriteria $criteria) => $this->service->getByAlbum($albumId, $criteria)
         );
     }
 
@@ -46,7 +70,7 @@ class PhotosController extends ApiController
 
         return $this->handleWrite(
             $form,
-            fn () => $this->photoService()->createInAlbum($albumId, (string) $form->title, $form->file),
+            fn () => $this->service->createInAlbum($albumId, (string) $form->title, $form->file),
             201
         );
     }
@@ -60,7 +84,7 @@ class PhotosController extends ApiController
      */
     private function requireAlbumAccess(int $albumId, string $ability): void
     {
-        $album = $this->photoService()->findAlbumOrFail($albumId);
+        $album = $this->service->findAlbumOrFail($albumId);
         $this->requireVisibleAlbum($album);
         $this->access->requireOn($ability, $album);
     }
@@ -95,10 +119,4 @@ class PhotosController extends ApiController
         return new PhotoUpdateForm();
     }
 
-    private function photoService(): PhotoServiceInterface
-    {
-        /** @var PhotoServiceInterface $service */
-        $service = $this->service;
-        return $service;
-    }
 }

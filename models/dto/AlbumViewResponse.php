@@ -1,11 +1,17 @@
 <?php
 
+declare(strict_types=1);
+
 namespace app\models\dto;
 
 use app\models\db\Album;
+use app\models\db\Photo;
 
 readonly class AlbumViewResponse
 {
+    /**
+     * @param Photo[] $photos the album's photos, embedded by this response
+     */
     public function __construct(
         public int $id,
         public string $title,
@@ -30,6 +36,7 @@ readonly class AlbumViewResponse
         );
     }
 
+    /** @return array<string, mixed> */
     public function toArray(): array
     {
         return [

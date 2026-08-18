@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace app\components\log;
 
 use app\models\contract\CorrelationIdInterface;
@@ -42,7 +44,7 @@ class JsonLogTarget extends Target
      * `yii\log\Dispatcher` property that does not exist, and the application
      * refuses to boot.)
      *
-     * @var array
+     * @var string[]
      */
     public $logVars = [];
 
@@ -65,7 +67,7 @@ class JsonLogTarget extends Target
     }
 
     /**
-     * @param  array $message Yii's [text, level, category, timestamp, traces, memory]
+     * @param  array<mixed> $message Yii's [text, level, category, timestamp, traces, memory]
      * @return array<string, mixed>
      */
     private function format(array $message): array

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace app\controllers;
 
 use app\controllers\basic\ApiControllerTrait;
@@ -31,6 +33,9 @@ class PermissionsController extends Controller
         return $this->apiBehaviors(parent::behaviors());
     }
 
+    /**
+     * @return list<array<string, mixed>> the catalog, one entry per permission
+     */
     public function actionIndex(): array
     {
         $this->access->requirePermission('permission.index');
@@ -41,6 +46,7 @@ class PermissionsController extends Controller
         );
     }
 
+    /** @return array<string, list<string>> */
     protected function verbs(): array
     {
         return [

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 // Read from the environment, defaulting to production. The Yii2 template ships
 // these hard-coded to dev with a comment asking you to remember to change them —
 // which is how a production image ends up bootstrapping the debug module that

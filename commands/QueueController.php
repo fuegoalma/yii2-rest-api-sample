@@ -1,9 +1,11 @@
 <?php
 
+declare(strict_types=1);
+
 namespace app\commands;
 
 use app\commands\basic\BasicConsoleController;
-use app\components\queue\DbQueue;
+use app\models\contract\queue\QueueWorkerInterface;
 use app\models\contract\StopSignalInterface;
 use Throwable;
 use Yii;
@@ -21,7 +23,7 @@ class QueueController extends BasicConsoleController
     public function __construct(
         $id,
         $module,
-        private readonly DbQueue $queue,
+        private readonly QueueWorkerInterface $queue,
         private readonly StopSignalInterface $stopSignal,
         $config = []
     ) {
@@ -51,7 +53,7 @@ class QueueController extends BasicConsoleController
         }
     }
 
-    public function actionRun(int $limit = DbQueue::DEFAULT_LIMIT): void
+    public function actionRun(int $limit = QueueWorkerInterface::DEFAULT_LIMIT): void
     {
         $done = $this->queue->processPending($limit);
         $this->stdout("Processed {$done} queued job(s)." . PHP_EOL);

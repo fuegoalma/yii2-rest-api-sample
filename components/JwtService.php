@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace app\components;
 
 use Firebase\JWT\JWT;
@@ -51,13 +53,19 @@ class JwtService extends Component
         }
     }
 
-    public function issue(int $userId): string
+    /**
+     * @param int $tokenVersion the account's token generation, carried as `ver`
+     *                          so a bump can withdraw every token issued before
+     *                          it without this check costing a lookup of its own
+     */
+    public function issue(int $userId, int $tokenVersion): string
     {
         $now = time();
 
         return JWT::encode(
             [
                 'sub' => $userId,
+                'ver' => $tokenVersion,
                 'iat' => $now,
                 'exp' => $now + $this->ttl,
             ],
@@ -67,7 +75,7 @@ class JwtService extends Component
     }
 
     /**
-     * @return null|array decoded claims, or null when the token is invalid or expired
+     * @return null|array<string, mixed> decoded claims, or null when the token is invalid or expired
      */
     public function decode(string $token): ?array
     {
@@ -78,13 +86,4 @@ class JwtService extends Component
         }
     }
 
-    /**
-     * @return null|int user id from the `sub` claim, or null for an invalid token
-     */
-    public function getUserId(string $token): ?int
-    {
-        $claims = $this->decode($token);
-
-        return isset($claims['sub']) ? (int) $claims['sub'] : null;
-    }
 }

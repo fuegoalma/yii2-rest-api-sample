@@ -1,7 +1,10 @@
 <?php
 
+declare(strict_types=1);
+
 namespace tests\functional;
 
+use app\models\db\User;
 use FunctionalTester;
 use tests\support\CreatesImageFixtures;
 use tests\support\RestoresGlobalState;
@@ -39,7 +42,9 @@ abstract class BaseCest
         $db = \Yii::$app->db;
         $db->createCommand('SET FOREIGN_KEY_CHECKS=0')->execute();
         $db->createCommand('TRUNCATE TABLE user_role')->execute();
+        $db->createCommand('TRUNCATE TABLE rbac_audit')->execute();
         $db->createCommand('TRUNCATE TABLE refresh_token')->execute();
+        $db->createCommand('TRUNCATE TABLE one_time_token')->execute();
         $db->createCommand('TRUNCATE TABLE photo')->execute();
         $db->createCommand('TRUNCATE TABLE album')->execute();
         $db->createCommand('TRUNCATE TABLE user')->execute();
@@ -74,10 +79,16 @@ abstract class BaseCest
 
     /**
      * Issues a JWT for the given user and sends it with every request.
+     *
+     * The token carries the account's current `token_version`, exactly as the
+     * auth endpoints do — a token minted with the wrong one authenticates
+     * nothing, so this reads it rather than assuming zero.
      */
     protected function actingAs(FunctionalTester $I, int $userId): void
     {
-        $I->amBearerAuthenticated(Yii::$app->jwt->issue($userId));
+        $version = (int) User::find()->select('token_version')->where(['id' => $userId])->scalar();
+
+        $I->amBearerAuthenticated(Yii::$app->jwt->issue($userId, $version));
     }
 
     /**

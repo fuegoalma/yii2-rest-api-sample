@@ -1,10 +1,13 @@
 <?php
 
+declare(strict_types=1);
+
 namespace app\models\service;
 
+use app\components\SqlTime;
 use app\models\contract\repository\RefreshTokenRepositoryInterface;
 use app\models\db\RefreshToken;
-use Yii;
+use app\models\service\basic\HashesRawTokens;
 use yii\base\Exception;
 use app\models\exception\UnauthorizedException;
 use yii\web\UnauthorizedHttpException;
@@ -20,7 +23,7 @@ use yii\web\UnauthorizedHttpException;
  */
 readonly class RefreshTokenService
 {
-    private const int TOKEN_LENGTH = 64;
+    use HashesRawTokens;
 
     /**
      * $ttl (seconds) comes from JWT_REFRESH_TTL via config/di.php and carries
@@ -42,13 +45,13 @@ readonly class RefreshTokenService
      */
     public function issue(int $userId, ?string $familyId = null): string
     {
-        $raw = $this->randomString();
+        $raw = $this->randomToken();
 
         $token = new RefreshToken();
         $token->user_id = $userId;
-        $token->token_hash = $this->hash($raw);
-        $token->family_id = $familyId ?? $this->randomString();
-        $token->expires_at = date('Y-m-d H:i:s', time() + $this->ttl);
+        $token->token_hash = $this->hashToken($raw);
+        $token->family_id = $familyId ?? $this->randomToken();
+        $token->expires_at = SqlTime::at($this->ttl);
 
         $this->repository->add($token);
 
@@ -65,25 +68,43 @@ readonly class RefreshTokenService
      */
     public function consume(string $rawToken): RefreshToken
     {
-        $token = $this->repository->findByHash($this->hash($rawToken));
+        $token = $this->repository->findByHash($this->hashToken($rawToken));
 
         if ($token === null) {
             throw new UnauthorizedException('Invalid refresh token.', 'refresh_token.invalid');
         }
 
         if ($token->isRevoked()) {
-            // a revoked token is being replayed — treat the family as compromised
-            $this->repository->revokeFamily($token->family_id);
-            throw new UnauthorizedException('Refresh token has been revoked.', 'refresh_token.reused');
+            // a revoked token is being replayed
+            $this->reuseDetected($token);
         }
 
         if ($token->isExpired()) {
             throw new UnauthorizedException('Refresh token has expired.', 'refresh_token.expired');
         }
 
-        $this->repository->revoke($token);
+        if (!$this->repository->consume($token)) {
+            // The row was active when we read it and is spent by the time we
+            // write, so a concurrent request rotated this same token value.
+            // Sequential replay and a lost race are the same evidence — one
+            // token presented twice — and get the same answer.
+            $this->reuseDetected($token);
+        }
 
         return $token;
+    }
+
+    /**
+     * A token value presented more than once means a copy is loose, so the
+     * whole session family goes and the client has to log in again.
+     *
+     * @throws UnauthorizedHttpException always
+     */
+    private function reuseDetected(RefreshToken $token): never
+    {
+        $this->repository->revokeFamily($token->family_id);
+
+        throw new UnauthorizedException('Refresh token has been revoked.', 'refresh_token.reused');
     }
 
     /**
@@ -93,19 +114,30 @@ readonly class RefreshTokenService
      */
     public function revokeSession(string $rawToken): void
     {
-        $token = $this->repository->findByHash($this->hash($rawToken));
+        $token = $this->repository->findByHash($this->hashToken($rawToken));
         if ($token !== null) {
             $this->repository->revokeFamily($token->family_id);
         }
     }
 
-    /** Ends every session of the token's owner (log out on all devices). */
-    public function revokeAllSessions(string $rawToken): void
+    /**
+     * Ends every session of the token's owner (log out on all devices).
+     *
+     * @return int|null the owner, so the caller can also withdraw their access
+     *                  tokens; null when the presented token is unknown, which
+     *                  keeps logout idempotent and silent about what exists
+     */
+    public function revokeAllSessions(string $rawToken): ?int
     {
-        $token = $this->repository->findByHash($this->hash($rawToken));
-        if ($token !== null) {
-            $this->repository->revokeAllForUser($token->user_id);
+        $token = $this->repository->findByHash($this->hashToken($rawToken));
+
+        if ($token === null) {
+            return null;
         }
+
+        $this->repository->revokeAllForUser($token->user_id);
+
+        return (int) $token->user_id;
     }
 
     /**
@@ -116,18 +148,5 @@ readonly class RefreshTokenService
     public function pruneExpired(): int
     {
         return $this->repository->deleteExpired();
-    }
-
-    /**
-     * @throws Exception
-     */
-    private function randomString(): string
-    {
-        return Yii::$app->security->generateRandomString(self::TOKEN_LENGTH);
-    }
-
-    private function hash(string $rawToken): string
-    {
-        return hash('sha256', $rawToken);
     }
 }

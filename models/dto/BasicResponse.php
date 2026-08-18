@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace app\models\dto;
 
 readonly class BasicResponse
@@ -52,6 +54,7 @@ readonly class BasicResponse
         return new self(false, $data, $code);
     }
 
+    /** @return array<string, mixed> */
     public function toArray(): array
     {
         return [

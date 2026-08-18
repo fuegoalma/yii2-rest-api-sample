@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace app\components;
 
 /**
@@ -25,6 +27,7 @@ final class ApiErrorCatalog
         404 => ['not_found', 'The requested resource was not found.'],
         405 => ['method_not_allowed', 'That method is not supported on this resource.'],
         409 => ['conflict', 'This operation conflicts with a safety rule and was refused.'],
+        413 => ['payload_too_large', 'The request body is larger than this endpoint accepts.'],
         415 => ['unsupported_media_type', 'The request body is in a format this endpoint does not accept.'],
         422 => ['validation_failed', 'The request could not be processed — see `error` for the fields at fault.'],
         429 => ['too_many_requests', 'Too many attempts. Wait for the period given in `Retry-After` and try again.'],

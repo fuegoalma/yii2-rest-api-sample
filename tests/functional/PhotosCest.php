@@ -1,8 +1,11 @@
 <?php
 
+declare(strict_types=1);
+
 namespace tests\functional;
 
 use app\components\PhotoUrlBuilder;
+use app\components\RequestSizeLimit;
 use FunctionalTester;
 use PHPUnit\Framework\Assert;
 use Yii;
@@ -255,6 +258,30 @@ class PhotosCest extends BaseCest
         $I->sendPost('/albums/' . $albumId . '/photos', [], ['file' => $file]);
         $I->seeResponseCodeIs(422);
         $I->seeResponseContainsJson(['success' => false]);
+    }
+
+    /**
+     * A body over `post_max_size` is discarded by PHP before any rule runs, so
+     * without the size guard this arrives as a request with no fields and the
+     * API blames the caller for omitting the title they did send. The status is
+     * the point: a caller reading 422 resends the same body.
+     */
+    public function testAnOversizedRequestIsRefusedAsTooLargeRatherThanInvalid(FunctionalTester $I): void
+    {
+        $albumId = $this->insertAlbum();
+
+        // read from the ini the filter itself reads, so the two cannot drift
+        $overLimit = RequestSizeLimit::parseSize((string) ini_get('post_max_size')) + 1;
+
+        $I->haveHttpHeader('Content-Length', (string) $overLimit);
+        $I->sendPost('/albums/' . $albumId . '/photos', ['title' => 'Too big']);
+
+        $I->seeResponseCodeIs(413);
+        $I->seeResponseContainsJson([
+            'success' => false,
+            'data' => ['error_code' => 'payload.too_large'],
+        ]);
+        $I->deleteHeader('Content-Length');
     }
 
     /**

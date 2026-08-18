@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace app\models\db;
 
 use app\components\PhotoUrlBuilder;
@@ -62,12 +64,14 @@ class Photo extends ActiveRecord implements OwnableInterface
         ];
     }
 
+    /** @return array<int|string, string|callable> */
     public function fields(): array // API fields
     {
         return [
             'id',
             'title',
-            'url'
+            'url',
+            'created_at',
         ];
     }
 

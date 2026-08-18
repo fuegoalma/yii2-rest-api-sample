@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 use yii\db\Migration;
 
 class m260706_000000_rename_photo_url_to_file_name extends Migration

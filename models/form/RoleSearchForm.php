@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace app\models\form;
 
 use app\models\form\basic\SearchForm;
@@ -9,7 +11,7 @@ use app\models\form\basic\SearchForm;
  */
 class RoleSearchForm extends SearchForm
 {
-    public $name;
+    public mixed $name = null;
 
     public function rules(): array
     {

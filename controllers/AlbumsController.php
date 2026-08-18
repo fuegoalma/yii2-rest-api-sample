@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace app\controllers;
 
 use app\controllers\basic\AlbumVisibilityTrait;
@@ -19,6 +21,9 @@ use yii\db\ActiveRecord;
 use yii\web\NotFoundHttpException;
 use Yii;
 
+/**
+ * @extends ApiController<AlbumServiceInterface>
+ */
 class AlbumsController extends ApiController
 {
     use AlbumVisibilityTrait;
@@ -29,6 +34,8 @@ class AlbumsController extends ApiController
      * The admin/moderator listing: requires `album.index.any`. Soft-deleted
      * albums are the review queue — hidden unless explicitly requested via
      * the `is_deleted` filter.
+     *
+     * @return ActiveDataProvider|array<string, string[]>
      */
     public function actionIndex(): ActiveDataProvider|array
     {
@@ -48,17 +55,21 @@ class AlbumsController extends ApiController
 
     /**
      * The caller's own albums — available to every authenticated user.
+     *
+     * @return ActiveDataProvider|array<string, string[]>
      */
     public function actionMy(): ActiveDataProvider|array
     {
         return $this->handleIndex(
             $this->searchForm(),
-            fn (SearchCriteria $criteria) => $this->albumService()
+            fn (SearchCriteria $criteria) => $this->service
                 ->getByUser((int) Yii::$app->user->id, $criteria)
         );
     }
 
     /**
+     * @return array<string, mixed>
+     *
      * @throws NotFoundHttpException
      */
     public function actionView(int $id): array
@@ -98,30 +109,36 @@ class AlbumsController extends ApiController
         $this->assertVisible($album);
 
         if ($this->access->canOn('album.delete', $album)) {
-            $this->albumService()->delete($id);
+            $this->service->delete($id);
         } else {
             $this->access->requirePermission('album.soft-delete.any');
 
-            $form = new AlbumSoftDeleteForm();
-            if (!$this->validateRequest($form)) {
-                return $form->getErrors();
-            }
+            return $this->withValidatedForm(
+                new AlbumSoftDeleteForm(),
+                function (AlbumSoftDeleteForm $form) use ($id): null {
+                    $this->service->softDelete(
+                        $id,
+                        $form->reason === null ? null : (string) $form->reason
+                    );
 
-            $this->albumService()->softDelete($id, $form->reason === null ? null : (string) $form->reason);
+                    return $this->noContent();
+                }
+            );
         }
 
-        Yii::$app->response->statusCode = 204;
-        return null;
+        return $this->noContent();
     }
 
     /**
      * Lifts a pseudo-deletion after review.
+     *
+     * @return array<string, mixed>
      */
     public function actionRestore(int $id): array
     {
         $this->access->requirePermission('album.restore');
 
-        return $this->albumService()->restore($id)->toArray();
+        return $this->service->restore($id)->toArray();
     }
 
     protected function accessResource(): string
@@ -135,6 +152,7 @@ class AlbumsController extends ApiController
         $this->requireVisibleAlbum($model);
     }
 
+    /** @return array<string, list<string>> */
     protected function verbs(): array
     {
         return array_merge(parent::verbs(), [
@@ -158,10 +176,4 @@ class AlbumsController extends ApiController
         return new AlbumUpdateForm();
     }
 
-    private function albumService(): AlbumServiceInterface
-    {
-        /** @var AlbumServiceInterface $service */
-        $service = $this->service;
-        return $service;
-    }
 }

@@ -1,8 +1,9 @@
 <?php
 
+declare(strict_types=1);
+
 namespace app\components;
 
-use app\components\ApiErrorCatalog;
 use app\models\dto\BasicResponse;
 use app\models\dto\PaginationMeta;
 use yii\data\DataProviderInterface;
@@ -11,6 +12,9 @@ use Yii;
 
 class ApiSerializer extends Serializer
 {
+    /**
+     * @return array<string, mixed>
+     */
     public function serialize($data): array
     {
         $status_code = Yii::$app->response->statusCode;
@@ -56,6 +60,9 @@ class ApiSerializer extends Serializer
         return [$fields, []];
     }
 
+    /**
+     * @return array{items: mixed, pagination?: array<string, mixed>}
+     */
     private function serializePaginated(DataProviderInterface $dataProvider): array
     {
         $result = [

@@ -61,6 +61,10 @@ jobs:
           # installs the same driver for local `make coverage` — keep them in step.
           coverage: pcov
           tools: composer:v2
+          # Matches docker/php/app.ini: photo_max_upload_bytes (config/params.php)
+          # is validated against these two, and UploadParamsContractTest fails the
+          # build if the runtime accepts less than the app promises.
+          ini-values: upload_max_filesize=10M, post_max_size=12M
 
       - name: Cache Composer packages
         uses: actions/cache@v4
@@ -112,6 +116,13 @@ jobs:
       # The HTML report gives the same per-file drill-down as locally. Uploaded
       # on a green run too: a gate that passes at exactly 100% is the run you
       # most want the report from when the next commit drops below it.
+      # Line coverage says a line ran; this says the suite would notice if it were
+      # wrong. Threshold lives in infection.json5 — keep `make mutation` in step.
+      - name: Mutation testing (Infection)
+        run: |
+          vendor/bin/infection --threads=4 --no-progress --no-interaction \
+              --initial-tests-php-options="-d pcov.enabled=1 -d pcov.directory=$GITHUB_WORKSPACE"
+
       - name: Upload coverage report
         if: always()
         uses: actions/upload-artifact@v4

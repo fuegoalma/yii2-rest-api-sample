@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace app\models\form;
 
 use app\models\form\basic\SearchForm;
@@ -10,9 +12,9 @@ use app\models\form\basic\SearchForm;
  */
 class AlbumSearchForm extends SearchForm
 {
-    public $user_id;
-    public $title;
-    public $is_deleted;
+    public mixed $user_id = null;
+    public mixed $title = null;
+    public mixed $is_deleted = null;
 
     public function rules(): array
     {
@@ -26,7 +28,7 @@ class AlbumSearchForm extends SearchForm
 
     protected function sortableAttributes(): array
     {
-        return ['id', 'user_id', 'title', 'created_at', 'updated_at'];
+        return ['id', 'title', 'created_at', 'updated_at'];
     }
 
     protected function likeAttributes(): array

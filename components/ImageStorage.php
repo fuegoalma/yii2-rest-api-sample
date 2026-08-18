@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace app\components;
 
 use app\models\contract\image\ImageEncoderInterface;
@@ -56,6 +58,22 @@ readonly class ImageStorage
         if ($this->filesystem->fileExists($key)) {
             $this->filesystem->delete($key);
         }
+    }
+
+    /**
+     * Removes a whole album's directory and everything in it.
+     *
+     * Here rather than on the caller for the same reason {@see delete()} is:
+     * turning "album 42" into a storage location is this class's job, and the
+     * `basename()` below is the guard that keeps a directory name from climbing
+     * out of the upload root. A caller reaching for the filesystem directly
+     * would skip it.
+     *
+     * @throws FilesystemException
+     */
+    public function deleteDirectory(string $subDir): void
+    {
+        $this->filesystem->deleteDirectory(basename($subDir));
     }
 
     private function key(string $subDir, string $fileName): string

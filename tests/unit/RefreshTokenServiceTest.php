@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace tests\unit;
 
 use app\models\db\RefreshToken;
@@ -83,16 +85,42 @@ class RefreshTokenServiceTest extends BaseUnitTest
             ->with(hash('sha256', 'raw'))
             ->willReturn($token);
 
-        $this->repositoryMock->expects($this->once())->method('revoke')->with($token);
+        $this->repositoryMock
+            ->expects($this->once())
+            ->method('consume')
+            ->with($token)
+            ->willReturn(true);
         $this->repositoryMock->expects($this->never())->method('revokeFamily');
 
         $this->assertSame($token, $this->service->consume('raw'));
     }
 
+    /**
+     * Losing the claim means another request rotated this very token between
+     * our findByHash() and our write. That is indistinguishable from a stolen
+     * token being replayed, and is treated the same way: the family goes.
+     */
+    public function testConsumeTreatsALostClaimAsReuse(): void
+    {
+        $token = $this->makeToken();
+        $token->family_id = 'raced-family';
+
+        $this->repositoryMock->method('findByHash')->willReturn($token);
+        $this->repositoryMock->method('consume')->with($token)->willReturn(false);
+
+        $this->repositoryMock
+            ->expects($this->once())
+            ->method('revokeFamily')
+            ->with('raced-family');
+
+        $this->expectException(UnauthorizedHttpException::class);
+        $this->service->consume('raw');
+    }
+
     public function testConsumeThrowsForUnknownToken(): void
     {
         $this->repositoryMock->method('findByHash')->willReturn(null);
-        $this->repositoryMock->expects($this->never())->method('revoke');
+        $this->repositoryMock->expects($this->never())->method('consume');
 
         $this->expectException(UnauthorizedHttpException::class);
         $this->service->consume('raw');
@@ -110,7 +138,7 @@ class RefreshTokenServiceTest extends BaseUnitTest
             ->expects($this->once())
             ->method('revokeFamily')
             ->with('compromised-family');
-        $this->repositoryMock->expects($this->never())->method('revoke');
+        $this->repositoryMock->expects($this->never())->method('consume');
 
         $this->expectException(UnauthorizedHttpException::class);
         $this->service->consume('raw');
@@ -119,7 +147,7 @@ class RefreshTokenServiceTest extends BaseUnitTest
     public function testConsumeThrowsForExpiredToken(): void
     {
         $this->repositoryMock->method('findByHash')->willReturn($this->makeToken(expired: true));
-        $this->repositoryMock->expects($this->never())->method('revoke');
+        $this->repositoryMock->expects($this->never())->method('consume');
         $this->repositoryMock->expects($this->never())->method('revokeFamily');
 
         $this->expectException(UnauthorizedHttpException::class);

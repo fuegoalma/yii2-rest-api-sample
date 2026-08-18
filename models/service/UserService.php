@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace app\models\service;
 
 use app\models\contract\repository\UserRepositoryInterface;
@@ -40,7 +42,12 @@ readonly class UserService extends BaseCrudService
     {
         $user = $this->findOrFail($id);
 
-        // albums (their photos + files) and the account go together or not at all
+        // Albums (their photos + files) and the account go together or not at
+        // all. This deliberately gives up the short locks that
+        // BaseRepository::deleteInBatches() exists for — closing an account is
+        // rare, and an account row whose albums are half gone is not a state
+        // anyone can act on. DELETE /albums/{id} takes the other side of the
+        // same trade; ADR 8 has the table.
         $this->tx->run(function () use ($id, $user): void {
             $this->albumService->deleteByUser($id);
             $this->repository->delete($user);
@@ -48,6 +55,8 @@ readonly class UserService extends BaseCrudService
     }
 
     /**
+     * @param array<string, mixed> $data
+     *
      * @throws Exception
      * @throws \yii\db\Exception
      */
@@ -57,6 +66,8 @@ readonly class UserService extends BaseCrudService
     }
 
     /**
+     * @param array<string, mixed> $data
+     *
      * @throws Exception
      * @throws \yii\db\Exception
      * @throws NotFoundHttpException
@@ -70,6 +81,10 @@ readonly class UserService extends BaseCrudService
      * Replaces the plain-text password from the request with its hash.
      * A client-supplied password_hash is never accepted — the hash is
      * only ever produced server-side from the plain password.
+     *
+     * @param array<string, mixed> $data
+     *
+     * @return array<string, mixed>
      *
      * @throws Exception
      */

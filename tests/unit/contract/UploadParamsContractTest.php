@@ -1,7 +1,11 @@
 <?php
 
+declare(strict_types=1);
+
 namespace tests\unit\contract;
 
+use app\components\RequestSizeLimit;
+use app\models\form\PhotoCreateForm;
 use Yii;
 
 /**
@@ -43,6 +47,50 @@ final class UploadParamsContractTest extends ContractTestCase
         );
 
         $this->assertSame((int) $matches[1], (int) Yii::$app->params['photo_quality']);
+    }
+
+    public function testTheDocumentedSizeLimitMatchesTheConfiguredOne(): void
+    {
+        $this->assertSame(
+            1,
+            preg_match('/at most (\d+) bytes/', $this->uploadDescription(), $matches),
+            'POST ' . self::UPLOAD_PATH . ' no longer states the largest upload it accepts'
+        );
+
+        $this->assertSame((int) $matches[1], (int) Yii::$app->params['photo_max_upload_bytes']);
+    }
+
+    /**
+     * The form's rule is what actually rejects an oversized file, so the number
+     * the document publishes has to be the one the rule was given — not merely
+     * the one sitting in params.php next to it.
+     */
+    public function testTheUploadFormEnforcesTheDocumentedSizeLimit(): void
+    {
+        $maxSize = null;
+
+        foreach ((new PhotoCreateForm())->rules() as $rule) {
+            if (($rule[1] ?? null) === 'file' && isset($rule['maxSize'])) {
+                $maxSize = (int) $rule['maxSize'];
+            }
+        }
+
+        $this->assertNotNull($maxSize, 'PhotoCreateForm no longer caps the upload size at all');
+        $this->assertSame((int) Yii::$app->params['photo_max_upload_bytes'], $maxSize);
+    }
+
+    /**
+     * PHP discards a body over `post_max_size` before any rule can run, so a
+     * form limit above it would be unreachable and the caller would get the
+     * generic 413 instead of a message naming the file.
+     */
+    public function testPhpWouldNotDiscardAnUploadTheFormWouldAccept(): void
+    {
+        $postMax = RequestSizeLimit::parseSize((string) ini_get('post_max_size'));
+        $uploadMax = RequestSizeLimit::parseSize((string) ini_get('upload_max_filesize'));
+
+        $this->assertGreaterThanOrEqual((int) Yii::$app->params['photo_max_upload_bytes'], $uploadMax);
+        $this->assertGreaterThan($uploadMax, $postMax);
     }
 
     /**

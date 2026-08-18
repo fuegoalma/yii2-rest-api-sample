@@ -1,7 +1,10 @@
 <?php
 
+declare(strict_types=1);
+
 namespace app\models\repository;
 
+use app\components\SqlTime;
 use app\models\contract\repository\RefreshTokenRepositoryInterface;
 use app\models\db\RefreshToken;
 use yii\db\Exception;
@@ -29,22 +32,34 @@ class RefreshTokenRepository implements RefreshTokenRepositoryInterface
     }
 
     /**
-     * @throws Exception
+     * Claims a token for rotation: revokes it, but only if it was still active.
+     *
+     * The condition is what makes this safe under concurrency. Two simultaneous
+     * refreshes both pass {@see findByHash()} while the row is still active, so
+     * a read-then-save would let both rotate and neither would look like reuse.
+     * Here the database decides: `WHERE revoked_at IS NULL` means exactly one
+     * UPDATE can match, and the loser is told so.
+     *
+     * @return bool true if this call revoked the token, false if it was already
+     *              spent — which the caller must treat as reuse
      */
-    public function revoke(RefreshToken $token): void
+    public function consume(RefreshToken $token): bool
     {
-        $token->revoked_at = $this->now();
-        // @codeCoverageIgnoreStart
-        // Unreachable in practice, and deliberately kept: save(false) skips
-        // validation, so on an existing row it returns false only if a
-        // beforeSave() hook vetoes the write — RefreshToken has none, and a
-        // real DB failure throws instead. Silently failing to revoke a token
-        // would be a security bug, so the check stays as a guard against a
-        // future hook being added.
-        if (!$token->save(false, ['revoked_at'])) {
-            throw new Exception('Failed to revoke refresh token.');
+        $now = SqlTime::now();
+
+        $claimed = RefreshToken::updateAll(
+            ['revoked_at' => $now],
+            ['id' => $token->id, 'revoked_at' => null]
+        );
+
+        if ($claimed === 0) {
+            return false;
         }
-        // @codeCoverageIgnoreEnd
+
+        // the caller goes on using the object it passed in
+        $token->revoked_at = $now;
+
+        return true;
     }
 
     /** Revokes every still-active token in a family (one login session). */
@@ -68,19 +83,18 @@ class RefreshTokenRepository implements RefreshTokenRepositoryInterface
      */
     public function deleteExpired(): int
     {
-        return RefreshToken::deleteAll(['<', 'expires_at', $this->now()]);
+        return RefreshToken::deleteAll(['<', 'expires_at', SqlTime::now()]);
     }
 
+    /**
+     * @param array<string, mixed> $condition which tokens to revoke
+     */
     private function revokeWhere(array $condition): void
     {
         RefreshToken::updateAll(
-            ['revoked_at' => $this->now()],
+            ['revoked_at' => SqlTime::now()],
             ['and', $condition, ['revoked_at' => null]]
         );
     }
 
-    private function now(): string
-    {
-        return date('Y-m-d H:i:s');
-    }
 }

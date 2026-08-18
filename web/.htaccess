@@ -2,3 +2,30 @@ RewriteEngine on
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteRule . index.php [L]
+
+# --- Static image caching --------------------------------------------------
+#
+# Images are served by Apache as plain files, so the freshness policy has to be
+# stated here — the application never sees these requests. Without it a browser
+# gets only ETag/Last-Modified, which means a conditional request per image per
+# page view: cheap in bytes, but a full round trip each.
+#
+# Only mod_headers is used. Cache-Control carries the whole policy; an Expires
+# header would restate it in a weaker, absolute-clock form.
+<IfModule mod_headers.c>
+    # Uploaded photos are content-immutable by construction: ImageStorage names
+    # every file with a 40-character random string, and PhotoUpdateForm accepts
+    # a title change only — the bytes behind a URL never change. `immutable`
+    # additionally tells the browser not to revalidate even on an explicit
+    # reload. See docs/adr/0012 for what would break this.
+    <If "%{REQUEST_URI} =~ m#^/uploads/albums/#">
+        Header always set Cache-Control "public, max-age=31536000, immutable"
+    </If>
+
+    # Seeded demo images keep fixed names (1.jpg, 2.jpg, …), so a release can
+    # change the bytes behind an unchanged URL. A day of freshness, then a
+    # conditional request settles it against the ETag Apache already sends.
+    <If "%{REQUEST_URI} =~ m#^/default-images/#">
+        Header always set Cache-Control "public, max-age=86400"
+    </If>
+</IfModule>

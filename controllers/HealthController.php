@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace app\controllers;
 
 use app\controllers\basic\ApiControllerTrait;
@@ -26,6 +28,9 @@ class HealthController extends Controller
         return $this->apiBehaviors(parent::behaviors(), requireAuth: false);
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     public function actionIndex(): array
     {
         $result = $this->service->check();
@@ -37,6 +42,7 @@ class HealthController extends Controller
         return $result->toArray();
     }
 
+    /** @return array<string, list<string>> */
     protected function verbs(): array
     {
         return [

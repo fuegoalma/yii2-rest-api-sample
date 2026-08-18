@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace app\models\form;
 
 use app\models\db\Role;
@@ -15,7 +17,7 @@ class RoleAssignForm extends ApiForm
 {
     use ValidatesKnownNames;
 
-    public $roles;
+    public mixed $roles = null;
 
     public function rules(): array
     {

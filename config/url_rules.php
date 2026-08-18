@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /**
  * REST API URL rules — single source of truth shared by the web (`web.php`) and
  * test (`test.php`) configs so the route table never drifts between them. Only
@@ -12,15 +14,25 @@ return [
     'GET docs' => 'docs/index',
     'GET docs/openapi.yaml' => 'docs/spec',
     'GET,OPTIONS health' => 'health/index',
+    // Prometheus scrape target; plain text, no envelope, no auth (see the controller)
+    'GET metrics' => 'metrics/index',
     'POST,OPTIONS auth/login' => 'auth/login',
     'POST,OPTIONS auth/register' => 'auth/register',
     'POST,OPTIONS auth/refresh' => 'auth/refresh',
     'POST,OPTIONS auth/logout' => 'auth/logout',
     'POST,OPTIONS auth/logout-all' => 'auth/logout-all',
+    // password recovery: request a token by email, then spend it
+    'POST,OPTIONS auth/forgot-password' => 'auth/forgot-password',
+    'POST,OPTIONS auth/reset-password' => 'auth/reset-password',
+    'POST,OPTIONS auth/verify-email' => 'auth/verify-email',
     // the current user: profile, and the caller's roles + permissions for the client UI
     'GET users/me' => 'users/me',
     'OPTIONS users/me' => 'users/options',
     'GET users/me/permissions' => 'users/me-permissions',
+    'PUT users/me/password' => 'users/change-password',
+    'POST users/me/resend-verification' => 'users/resend-verification',
+    'OPTIONS users/me/resend-verification' => 'users/options',
+    'OPTIONS users/me/password' => 'users/options',
     'OPTIONS users/me/permissions' => 'users/options',
     // role assignments are a child resource of users
     'GET users/<id:\d+>/roles' => 'users/roles',

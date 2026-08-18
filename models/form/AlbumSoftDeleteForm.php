@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace app\models\form;
 
 use app\models\form\basic\ApiForm;
@@ -10,7 +12,7 @@ use app\models\form\basic\ApiForm;
  */
 class AlbumSoftDeleteForm extends ApiForm
 {
-    public $reason;
+    public mixed $reason = null;
 
     public function rules(): array
     {

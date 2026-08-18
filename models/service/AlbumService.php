@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace app\models\service;
 
 use app\models\contract\queue\QueueInterface;
@@ -34,7 +36,7 @@ readonly class AlbumService extends BaseCrudService implements AlbumServiceInter
         $criteria = ($criteria ?? new SearchCriteria())
             ->withScope(['user_id' => $userId, 'is_deleted' => 0]);
 
-        return $this->repository->getAllDP($criteria);
+        return $this->albums->getAllDP($criteria);
     }
 
     /**
@@ -71,10 +73,24 @@ readonly class AlbumService extends BaseCrudService implements AlbumServiceInter
      * then the on-disk upload directories. The file cleanup is handed to the
      * queue (per album), so a large, slow delete never blocks the request and a
      * failure can be retried by the worker instead of aborting the DB teardown.
-     * With the DB queue driver the jobs are enqueued in the same transaction as
-     * the row deletes, so files are only ever scheduled for removal once the
-     * rows are actually gone. Seeded demo images live elsewhere and are shared,
-     * so removing an album's own directory is safe.
+     * Seeded demo images live elsewhere and are shared, so removing an album's
+     * own directory is safe.
+     *
+     * **This method opens no transaction of its own, and its two callers differ
+     * on that deliberately** (see ADR 8):
+     *
+     * - `delete()` — one album, from `DELETE /albums/{id}`. No transaction, so
+     *   the batched deletes keep their locks short, which is the point of
+     *   batching. The exposure is a crash between the row deletes and the
+     *   enqueue, which leaves a directory nobody will collect. That is garbage
+     *   on disk, invisible to the API, and the cheaper of the two risks on a
+     *   request a user makes often.
+     * - `deleteByUser()` — every album of an account being closed, called by
+     *   `UserService::delete()` **inside a transaction**. There the account row
+     *   and its albums have to go together, so the batching's short locks are
+     *   traded away on purpose. It is a rare, admin-initiated operation, and
+     *   committing the queue rows with the deletes is what guarantees the
+     *   worker never sees a cleanup job for an album that still exists.
      *
      * @param int[] $albumIds
      * @throws \Throwable
@@ -108,7 +124,7 @@ readonly class AlbumService extends BaseCrudService implements AlbumServiceInter
 
         $album->is_deleted = 1;
         $album->delete_reason = $reason;
-        $this->repository->save($album);
+        $this->albums->save($album);
     }
 
     /**
@@ -122,7 +138,7 @@ readonly class AlbumService extends BaseCrudService implements AlbumServiceInter
 
         $album->is_deleted = 0;
         $album->delete_reason = null;
-        $this->repository->save($album);
+        $this->albums->save($album);
 
         return $album;
     }

@@ -21,10 +21,12 @@ BASE="http://localhost:${PORT}"
 NETWORK="smoke-$$"
 DB="smoke-db-$$"
 WEB="smoke-web-$$"
+UPLOAD="/tmp/smoke-upload-$$.png"
 
 cleanup() {
     docker rm -f "$WEB" "$DB" >/dev/null 2>&1 || true
     docker network rm "$NETWORK" >/dev/null 2>&1 || true
+    rm -f "$UPLOAD"
 }
 trap cleanup EXIT
 
@@ -84,6 +86,17 @@ done
 step "GET /health reports the database is reachable"
 grep -q '"status":"ok"' <<< "$(curl -fsS "${BASE}/health")"
 
+# The image used to ship no php.ini at all, so the runtime ran on PHP's
+# compiled-in defaults and would have printed internals on a fatal error.
+step "The runtime is configured for production"
+PHP_SETTINGS=$(docker exec "$WEB" php -r \
+    'echo "ini=", (php_ini_loaded_file() ?: "NONE"),
+           " display_errors=", (ini_get("display_errors") ?: "0"),
+           " validate_timestamps=", ini_get("opcache.validate_timestamps");')
+grep -qv 'ini=NONE' <<< "$PHP_SETTINGS"
+grep -q 'display_errors=0' <<< "$PHP_SETTINGS"
+grep -q 'validate_timestamps=0' <<< "$PHP_SETTINGS"
+
 step "GET /docs/openapi.yaml serves the published spec"
 grep -q '^openapi:' <<< "$(curl -fsS "${BASE}/docs/openapi.yaml")"
 
@@ -100,10 +113,40 @@ TOKEN=$(curl -fsS -X POST "${BASE}/auth/register" -H 'Content-Type: application/
     | sed -n 's/.*"access_token":"\([^"]*\)".*/\1/p')
 test -n "$TOKEN"
 
-curl -fsS -X POST "${BASE}/albums" -H "Authorization: Bearer ${TOKEN}" \
-    -H 'Content-Type: application/json' -d '{"title":"Smoke album"}' >/dev/null
+ALBUM_ID=$(curl -fsS -X POST "${BASE}/albums" -H "Authorization: Bearer ${TOKEN}" \
+    -H 'Content-Type: application/json' -d '{"title":"Smoke album"}' \
+    | sed -n 's/.*"id":\([0-9]*\).*/\1/p')
+test -n "$ALBUM_ID"
 
 grep -q 'Smoke album' <<< "$(curl -fsS "${BASE}/albums/my" -H "Authorization: Bearer ${TOKEN}")"
+
+# The cache policy for uploads lives in web/.htaccess and is applied by Apache,
+# which no PHP test ever starts — this is the only place it can be checked.
+step "An uploaded image is served with an immutable cache policy"
+docker exec "$WEB" php -r \
+    '$i = new Imagick(); $i->newPseudoImage(64, 64, "plasma:fractal"); $i->setImageFormat("png"); $i->writeImage("/tmp/smoke.png");'
+docker cp "$WEB:/tmp/smoke.png" "$UPLOAD" >/dev/null
+
+PHOTO_URL=$(curl -fsS -X POST "${BASE}/albums/${ALBUM_ID}/photos" \
+    -H "Authorization: Bearer ${TOKEN}" \
+    -F 'title=Smoke photo' -F "file=@${UPLOAD}" \
+    | sed -n 's|.*"url":"\([^"]*\)".*|\1|p')
+test -n "$PHOTO_URL"
+
+PHOTO_HEADERS=$(curl -fsS -D - -o /dev/null "$PHOTO_URL")
+grep -qi 'cache-control: public, max-age=31536000, immutable' <<< "$PHOTO_HEADERS"
+
+# A 304 that drops Cache-Control resets the browser's freshness clock, so the
+# policy has to survive revalidation — that is what `Header always` is for.
+step "A 304 still carries the cache policy"
+ETAG=$(sed -n 's/^[Ee][Tt][Aa][Gg]: //p' <<< "$PHOTO_HEADERS" | tr -d '\r')
+NOT_MODIFIED=$(curl -fsS -D - -o /dev/null -H "If-None-Match: ${ETAG}" "$PHOTO_URL")
+grep -q '^HTTP/[0-9.]* 304' <<< "$NOT_MODIFIED"
+grep -qi 'cache-control: public, max-age=31536000, immutable' <<< "$NOT_MODIFIED"
+
+step "Seeded demo images are cacheable, but expire so a release can replace them"
+grep -qi 'cache-control: public, max-age=86400' \
+    <<< "$(curl -fsS -D - -o /dev/null "${BASE}/default-images/1.jpg")"
 
 step "An error answers in the published shape"
 grep -q '"error_code":"not_found"' <<< "$(curl -s "${BASE}/albums/999999" -H "Authorization: Bearer ${TOKEN}")"

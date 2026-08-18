@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace tests\unit;
 
 use app\models\contract\service\AlbumServiceInterface;

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace app\models\db;
 
 use yii\db\ActiveQuery;
@@ -48,6 +50,7 @@ class Role extends ActiveRecord
         ];
     }
 
+    /** @return array<int|string, string|callable> */
     public function fields(): array // API fields
     {
         return [
@@ -58,6 +61,7 @@ class Role extends ActiveRecord
         ];
     }
 
+    /** @return list<string> */
     public function extraFields(): array
     {
         return [

@@ -21,3 +21,5 @@ somewhere other than where the benefit shows up.
 | [0009](0009-one-delete-route-two-outcomes.md)        | One delete route, outcome decided by permission                      |
 | [0010](0010-config-driven-parameters.md)             | A config-driven parameter has no default in code                     |
 | [0011](0011-machine-readable-error-codes.md)         | Errors carry a machine-readable code, and disclose nothing by accident |
+| [0012](0012-immutable-cache-for-uploaded-images.md)  | Uploaded images are cached as immutable for a year                   |
+| [0013](0013-conditional-get-saves-bandwidth-not-work.md) | Conditional GET saves bandwidth, not work                        |

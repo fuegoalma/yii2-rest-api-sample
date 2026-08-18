@@ -1,0 +1,43 @@
+{
+    // Mutation testing: change the code on purpose and see whether the suite
+    // notices. It answers the one question 100% line coverage cannot — whether
+    // the tests *assert* anything, or merely execute the lines.
+    //
+    // Scope is deliberately narrow. Infection reruns the suite once per surviving
+    // mutant, and this suite talks to MySQL, so mutating everything would take
+    // hours. The directories below are where the decisions live — the branches
+    // that grant access, claim a token or reject an upload — and they are the
+    // ones where a test that fails to assert is worth knowing about. Controllers
+    // and DTOs are mostly wiring, and are covered by the contract gates instead.
+    source: {
+        directories: [
+            "components",
+            "models/service",
+            "models/repository",
+            "models/form"
+        ],
+        excludes: [
+            // interfaces carry no logic to mutate
+            "models/contract"
+        ]
+    },
+    // Only the unit suite runs per mutant. The functional suite drives real HTTP
+    // requests and truncates tables between tests, which is both slow and shared
+    // state — the wrong thing to run thousands of times in parallel.
+    testFramework: "codeception",
+    testFrameworkOptions: "--skip functional",
+    logs: {
+        text: "tests/_output/infection.log",
+        summary: "tests/_output/infection-summary.log"
+    },
+    tmpDir: "runtime/infection",
+    // Seconds a mutant's test run may take before it counts as a timeout. The
+    // suite is ~10s, so this is loose enough that only a mutant which genuinely
+    // hangs (an inverted loop condition, say) is recorded as one.
+    timeout: 120,
+    // Measured ~78% against the unit suite. The floor sits a little below so the
+    // gate catches a real regression without failing on the couple of points
+    // that move as unit and functional coverage shift between them.
+    minMsi: 76,
+    minCoveredMsi: 76
+}

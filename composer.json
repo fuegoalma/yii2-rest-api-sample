@@ -1,21 +1,26 @@
 {
-    "name": "yiisoft/yii2-app-basic",
-    "description": "Yii 2 Basic Project Template",
+    "name": "fuegoalma/yii2-rest-api-sample",
+    "description": "REST API for users, albums and photos: Yii2 on PHP 8.5, two-token JWT authentication, flat RBAC, background jobs, and an OpenAPI document checked against the code.",
     "keywords": [
         "yii2",
-        "framework",
-        "basic",
-        "project template"
+        "rest-api",
+        "jwt",
+        "rbac",
+        "openapi"
     ],
-    "homepage": "https://www.yiiframework.com/",
+    "homepage": "https://github.com/fuegoalma/yii2-rest-api-sample",
     "type": "project",
-    "license": "BSD-3-Clause",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "fuegoalma",
+            "homepage": "https://github.com/fuegoalma"
+        }
+    ],
     "support": {
-        "issues": "https://github.com/yiisoft/yii2/issues?state=open",
-        "forum": "https://www.yiiframework.com/forum/",
-        "wiki": "https://www.yiiframework.com/wiki/",
-        "irc": "ircs://irc.libera.chat:6697/yii",
-        "source": "https://github.com/yiisoft/yii2"
+        "issues": "https://github.com/fuegoalma/yii2-rest-api-sample/issues",
+        "source": "https://github.com/fuegoalma/yii2-rest-api-sample",
+        "docs": "https://fuegoalma.github.io/yii2-rest-api-sample/"
     },
     "minimum-stability": "stable",
     "require": {
@@ -42,12 +47,15 @@
         "friendsofphp/php-cs-fixer": "^3.95",
         "phpstan/phpstan": "^2.2",
         "symfony/yaml": "^8.1",
-        "captainhook/captainhook": "^5.29"
+        "captainhook/captainhook": "^5.29",
+        "infection/infection": "^0.35",
+        "infection/codeception-adapter": "^0.4"
     },
     "config": {
         "allow-plugins": {
             "yiisoft/yii2-composer": true,
-            "captainhook/captainhook": false
+            "captainhook/captainhook": false,
+            "infection/extension-installer": true
         },
         "process-timeout": 1800,
         "fxp-asset": {
@@ -85,5 +93,10 @@
             "type": "composer",
             "url": "https://asset-packagist.org"
         }
-    ]
+    ],
+    "autoload": {
+        "psr-4": {
+            "app\\": ""
+        }
+    }
 }

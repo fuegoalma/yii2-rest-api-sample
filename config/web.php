@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 $params = require __DIR__ . '/params.php';
 $db = require __DIR__ . '/db.php';
 
@@ -19,6 +21,23 @@ $config = [
             'parsers' => [
                 'application/json' => 'yii\web\JsonParser',
             ],
+            // Which hosts may tell us who the client is.
+            //
+            // `RateLimiter` buckets by client IP, so this decides whether the
+            // limit means anything. Empty (the default) means `X-Forwarded-For`
+            // is ignored and the address is whoever opened the socket — right
+            // for a directly exposed app, and wrong behind a load balancer,
+            // where every caller then shares the balancer's address and one
+            // brute-force attempt exhausts the budget for everybody.
+            //
+            // Deployments behind a proxy set TRUSTED_PROXIES to that proxy's
+            // address or CIDR. It is deliberately not a wildcard default:
+            // trusting the header from anyone lets a caller mint a fresh rate
+            // limit per request by rotating it.
+            'trustedHosts' => array_values(array_filter(array_map(
+                'trim',
+                explode(',', (string) getenv('TRUSTED_PROXIES'))
+            ))),
         ],
         'response' => [
             'class' => 'yii\web\Response',

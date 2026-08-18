@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace app\models\repository;
 
 use app\models\contract\repository\AlbumRepositoryInterface;
@@ -14,6 +16,7 @@ class AlbumRepository extends BaseRepository implements AlbumRepositoryInterface
         return Album::class;
     }
 
+    /** @return string[] */
     protected function viewRelations(): array
     {
         return ['photos', 'user'];

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 $db = require __DIR__ . '/db.php';
 return array_merge($db, [
     'dsn' => sprintf(

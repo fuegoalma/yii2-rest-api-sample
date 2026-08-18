@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace app\models\db;
 
 use yii\db\ActiveRecord;
@@ -45,6 +47,7 @@ class Permission extends ActiveRecord
         ];
     }
 
+    /** @return array<int|string, string|callable> */
     public function fields(): array // API fields
     {
         return [

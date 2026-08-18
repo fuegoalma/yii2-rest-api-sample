@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace app\models\form;
 
 use app\models\form\basic\SearchForm;
@@ -11,7 +13,7 @@ use app\models\form\basic\SearchForm;
  */
 class PhotoSearchForm extends SearchForm
 {
-    public $title;
+    public mixed $title = null;
 
     public function rules(): array
     {

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace app\models\repository;
 
 use app\models\contract\repository\UserRepositoryInterface;
@@ -15,6 +17,7 @@ class UserRepository extends BaseRepository implements UserRepositoryInterface
         return User::class;
     }
 
+    /** @return string[] */
     protected function viewRelations(): array
     {
         return ['albums'];
@@ -26,6 +29,14 @@ class UserRepository extends BaseRepository implements UserRepositoryInterface
     public function batchInsert(array $data): void
     {
         $this->batchInsertRows(['first_name', 'last_name', 'email', 'password_hash'], $data);
+    }
+
+    public function findById(int $id): ?User
+    {
+        /** @var ?User $user */
+        $user = parent::findById($id);
+
+        return $user;
     }
 
     public function findByEmail(string $email): ?User

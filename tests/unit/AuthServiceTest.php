@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace tests\unit;
 
 use app\components\JwtService;
@@ -7,6 +9,7 @@ use app\models\db\RefreshToken;
 use app\models\db\User;
 use app\models\dto\TokenResponse;
 use app\models\contract\repository\UserRepositoryInterface;
+use app\models\contract\service\EmailVerificationInterface;
 use app\models\service\AuthService;
 use app\models\service\RefreshTokenService;
 use app\models\service\UserService;
@@ -40,6 +43,9 @@ class AuthServiceTest extends BaseUnitTest
             $this->userServiceMock,
             $this->refreshTokensMock,
             $this->jwt,
+            // registration queues a verification message; whether it does is
+            // EmailVerificationCest's business, not this class's
+            $this->createStub(EmailVerificationInterface::class),
         );
     }
 
@@ -67,7 +73,7 @@ class AuthServiceTest extends BaseUnitTest
 
         $this->assertSame('Bearer', $response->token_type);
         $this->assertSame(60, $response->expires_in);
-        $this->assertSame(42, $this->jwt->getUserId($response->access_token));
+        $this->assertSame(42, $this->jwt->decode($response->access_token)['sub']);
         $this->assertSame('raw-refresh-token', $response->refresh_token);
     }
 
@@ -83,6 +89,38 @@ class AuthServiceTest extends BaseUnitTest
 
         $this->expectException(UnauthorizedHttpException::class);
         $this->service->login('unknown@example.com', 'secret123');
+    }
+
+    /**
+     * Rejecting an unknown address without hashing anything makes the response
+     * time an oracle: a real account costs a bcrypt verify (~140 ms here), a
+     * made-up one returns in microseconds. That difference is measurable across
+     * the network and turns the login endpoint into an "is this person
+     * registered?" lookup — enumerable from many addresses, so the per-IP rate
+     * limit does not close it.
+     *
+     * The bound is deliberately far below one bcrypt round and far above a
+     * short-circuit, which is a gap of several orders of magnitude: the
+     * assertion is "work was done", not "exactly this much time".
+     */
+    public function testLoginSpendsTheSameWorkOnAnUnknownEmail(): void
+    {
+        $this->repositoryMock->method('findByEmail')->willReturn(null);
+
+        $started = microtime(true);
+
+        try {
+            $this->service->login('unknown@example.com', 'secret123');
+            $this->fail('an unknown email should not authenticate');
+        } catch (UnauthorizedHttpException) {
+            // expected — the timing is what is under test
+        }
+
+        $this->assertGreaterThan(
+            0.01,
+            microtime(true) - $started,
+            'login returned too quickly for an unknown email, leaking that the account does not exist'
+        );
     }
 
     /**
@@ -131,7 +169,7 @@ class AuthServiceTest extends BaseUnitTest
         $response = $this->service->register($data);
 
         $this->assertInstanceOf(TokenResponse::class, $response);
-        $this->assertSame(42, $this->jwt->getUserId($response->access_token));
+        $this->assertSame(42, $this->jwt->decode($response->access_token)['sub']);
         $this->assertSame('raw-refresh-token', $response->refresh_token);
     }
 
@@ -170,6 +208,10 @@ class AuthServiceTest extends BaseUnitTest
             ->with('old-refresh-token')
             ->willReturn($consumed);
 
+        // the fresh pair carries the owner's *current* version, so refresh has
+        // to read the account rather than trust what the old token was issued at
+        $this->repositoryMock->method('findById')->with(42)->willReturn($this->makeUser());
+
         // rotation keeps the session family, so issue is called with it
         $this->refreshTokensMock
             ->expects($this->once())
@@ -180,8 +222,28 @@ class AuthServiceTest extends BaseUnitTest
         $response = $this->service->refresh('old-refresh-token');
 
         $this->assertInstanceOf(TokenResponse::class, $response);
-        $this->assertSame(42, $this->jwt->getUserId($response->access_token));
+        $this->assertSame(42, $this->jwt->decode($response->access_token)['sub']);
         $this->assertSame('new-refresh-token', $response->refresh_token);
+    }
+
+    /**
+     * The refresh token's row survives just long enough for this to happen: the
+     * `user_id` foreign key cascades, so the token is gone once the account is —
+     * but a request already in flight can hold a token whose owner has just been
+     * deleted. It must not authenticate as a user that no longer exists.
+     */
+    public function testRefreshRefusesATokenWhoseOwnerIsGone(): void
+    {
+        $consumed = new RefreshToken();
+        $consumed->user_id = 42;
+        $consumed->family_id = 'family-abc';
+
+        $this->refreshTokensMock->method('consume')->willReturn($consumed);
+        $this->repositoryMock->method('findById')->with(42)->willReturn(null);
+        $this->refreshTokensMock->expects($this->never())->method('issue');
+
+        $this->expectException(UnauthorizedHttpException::class);
+        $this->service->refresh('orphaned-refresh-token');
     }
 
     public function testRefreshPropagatesUnauthorizedFromTokenService(): void
@@ -230,6 +292,7 @@ class AuthServiceTest extends BaseUnitTest
         $user->last_name = 'Doe';
         $user->email = 'john.doe@example.com';
         $user->password_hash = Yii::$app->security->generatePasswordHash('secret123');
+        $user->token_version = 0;
 
         return $user;
     }
