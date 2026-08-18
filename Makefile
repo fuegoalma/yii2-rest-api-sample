@@ -124,8 +124,20 @@ coverage:
 		--coverage --coverage-xml --coverage-html --coverage-text --disable-coverage-php
 	$(WEB) php tests/bin/coverage-check.php tests/_output/coverage.xml
 
-mutation: ## Run mutation testing (Infection) and enforce the MSI threshold
-	$(DC) exec -T web vendor/bin/infection --threads=$${threads:-4} --no-progress --no-interaction \
+# Infection executes *mutated* application code against a real database, so a
+# mutant that disables a guard really does what the guard prevented — one that
+# drops the `is_system` check deletes the migration-seeded roles, and every later
+# test then fails for a reason that has nothing to do with it. That is why this
+# gets its own throwaway schema, rebuilt from scratch each run, and never touches
+# the database `make test` uses.
+MUTATION_DB := $(shell grep -E '^TEST_DB_NAME=' .env 2>/dev/null | cut -d= -f2)_mutation
+
+mutation: ## Run mutation testing (Infection) against a disposable database
+	$(DC) exec -T db sh -c 'mysql -uroot -p"$$MYSQL_ROOT_PASSWORD" \
+		-e "DROP DATABASE IF EXISTS \`$(MUTATION_DB)\`; CREATE DATABASE \`$(MUTATION_DB)\`;"'
+	$(DC) exec -T -e TEST_DB_NAME=$(MUTATION_DB) web php yii migrate-test/up --interactive=0
+	$(DC) exec -T -e TEST_DB_NAME=$(MUTATION_DB) web \
+		vendor/bin/infection --threads=$${threads:-4} --no-progress --no-interaction \
 		--initial-tests-php-options="-d pcov.enabled=1 -d pcov.directory=/var/www/html"
 
 load: ## Run the k6 load scenario against a running stack (vus=, duration=)

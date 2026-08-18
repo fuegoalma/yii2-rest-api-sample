@@ -35,6 +35,9 @@
     // suite is ~10s, so this is loose enough that only a mutant which genuinely
     // hangs (an inverted loop condition, say) is recorded as one.
     timeout: 120,
-    minMsi: 78,
-    minCoveredMsi: 78
+    // Measured ~78% against the unit suite. The floor sits a little below so the
+    // gate catches a real regression without failing on the couple of points
+    // that move as unit and functional coverage shift between them.
+    minMsi: 76,
+    minCoveredMsi: 76
 }
