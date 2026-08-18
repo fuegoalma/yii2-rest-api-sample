@@ -255,6 +255,39 @@ paths:
         '429':
           $ref: '#/components/responses/TooManyRequests'
 
+  /auth/verify-email:
+    post:
+      tags: [Auth]
+      x-permission: []
+      operationId: authVerifyEmail
+      summary: Confirm an email address
+      description: |
+        Spends the token sent on registration and marks the address verified.
+
+        **Public**: the token is the proof, and requiring a session as well
+        would break opening the link in a different browser.
+
+        Verification is **recorded, not enforced** — an unverified account is
+        fully usable, and `email_verified` on the user shape is there so a
+        client can prompt. Unknown or spent token → 401
+        `email_verification.invalid`; expired → 401 `email_verification.expired`.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyEmailRequest'
+      responses:
+        '204':
+          description: Address confirmed.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
   # ---------------------------------------------------------------- Health
   /health:
     get:
@@ -534,6 +567,22 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/ChangePasswordRequest'
+
+  /users/me/resend-verification:
+    post:
+      tags: [Users]
+      x-permission: []
+      operationId: usersResendVerification
+      summary: Re-send your verification message
+      description: |
+        Issues a fresh token for the **caller's own** address and retires any
+        earlier one. Idempotent, and a no-op once the address is already
+        verified — so it cannot be used to spray mail at a confirmed address.
+      responses:
+        '204':
+          description: Message queued (or already verified, in which case nothing was sent).
+        '401':
+          $ref: '#/components/responses/Unauthorized'
 
   /users/{id}/roles:
     parameters:
@@ -1228,7 +1277,7 @@ components:
                 reason narrow it further: `auth.invalid_credentials`,
                 `refresh_token.invalid`, `refresh_token.reused`,
                 `refresh_token.expired`, `role.system_immutable`,
-                `role.escalation_denied`, `role.last_manager`, `password_reset.invalid`, `password_reset.expired`.
+                `role.escalation_denied`, `role.last_manager`, `password_reset.invalid`, `password_reset.expired`, `email_verification.invalid`, `email_verification.expired`.
               example: not_found
             error:
               type: object
@@ -1332,6 +1381,11 @@ components:
       properties:
         token: { type: string, maxLength: 64, example: 8f3ac91b7d2e4a6c }
         password: { type: string, minLength: 6, maxLength: 72, example: brand-new-secret }
+    VerifyEmailRequest:
+      type: object
+      required: [token]
+      properties:
+        token: { type: string, maxLength: 64, example: 8f3ac91b7d2e4a6c }
     ChangePasswordRequest:
       type: object
       required: [current_password, password]
@@ -1347,6 +1401,7 @@ components:
         email: { type: string, format: email, example: john@example.com }
         created_at: { type: string, format: date-time, example: '2026-02-28 20:11:48' }
         updated_at: { type: string, format: date-time, example: '2026-02-28 20:11:48' }
+        email_verified: { type: boolean, example: false, description: 'Whether the address has been proven. Recorded, not enforced — an unverified account is fully usable.' }
     UserWithAlbums:
       allOf:
         - $ref: '#/components/schemas/User'

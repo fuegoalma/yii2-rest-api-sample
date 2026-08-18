@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace tests\unit;
 
 use app\models\contract\queue\QueueInterface;
-use app\models\contract\repository\PasswordResetTokenRepositoryInterface;
+use app\models\contract\repository\OneTimeTokenRepositoryInterface;
 use app\models\contract\repository\RefreshTokenRepositoryInterface;
 use app\models\contract\repository\UserRepositoryInterface;
-use app\models\db\PasswordResetToken;
+use app\models\db\OneTimeToken;
 use app\models\db\User;
 use app\models\jobs\SendEmailJob;
 use app\models\service\PasswordService;
@@ -23,7 +23,7 @@ class PasswordServiceTest extends BaseUnitTest
 {
     private PasswordService $service;
     private UserRepositoryInterface $users;
-    private PasswordResetTokenRepositoryInterface $tokens;
+    private OneTimeTokenRepositoryInterface $tokens;
     private RefreshTokenRepositoryInterface $refreshTokens;
     private QueueInterface $queue;
 
@@ -34,7 +34,7 @@ class PasswordServiceTest extends BaseUnitTest
     {
         parent::setUp();
         $this->users = $this->createMock(UserRepositoryInterface::class);
-        $this->tokens = $this->createMock(PasswordResetTokenRepositoryInterface::class);
+        $this->tokens = $this->createMock(OneTimeTokenRepositoryInterface::class);
         $this->refreshTokens = $this->createMock(RefreshTokenRepositoryInterface::class);
         $this->queue = $this->createMock(QueueInterface::class);
         $this->service = new PasswordService(
@@ -96,7 +96,7 @@ class PasswordServiceTest extends BaseUnitTest
 
         $stored = null;
         $this->tokens->method('add')->willReturnCallback(
-            static function (PasswordResetToken $token) use (&$stored): void {
+            static function (OneTimeToken $token) use (&$stored): void {
                 $stored = $token;
             }
         );
@@ -117,9 +117,9 @@ class PasswordServiceTest extends BaseUnitTest
         $this->assertStringNotContainsString($stored->token_hash, $sent->body);
     }
 
-    private function token(): PasswordResetToken
+    private function token(): OneTimeToken
     {
-        $token = new PasswordResetToken();
+        $token = new OneTimeToken();
         $token->id = 1;
         $token->user_id = 42;
         $token->token_hash = hash('sha256', 'raw');

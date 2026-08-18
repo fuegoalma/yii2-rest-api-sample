@@ -11,6 +11,7 @@ use app\models\contract\service\RoleServiceInterface;
 use app\models\db\Permission;
 use app\models\db\Role;
 use app\models\db\User;
+use app\models\contract\service\EmailVerificationInterface;
 use app\models\contract\service\PasswordServiceInterface;
 use app\models\form\basic\ApiForm;
 use app\models\form\ChangePasswordForm;
@@ -32,6 +33,7 @@ class UsersController extends ApiController
         AccessControlInterface $access,
         private readonly RoleServiceInterface $roleService,
         private readonly PasswordServiceInterface $passwords,
+        private readonly EmailVerificationInterface $verification,
         $config = []
     ) {
         parent::__construct($id, $module, $service, $access, $config);
@@ -92,6 +94,19 @@ class UsersController extends ApiController
     }
 
     /**
+     * Re-sends the caller's own verification message. Idempotent, and a no-op
+     * once the address is already verified — so it cannot be used to spray mail
+     * at a confirmed address.
+     */
+    public function actionResendVerification(): mixed
+    {
+        $this->verification->send($this->currentUserId());
+        Yii::$app->response->statusCode = 204;
+
+        return null;
+    }
+
+    /**
      * @return list<array<string, mixed>> the user's roles
      */
     public function actionRoles(int $id): array
@@ -146,6 +161,7 @@ class UsersController extends ApiController
             'me' => ['GET', 'OPTIONS'],
             'me-permissions' => ['GET', 'OPTIONS'],
             'change-password' => ['PUT', 'OPTIONS'],
+            'resend-verification' => ['POST', 'OPTIONS'],
             'roles' => ['GET', 'OPTIONS'],
             'set-roles' => ['PUT', 'OPTIONS'],
         ]);

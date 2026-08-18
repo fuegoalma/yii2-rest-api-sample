@@ -20,6 +20,7 @@ use yii\web\IdentityInterface;
  * @property string $last_name
  * @property string $email
  * @property string $password_hash
+ * @property string|null $email_verified_at
  * @property int $token_version  bumped to withdraw every access token issued so far
  * @property string $created_at
  * @property string $updated_at
@@ -74,6 +75,7 @@ class User extends ActiveRecord implements IdentityInterface, OwnableInterface
             'email',
             'created_at',
             'updated_at',
+            'email_verified' => fn () => $this->email_verified_at !== null,
         ];
     }
 

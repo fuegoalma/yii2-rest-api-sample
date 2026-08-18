@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace tests\functional;
 
-use app\models\db\PasswordResetToken;
+use app\models\db\OneTimeToken;
 use FunctionalTester;
 use Yii;
 use yii\db\Exception;
@@ -182,7 +182,7 @@ class PasswordCest extends BaseCest
         $I->deleteHeader('Authorization');
         $raw = $this->requestReset($I);
 
-        PasswordResetToken::updateAll(['expires_at' => date('Y-m-d H:i:s', time() - 60)]);
+        OneTimeToken::updateAll(['expires_at' => date('Y-m-d H:i:s', time() - 60)]);
 
         $I->sendPost('/auth/reset-password', ['token' => $raw, 'password' => self::NEW_PASSWORD]);
         $I->seeResponseCodeIs(401);
@@ -224,7 +224,7 @@ class PasswordCest extends BaseCest
         $I->seeResponseCodeIs(204);
 
         // nothing was issued, either
-        $I->assertSame(0, (int) PasswordResetToken::find()->count());
+        $I->assertSame(0, (int) OneTimeToken::find()->count());
     }
 
     /**
@@ -261,7 +261,7 @@ class PasswordCest extends BaseCest
         $I->seeResponseCodeIs(204);
 
         $raw = Yii::$app->security->generateRandomString(64);
-        PasswordResetToken::updateAll(
+        OneTimeToken::updateAll(
             ['token_hash' => hash('sha256', $raw)],
             ['used_at' => null]
         );

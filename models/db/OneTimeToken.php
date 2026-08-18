@@ -12,16 +12,20 @@ use yii\db\ActiveRecord;
  *
  * @property int $id
  * @property int $user_id
+ * @property string $purpose
  * @property string $token_hash
  * @property string $expires_at
  * @property string|null $used_at
  * @property string $created_at
  */
-class PasswordResetToken extends ActiveRecord
+class OneTimeToken extends ActiveRecord
 {
+    public const string PURPOSE_PASSWORD_RESET = 'password_reset';
+    public const string PURPOSE_EMAIL_VERIFICATION = 'email_verification';
+
     public static function tableName(): string
     {
-        return 'password_reset_token';
+        return 'one_time_token';
     }
 
     /**
@@ -35,7 +39,8 @@ class PasswordResetToken extends ActiveRecord
     public function rules(): array
     {
         return [
-            [['user_id', 'token_hash', 'expires_at'], 'required'],
+            [['user_id', 'token_hash', 'expires_at', 'purpose'], 'required'],
+            [['purpose'], 'in', 'range' => [self::PURPOSE_PASSWORD_RESET, self::PURPOSE_EMAIL_VERIFICATION]],
             [['user_id'], 'integer'],
             [['token_hash'], 'string', 'max' => 64],
             [['expires_at', 'used_at'], 'safe'],

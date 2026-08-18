@@ -9,10 +9,12 @@ use app\controllers\basic\ApiControllerTrait;
 use app\models\contract\service\AuthServiceInterface;
 use app\models\db\User;
 use app\models\form\LoginForm;
+use app\models\contract\service\EmailVerificationInterface;
 use app\models\contract\service\PasswordServiceInterface;
 use app\models\form\ForgotPasswordForm;
 use app\models\form\RefreshTokenForm;
 use app\models\form\ResetPasswordForm;
+use app\models\form\VerifyEmailForm;
 use app\models\form\UserCreateForm;
 use Yii;
 use yii\rest\Controller;
@@ -26,6 +28,7 @@ class AuthController extends Controller
         $module,
         private readonly AuthServiceInterface $service,
         private readonly PasswordServiceInterface $passwords,
+        private readonly EmailVerificationInterface $verification,
         $config = []
     ) {
         parent::__construct($id, $module, $config);
@@ -148,6 +151,24 @@ class AuthController extends Controller
         return null;
     }
 
+    /**
+     * Public: the token *is* the proof, and requiring a session as well would
+     * break the common case of opening the link in a different browser.
+     */
+    public function actionVerifyEmail(): mixed
+    {
+        $form = new VerifyEmailForm();
+
+        if (!$this->validateRequest($form)) {
+            return $form->getErrors();
+        }
+
+        $this->verification->verify((string) $form->token);
+        Yii::$app->response->statusCode = 204;
+
+        return null;
+    }
+
     /** @return array<string, list<string>> */
     protected function verbs(): array
     {
@@ -159,6 +180,7 @@ class AuthController extends Controller
             'logout-all' => ['POST', 'OPTIONS'],
             'forgot-password' => ['POST', 'OPTIONS'],
             'reset-password' => ['POST', 'OPTIONS'],
+            'verify-email' => ['POST', 'OPTIONS'],
         ];
     }
 }

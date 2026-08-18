@@ -4,24 +4,24 @@ declare(strict_types=1);
 
 namespace app\models\repository;
 
-use app\models\contract\repository\PasswordResetTokenRepositoryInterface;
-use app\models\db\PasswordResetToken;
+use app\models\contract\repository\OneTimeTokenRepositoryInterface;
+use app\models\db\OneTimeToken;
 use yii\db\Exception;
 
-class PasswordResetTokenRepository implements PasswordResetTokenRepositoryInterface
+class OneTimeTokenRepository implements OneTimeTokenRepositoryInterface
 {
-    public function findByHash(string $hash): ?PasswordResetToken
+    public function findByHash(string $hash, string $purpose): ?OneTimeToken
     {
-        return PasswordResetToken::findOne(['token_hash' => $hash]);
+        return OneTimeToken::findOne(['token_hash' => $hash, 'purpose' => $purpose]);
     }
 
     /**
      * @throws Exception when the token cannot be persisted
      */
-    public function add(PasswordResetToken $token): void
+    public function add(OneTimeToken $token): void
     {
         if (!$token->save()) {
-            throw new Exception('Failed to persist password reset token.');
+            throw new Exception('Failed to persist one-time token.');
         }
     }
 
@@ -29,11 +29,11 @@ class PasswordResetTokenRepository implements PasswordResetTokenRepositoryInterf
      * `WHERE used_at IS NULL` is what makes the token single-use under
      * concurrency: exactly one UPDATE can match, and the loser is told so.
      */
-    public function consume(PasswordResetToken $token): bool
+    public function consume(OneTimeToken $token): bool
     {
         $now = $this->now();
 
-        $claimed = PasswordResetToken::updateAll(
+        $claimed = OneTimeToken::updateAll(
             ['used_at' => $now],
             ['id' => $token->id, 'used_at' => null]
         );
@@ -47,11 +47,11 @@ class PasswordResetTokenRepository implements PasswordResetTokenRepositoryInterf
         return true;
     }
 
-    public function invalidateAllForUser(int $userId): void
+    public function invalidateAllForUser(int $userId, string $purpose): void
     {
-        PasswordResetToken::updateAll(
+        OneTimeToken::updateAll(
             ['used_at' => $this->now()],
-            ['and', ['user_id' => $userId], ['used_at' => null]]
+            ['and', ['user_id' => $userId, 'purpose' => $purpose], ['used_at' => null]]
         );
     }
 

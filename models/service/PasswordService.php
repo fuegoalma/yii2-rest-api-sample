@@ -5,11 +5,11 @@ declare(strict_types=1);
 namespace app\models\service;
 
 use app\models\contract\queue\QueueInterface;
-use app\models\contract\repository\PasswordResetTokenRepositoryInterface;
+use app\models\contract\repository\OneTimeTokenRepositoryInterface;
 use app\models\contract\repository\RefreshTokenRepositoryInterface;
 use app\models\contract\repository\UserRepositoryInterface;
 use app\models\contract\service\PasswordServiceInterface;
-use app\models\db\PasswordResetToken;
+use app\models\db\OneTimeToken;
 use app\models\db\User;
 use app\models\exception\UnauthorizedException;
 use app\models\jobs\SendEmailJob;
@@ -36,7 +36,7 @@ readonly class PasswordService implements PasswordServiceInterface
      */
     public function __construct(
         private UserRepositoryInterface $users,
-        private PasswordResetTokenRepositoryInterface $tokens,
+        private OneTimeTokenRepositoryInterface $tokens,
         private RefreshTokenRepositoryInterface $refreshTokens,
         private QueueInterface $queue,
         private int $ttl,
@@ -87,13 +87,14 @@ readonly class PasswordService implements PasswordServiceInterface
             return;
         }
 
-        $this->tokens->invalidateAllForUser($user->id);
+        $this->tokens->invalidateAllForUser($user->id, OneTimeToken::PURPOSE_PASSWORD_RESET);
 
         $raw = Yii::$app->security->generateRandomString(self::TOKEN_LENGTH);
 
-        $token = new PasswordResetToken();
+        $token = new OneTimeToken();
         $token->user_id = $user->id;
         $token->token_hash = $this->hash($raw);
+        $token->purpose = OneTimeToken::PURPOSE_PASSWORD_RESET;
         $token->expires_at = date('Y-m-d H:i:s', time() + $this->ttl);
         $this->tokens->add($token);
 
@@ -112,7 +113,7 @@ readonly class PasswordService implements PasswordServiceInterface
      */
     public function reset(string $rawToken, string $newPassword): void
     {
-        $token = $this->tokens->findByHash($this->hash($rawToken));
+        $token = $this->tokens->findByHash($this->hash($rawToken), OneTimeToken::PURPOSE_PASSWORD_RESET);
 
         if ($token === null || $token->isUsed()) {
             throw new UnauthorizedException('Invalid password reset token.', 'password_reset.invalid');
@@ -148,7 +149,7 @@ readonly class PasswordService implements PasswordServiceInterface
         $user->password_hash = User::getEncryptedPassword($newPassword);
         $user->save(false, ['password_hash']);
 
-        $this->tokens->invalidateAllForUser($user->id);
+        $this->tokens->invalidateAllForUser($user->id, OneTimeToken::PURPOSE_PASSWORD_RESET);
         $this->refreshTokens->revokeAllForUser($user->id);
         User::bumpTokenVersion($user->id);
     }

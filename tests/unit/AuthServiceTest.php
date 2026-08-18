@@ -9,6 +9,7 @@ use app\models\db\RefreshToken;
 use app\models\db\User;
 use app\models\dto\TokenResponse;
 use app\models\contract\repository\UserRepositoryInterface;
+use app\models\contract\service\EmailVerificationInterface;
 use app\models\service\AuthService;
 use app\models\service\RefreshTokenService;
 use app\models\service\UserService;
@@ -42,6 +43,9 @@ class AuthServiceTest extends BaseUnitTest
             $this->userServiceMock,
             $this->refreshTokensMock,
             $this->jwt,
+            // registration queues a verification message; whether it does is
+            // EmailVerificationCest's business, not this class's
+            $this->createStub(EmailVerificationInterface::class),
         );
     }
 

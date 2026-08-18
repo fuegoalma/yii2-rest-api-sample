@@ -26,12 +26,13 @@ use app\models\contract\repository\AlbumRepositoryInterface;
 use app\models\contract\repository\PermissionRepositoryInterface;
 use app\models\contract\repository\PhotoRepositoryInterface;
 use app\models\contract\MailerInterface;
-use app\models\contract\repository\PasswordResetTokenRepositoryInterface;
+use app\models\contract\repository\OneTimeTokenRepositoryInterface;
 use app\models\contract\repository\RefreshTokenRepositoryInterface;
 use app\models\contract\repository\RoleRepositoryInterface;
 use app\models\contract\repository\UserRepositoryInterface;
 use app\models\contract\service\AccessControlInterface;
 use app\models\contract\service\AlbumServiceInterface;
+use app\models\contract\service\EmailVerificationInterface;
 use app\models\contract\service\PasswordServiceInterface;
 use app\models\contract\service\RbacAuditInterface;
 use app\models\contract\service\TransactionRunnerInterface;
@@ -39,7 +40,7 @@ use app\models\contract\StopSignalInterface;
 use app\models\repository\PermissionRepository;
 use app\models\repository\AlbumRepository;
 use app\models\repository\PhotoRepository;
-use app\models\repository\PasswordResetTokenRepository;
+use app\models\repository\OneTimeTokenRepository;
 use app\models\repository\RefreshTokenRepository;
 use app\models\repository\RoleRepository;
 use app\models\repository\UserRepository;
@@ -49,6 +50,7 @@ use app\models\service\AuthService;
 use app\models\service\HealthService;
 use app\models\service\PermissionService;
 use app\models\service\PhotoService;
+use app\models\service\EmailVerificationService;
 use app\models\service\PasswordService;
 use app\models\service\RbacAudit;
 use app\models\service\RefreshTokenService;
@@ -125,11 +127,12 @@ return [
         RoleRepositoryInterface::class => RoleRepository::class,
         PermissionRepositoryInterface::class => PermissionRepository::class,
         RefreshTokenRepositoryInterface::class => RefreshTokenRepository::class,
-        PasswordResetTokenRepositoryInterface::class => PasswordResetTokenRepository::class,
+        OneTimeTokenRepositoryInterface::class => OneTimeTokenRepository::class,
         // append-only record of who changed the authorization model
         RbacAuditInterface::class => RbacAudit::class,
         // password change + recovery
         PasswordServiceInterface::class => PasswordService::class,
+        EmailVerificationInterface::class => EmailVerificationService::class,
         // No mail server is provisioned here, so messages are written to the
         // structured log. Swap this one binding for yii\symfonymailer\Mailer to
         // send them — nothing above the seam changes. See LogMailer's docblock
@@ -171,6 +174,14 @@ return [
                 'ttl' => (int) (getenv('PASSWORD_RESET_TTL') ?: 3600),
             ],
         ],
+        // Longer than a password reset: nobody is waiting on this under
+        // pressure, and a link that expires before the message is read costs a
+        // support ticket.
+        EmailVerificationService::class => [
+            '__construct()' => [
+                'ttl' => (int) (getenv('EMAIL_VERIFICATION_TTL') ?: 86400),
+            ],
+        ],
         // 'db' is an app component, not a container definition, so it can't be
         // referenced with Instance::of() (that only resolves container-managed
         // classes) — build the service from the live app component instead
@@ -185,6 +196,7 @@ return [
                 3 => Instance::of(AccessControlInterface::class),
                 4 => Instance::of(RoleService::class),
                 5 => Instance::of(PasswordService::class),
+                6 => Instance::of(EmailVerificationService::class),
             ],
         ],
         AlbumsController::class => [
@@ -215,6 +227,7 @@ return [
             '__construct()' => [
                 2 => Instance::of(AuthService::class),
                 3 => Instance::of(PasswordService::class),
+                4 => Instance::of(EmailVerificationService::class),
             ],
         ],
         HealthController::class => [

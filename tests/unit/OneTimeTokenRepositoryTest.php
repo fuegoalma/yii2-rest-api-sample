@@ -4,26 +4,26 @@ declare(strict_types=1);
 
 namespace tests\unit;
 
-use app\models\db\PasswordResetToken;
-use app\models\repository\PasswordResetTokenRepository;
+use app\models\db\OneTimeToken;
+use app\models\repository\OneTimeTokenRepository;
 use yii\db\Exception;
 
-class PasswordResetTokenRepositoryTest extends BaseUnitTest
+class OneTimeTokenRepositoryTest extends BaseUnitTest
 {
-    private PasswordResetTokenRepository $repository;
+    private OneTimeTokenRepository $repository;
     private int $userId;
 
     protected function setUp(): void
     {
         parent::setUp();
-        $this->repository = new PasswordResetTokenRepository();
+        $this->repository = new OneTimeTokenRepository();
         $this->userId = $this->persistUser()->id;
-        PasswordResetToken::deleteAll();
+        OneTimeToken::deleteAll();
     }
 
     protected function tearDown(): void
     {
-        PasswordResetToken::deleteAll();
+        OneTimeToken::deleteAll();
         parent::tearDown();
     }
 
@@ -34,9 +34,9 @@ class PasswordResetTokenRepositoryTest extends BaseUnitTest
     public function testAddRejectsATokenThatFailsToPersist(): void
     {
         $this->expectException(Exception::class);
-        $this->expectExceptionMessage('Failed to persist password reset token.');
+        $this->expectExceptionMessage('Failed to persist one-time token.');
 
-        $this->repository->add(new PasswordResetToken());
+        $this->repository->add(new OneTimeToken());
     }
 
     /**
@@ -51,7 +51,7 @@ class PasswordResetTokenRepositoryTest extends BaseUnitTest
         $token = $this->token();
         $this->repository->add($token);
 
-        $stale = PasswordResetToken::findOne(['id' => $token->id]);
+        $stale = OneTimeToken::findOne(['id' => $token->id]);
 
         $this->assertTrue($this->repository->consume($token));
         $this->assertFalse($this->repository->consume($stale));
@@ -70,17 +70,18 @@ class PasswordResetTokenRepositoryTest extends BaseUnitTest
         $second = $this->token();
         $this->repository->add($second);
 
-        $this->repository->invalidateAllForUser($this->userId);
+        $this->repository->invalidateAllForUser($this->userId, OneTimeToken::PURPOSE_PASSWORD_RESET);
 
         // the already-spent one keeps the timestamp it was spent at
-        $this->assertSame($usedAt, PasswordResetToken::findOne(['id' => $first->id])->used_at);
-        $this->assertNotNull(PasswordResetToken::findOne(['id' => $second->id])->used_at);
+        $this->assertSame($usedAt, OneTimeToken::findOne(['id' => $first->id])->used_at);
+        $this->assertNotNull(OneTimeToken::findOne(['id' => $second->id])->used_at);
     }
 
-    private function token(): PasswordResetToken
+    private function token(): OneTimeToken
     {
-        $token = new PasswordResetToken();
+        $token = new OneTimeToken();
         $token->user_id = $this->userId;
+        $token->purpose = OneTimeToken::PURPOSE_PASSWORD_RESET;
         $token->token_hash = hash('sha256', uniqid('', true));
         $token->expires_at = date('Y-m-d H:i:s', time() + 600);
 

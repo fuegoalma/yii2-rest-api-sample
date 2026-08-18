@@ -7,6 +7,7 @@ namespace app\models\service;
 use app\components\JwtService;
 use app\models\contract\repository\UserRepositoryInterface;
 use app\models\contract\service\AuthServiceInterface;
+use app\models\contract\service\EmailVerificationInterface;
 use app\models\db\User;
 use app\models\dto\TokenResponse;
 use yii\base\Exception;
@@ -20,6 +21,7 @@ readonly class AuthService implements AuthServiceInterface
         private UserService $userService,
         private RefreshTokenService $refreshTokens,
         private JwtService $jwt,
+        private EmailVerificationInterface $verification,
     ) {
     }
 
@@ -61,6 +63,10 @@ readonly class AuthService implements AuthServiceInterface
         if ($user->hasErrors()) {
             return $user;
         }
+
+        // queued, so a mail outage cannot fail a registration that has already
+        // succeeded; the account works either way (see EmailVerificationService)
+        $this->verification->send($user->id);
 
         return $this->issueTokens($user->id, (int) $user->token_version);
     }

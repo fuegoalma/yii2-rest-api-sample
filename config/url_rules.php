@@ -22,11 +22,14 @@ return [
     // password recovery: request a token by email, then spend it
     'POST,OPTIONS auth/forgot-password' => 'auth/forgot-password',
     'POST,OPTIONS auth/reset-password' => 'auth/reset-password',
+    'POST,OPTIONS auth/verify-email' => 'auth/verify-email',
     // the current user: profile, and the caller's roles + permissions for the client UI
     'GET users/me' => 'users/me',
     'OPTIONS users/me' => 'users/options',
     'GET users/me/permissions' => 'users/me-permissions',
     'PUT users/me/password' => 'users/change-password',
+    'POST users/me/resend-verification' => 'users/resend-verification',
+    'OPTIONS users/me/resend-verification' => 'users/options',
     'OPTIONS users/me/password' => 'users/options',
     'OPTIONS users/me/permissions' => 'users/options',
     // role assignments are a child resource of users
