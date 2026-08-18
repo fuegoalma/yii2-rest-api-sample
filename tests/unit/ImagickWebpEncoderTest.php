@@ -7,6 +7,7 @@ namespace tests\unit;
 use app\components\image\ImagickWebpEncoder;
 use app\models\contract\image\ImageEncoderInterface;
 use Imagick;
+use ReflectionMethod;
 use Yii;
 use yii\base\Exception;
 
@@ -156,31 +157,31 @@ class ImagickWebpEncoderTest extends BaseUnitTest
     }
 
     /**
-     * getResourceLimit() always returns float, and "no limit" is reported as
-     * a value near PHP_INT_MAX — which a double cannot represent exactly. As
-     * of PHP 8.5, casting that value back to int with a bare `(int)` does not
-     * even saturate: it wraps to PHP_INT_MIN and raises a warning, which
-     * Yii's error handler turns into a thrown ErrorException. The Docker
-     * image's policy.xml caps every other resource with a finite value, so
-     * only TIME reproduces this here — a bare system ImageMagick (as on the
-     * CI runner, with no policy.xml at all) reports every resource this way.
-     * Setting it directly reproduces the bug without depending on either.
+     * Every other limit here describes one decode — pixels, dimensions, cache
+     * size — but the time resource is a budget the *process* accumulates, and
+     * whether writing it restarts that clock is a property of the ImageMagick
+     * build. On one that does not restart it, a per-decode ceiling becomes a
+     * ceiling on all image work this process will ever do, and every upload
+     * after it fails as an invalid image. That is not hypothetical: it is what
+     * turned CI red while the container's policy.xml (which reports the time
+     * limit as 0) kept it invisible here, so this asserts the limit is left
+     * alone rather than trusting the ambient default to stay friendly.
      */
-    public function testRestoresAnUnrepresentableResourceLimitWithoutError(): void
+    public function testItDoesNotTouchTheProcessWideTimeBudget(): void
     {
-        $probe = new Imagick();
-        $original = $probe->getResourceLimit(Imagick::RESOURCETYPE_TIME);
-        Imagick::setResourceLimit(Imagick::RESOURCETYPE_TIME, PHP_INT_MAX);
+        // Asserted on the declared ceilings rather than on the process after a
+        // decode: encode() restores whatever it narrowed, so from the outside
+        // "never touched it" and "narrowed it and put it back" are the same
+        // observation. The damage happens while the decode is in flight, and
+        // this is the only place it can be seen without a seam that exists
+        // solely to be looked through.
+        $limits = new ReflectionMethod(ImagickWebpEncoder::class, 'limits');
 
-        try {
-            $blob = $this->encoder()->encode($this->imageFixture(10, 10));
-
-            $this->assertSame('WEBP', $this->read($blob)->getImageFormat());
-            $this->assertGreaterThan(0.0, $probe->getResourceLimit(Imagick::RESOURCETYPE_TIME));
-        } finally {
-            Imagick::setResourceLimit(Imagick::RESOURCETYPE_TIME, (int) $original);
-            $probe->clear();
-        }
+        $this->assertArrayNotHasKey(
+            Imagick::RESOURCETYPE_TIME,
+            $limits->invoke($this->encoder()),
+            'the encoder narrowed the cumulative time budget, which it must never do'
+        );
     }
 
     private function encoder(): ImagickWebpEncoder
