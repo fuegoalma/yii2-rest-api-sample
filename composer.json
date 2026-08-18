@@ -47,12 +47,15 @@
         "friendsofphp/php-cs-fixer": "^3.95",
         "phpstan/phpstan": "^2.2",
         "symfony/yaml": "^8.1",
-        "captainhook/captainhook": "^5.29"
+        "captainhook/captainhook": "^5.29",
+        "infection/infection": "^0.35",
+        "infection/codeception-adapter": "^0.4"
     },
     "config": {
         "allow-plugins": {
             "yiisoft/yii2-composer": true,
-            "captainhook/captainhook": false
+            "captainhook/captainhook": false,
+            "infection/extension-installer": true
         },
         "process-timeout": 1800,
         "fxp-asset": {
@@ -90,5 +93,10 @@
             "type": "composer",
             "url": "https://asset-packagist.org"
         }
-    ]
+    ],
+    "autoload": {
+        "psr-4": {
+            "app\\": ""
+        }
+    }
 }

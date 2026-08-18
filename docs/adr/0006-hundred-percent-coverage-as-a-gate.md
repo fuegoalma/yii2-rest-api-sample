@@ -37,3 +37,35 @@ Three rules keep it honest:
 - All suites must run in **one** `codecept run`: coverage is merged across
   suites at the end of the process, so a split run has the second report
   overwrite the first. `make coverage` has no per-suite variant for that reason.
+
+## What the metric cannot see, and what was added because of it
+
+Line coverage answers "was this line executed". It does not answer "would anyone
+notice if it were wrong", and the difference is not academic — a test that calls
+a method and asserts nothing is worth exactly 100% of its lines.
+
+**Mutation testing is the answer to the second question.** `make mutation` runs
+Infection: it changes the code on purpose — flips a comparison, drops a method
+call, swaps `&&` for `||` — and reports how many of those changes the suite
+noticed. The baseline at the time of writing is **MSI 80.96%, mutation code
+coverage 100%**, over `components/`, `models/service/`, `models/repository/` and
+`models/form/`, in about a minute. `infection.json5` holds the floor, and CI
+enforces it alongside the line gate.
+
+Scope is narrow on purpose: Infection reruns the suite once per mutant, and only
+the unit suite is used (`--skip functional`), because the functional suite drives
+real HTTP requests and truncates tables between tests — shared state is the wrong
+thing to run thousands of times in parallel.
+
+**A second blind spot has no test at all, and is worth naming.** Line coverage is
+structurally unable to see a concurrency defect: two correct sequential paths
+interleaving badly is not a line anything failed to execute. The refresh-token
+rotation race and the queue's missing claim both sat under a green 100% gate for
+their whole lifetime. What found them was reading the code, and what pins them
+now is a test that reproduces the interleaving deliberately (a stale row read
+before another writer's claim) rather than any measurement.
+
+So the honest statement of what the gate buys is: it makes untested code
+impossible and untestable code visible. It does not make the tests good. The
+mutation score is the number to argue about; the coverage number is only the
+floor beneath it.

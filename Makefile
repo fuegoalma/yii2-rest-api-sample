@@ -124,6 +124,10 @@ coverage:
 		--coverage --coverage-xml --coverage-html --coverage-text --disable-coverage-php
 	$(WEB) php tests/bin/coverage-check.php tests/_output/coverage.xml
 
+mutation: ## Run mutation testing (Infection) and enforce the MSI threshold
+	$(DC) exec -T web vendor/bin/infection --threads=$${threads:-4} --no-progress --no-interaction \
+		--initial-tests-php-options="-d pcov.enabled=1 -d pcov.directory=/var/www/html"
+
 coverage-html: coverage
 	@echo "HTML report: tests/_output/coverage/index.html"
 
