@@ -47,10 +47,12 @@ a method and asserts nothing is worth exactly 100% of its lines.
 **Mutation testing is the answer to the second question.** `make mutation` runs
 Infection: it changes the code on purpose — flips a comparison, drops a method
 call, swaps `&&` for `||` — and reports how many of those changes the suite
-noticed. The baseline is **MSI 98%, mutation code coverage 100%**, over
+noticed. The baseline is **MSI ~79%, mutation code coverage 100%**, over
 `components/`, `models/service/`, `models/repository/` and `models/form/`, in
-about seven minutes. `infection.json5` holds the floor, and CI enforces it
-alongside the line gate.
+about a minute at four threads. `infection.json5` holds the floor at 76 — a
+little under the measurement, so the gate catches a regression without failing
+on the couple of points that move as coverage shifts between the suites — and CI
+enforces it alongside the line gate.
 
 ### What the score measures here, and what it does not
 
@@ -80,7 +82,8 @@ bound on test quality, not test quality.
 
 ### An escaped mutant is a candidate, not a defect
 
-The 159 survivors fall into three groups, and telling them apart is the work:
+The survivors — roughly 150 of ~750 mutants, a number that moves a little with
+every change — fall into three groups, and telling them apart is the work:
 
 - **Covered by the functional suite, which did not run.** `RoleService` reports
   ~30 survivors here; running those same mutants against the whole suite kills

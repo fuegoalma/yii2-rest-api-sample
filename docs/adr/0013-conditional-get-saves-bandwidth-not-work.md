@@ -30,14 +30,21 @@ one.
 ## Amendment: a validator nobody can reach saves nothing
 
 The filter above shipped with neither half of what a browser needs to use it,
-and both omissions were invisible from inside the API — every test passed, and a
-`curl` with a hand-copied `If-None-Match` produced a `304` on demand.
+and every omission below was invisible from inside the API — the whole suite
+passed, and a `curl` with a hand-copied `If-None-Match` produced a `304` on
+demand. All three were found by someone writing a browser client against it.
 
 - No response carried a `Cache-Control` directive, so a browser had no basis to
   store the body and never sent `If-None-Match`. The `304` path existed and was
   unreachable from a browser client.
 - The CORS filter exposed no headers, so `ETag` was hidden from cross-origin JS
   along with `Retry-After` and `X-Request-Id`.
+- And once it exposed them, a `429` still carried no `Access-Control-*` at all:
+  `yii\rest\Controller::behaviors()` already declares a `rateLimiter` key, so
+  `AuthController` overwriting it kept the parent's position — ahead of a
+  `corsFilter` appended at the end. The filter that grants a browser the right
+  to read a response has to run before every filter that can refuse one, so
+  `apiBehaviors()` prepends it.
 
 So a `200` from a `GET` now also carries `Cache-Control: private, no-cache` and
 `Vary: Authorization, Origin`, set in the same place as the ETag and before the

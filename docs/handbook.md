@@ -664,6 +664,11 @@ curl -i -X POST http://localhost:8084/auth/login \
 # Retry-After: 60
 ```
 
+A browser can read that header only because the CORS filter runs **before** the throttle and names
+`Retry-After` in `Access-Control-Expose-Headers` — see [What a cross-origin client may
+read](#what-a-cross-origin-client-may-read). It did neither for a while, and the symptom was a
+client whose "try again in N seconds" was permanently `undefined`.
+
 ### Which address counts as "the client"
 
 Everything above rests on `Yii::$app->request->userIP`, and that is a configuration decision, not a
