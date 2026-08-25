@@ -29,6 +29,14 @@ use Yii;
  */
 class ConditionalGet extends ActionFilter
 {
+    /**
+     * Named here rather than at the `set()` call below because the CORS filter
+     * has to expose it: a browser hides every header outside the safelist, so a
+     * validator this class sets and nobody may read is a validator no
+     * cross-origin client can ever send back.
+     */
+    public const string HEADER = 'ETag';
+
     public function afterAction($action, $result): mixed
     {
         // Deliberately not computed here. At this point `$response->data` is
@@ -51,7 +59,7 @@ class ConditionalGet extends ActionFilter
         }
 
         $etag = 'W/"' . sha1((string) $response->content) . '"';
-        $response->headers->set('ETag', $etag);
+        $response->headers->set(self::HEADER, $etag);
 
         if ($this->matches($etag)) {
             $response->statusCode = 304;

@@ -6,6 +6,8 @@ namespace app\controllers\basic;
 
 use app\components\ApiSerializer;
 use app\components\ConditionalGet;
+use app\components\CorrelationId;
+use app\components\RateLimiter;
 use app\models\form\basic\ApiForm;
 use yii\filters\auth\HttpBearerAuth;
 use yii\filters\Cors;
@@ -60,6 +62,18 @@ trait ApiControllerTrait
                 'Access-Control-Request-Headers' => ['*'],
                 'Access-Control-Allow-Credentials' => false,
                 'Access-Control-Max-Age' => 86400,
+                // A browser hides every response header outside the CORS
+                // safelist, and Yii emits this one only when the key is present
+                // — so an omission here is silent: the API keeps sending all
+                // three and no cross-origin client can read any of them. The
+                // list is composed from the emitting components' own constants
+                // rather than written out, so it cannot come to name a header
+                // that has been renamed or has stopped being sent.
+                'Access-Control-Expose-Headers' => [
+                    ConditionalGet::HEADER,  // the validator a client sends back
+                    RateLimiter::HEADER,     // how long a 429 wants to be left alone
+                    CorrelationId::HEADER,   // the id a bug report quotes
+                ],
             ],
         ];
 
