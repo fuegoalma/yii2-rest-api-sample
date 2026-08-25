@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace tests\functional;
 
-use app\components\RateLimiter;
 use app\models\contract\service\AuthServiceInterface;
 use app\models\db\User;
 use app\models\dto\TokenResponse;
@@ -553,14 +552,6 @@ class AuthCest extends BaseCest
             ]);
             $I->seeResponseCodeIs(401);
         }
-    }
-
-    /**
-     * The limit the application is actually configured with (see config/di.php).
-     */
-    private function maxLoginAttempts(): int
-    {
-        return Yii::$container->get(RateLimiter::class)->maxAttempts;
     }
 
     // ==================== PROTECTED ENDPOINTS ====================

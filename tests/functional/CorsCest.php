@@ -121,6 +121,39 @@ class CorsCest extends BaseCest
     }
 
     /**
+     * The answers a browser most needs to read are the ones produced *before*
+     * the action runs — a 429 from the throttle, a 401 from the authenticator —
+     * and a filter chain grants CORS in the order it is attached. The rate
+     * limiter arrives from `yii\rest\Controller::behaviors()` under a key that
+     * already exists, so overwriting it keeps the parent's position: ahead of
+     * the CORS filter, which never ran. The 429 came back with `Retry-After`
+     * set, no `Access-Control-*` at all, and therefore nothing a browser client
+     * could read — which is the bug this whole change is about, one filter
+     * further up.
+     *
+     * @throws Exception
+     */
+    public function testARejectionBeforeTheActionStillCarriesTheCorsGrant(FunctionalTester $I): void
+    {
+        $I->deleteHeader('Authorization');
+        $I->haveHttpHeader('Origin', self::ORIGIN);
+
+        // one past the limit: the last attempt is the one that is refused
+        for ($attempt = 0; $attempt <= $this->maxLoginAttempts(); $attempt++) {
+            $I->sendPost('/auth/login', ['email' => 'nobody@example.com', 'password' => 'wrong']);
+        }
+
+        $I->seeResponseCodeIs(429);
+        $I->seeHttpHeader(RateLimiter::HEADER);
+        $I->assertStringContainsString(
+            RateLimiter::HEADER,
+            (string) $I->grabHttpHeader('Access-Control-Expose-Headers'),
+        );
+
+        $I->deleteHeader('Origin');
+    }
+
+    /**
      * A preflight is sent by the browser before the real request and carries no
      * credentials of its own. It must answer without a token — the authenticator
      * is attached after the CORS filter with `except => ['options']` precisely

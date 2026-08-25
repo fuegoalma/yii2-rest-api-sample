@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace tests\functional;
 
+use app\components\RateLimiter;
 use app\models\db\User;
 use FunctionalTester;
 use tests\support\CreatesImageFixtures;
@@ -111,6 +112,16 @@ abstract class BaseCest
         $this->actingAs($I, $userId);
 
         return $userId;
+    }
+
+    /**
+     * The attempt limit the application is actually configured with (see
+     * config/di.php), rather than a copy of the default that stops being true
+     * the moment the env var is set.
+     */
+    protected function maxLoginAttempts(): int
+    {
+        return Yii::$container->get(RateLimiter::class)->maxAttempts;
     }
 
     /**

@@ -135,6 +135,21 @@ stop being merely permissive.
 - **Never authenticated** — the authenticator is attached *after* the CORS filter with `except => ['options']`, so a preflight needs no bearer token.
 - **Never throttled** — [`RateLimiter`](../components/RateLimiter.php) passes `OPTIONS` straight through, so a browser's preflights can't burn the caller's auth-endpoint budget.
 
+### The filter runs first, and that is not a detail
+
+`apiBehaviors()` **prepends** `corsFilter` to the behaviours array rather than assigning it, because
+filters run in declaration order and everything after it can refuse the request: the throttle, the
+authenticator, the verb filter, content negotiation. A refusal produced *ahead* of the CORS filter
+carries no `Access-Control-*` at all, so a browser hands the page a network error instead of the
+response — and the responses most worth reading (`401`, `429`) are exactly the ones produced before
+the action runs.
+
+Assigning was not enough for a subtle reason worth knowing: `yii\rest\Controller::behaviors()`
+already declares a `rateLimiter` key, so `AuthController` overwriting it **keeps the parent's
+position** — ahead of a `corsFilter` appended at the end. The 429 was the one response a browser
+could not read, on the endpoint whose entire purpose is telling a client how long to wait.
+[`CorsCest`](../tests/functional/CorsCest.php) pins it.
+
 ### What a cross-origin client may read
 
 A browser hides every response header outside the CORS safelist, and Yii's `Cors` emits

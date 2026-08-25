@@ -54,7 +54,7 @@ trait ApiControllerTrait
         // here on purpose: a binding that has gone dead must fail loudly rather
         // than silently restore a wildcard nobody chose (the rule ADR 10 states
         // for the encoder's bounding box, applied to a security setting).
-        $behaviors['corsFilter'] = [
+        $cors = [
             'class' => Cors::class,
             'cors' => [
                 'Origin' => Yii::$app->params['cors_allowed_origins'],
@@ -89,7 +89,22 @@ trait ApiControllerTrait
             ];
         }
 
-        return $behaviors;
+        // The CORS filter goes first, not merely before the authenticator:
+        // filters run in the order the array declares them, and everything after
+        // this line can *refuse* the request — the throttle, the authenticator,
+        // the verb filter, content negotiation. A refusal produced ahead of the
+        // CORS filter carries no `Access-Control-*` at all, so the browser hands
+        // the page nothing to read and the client sees a network error where a
+        // 429 with a `Retry-After` was sent.
+        //
+        // Prepending rather than assigning is the load-bearing part.
+        // `yii\rest\Controller::behaviors()` already declares a `rateLimiter`
+        // key, so a controller overwriting it (see AuthController) keeps the
+        // parent's *position* for it — which was ahead of a `corsFilter`
+        // appended at the end. That is how a 429 came to be the one response a
+        // browser could not read, on the endpoint whose whole point is telling
+        // a client to wait.
+        return ['corsFilter' => $cors] + $behaviors;
     }
 
     /**
