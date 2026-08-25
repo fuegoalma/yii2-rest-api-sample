@@ -68,10 +68,17 @@ class ConditionalGet extends ActionFilter
         // client could get to. `no-cache` is not "do not store": it is store and
         // revalidate every time, which is the only safe way to let a per-token
         // body be kept, since every reuse is re-authorized by the request that
-        // revalidates it. `private` keeps it out of shared caches, and `Vary`
-        // names what the stored copy depends on.
+        // revalidates it. `private` keeps it out of shared caches.
+        //
+        // `Vary` names what the stored copy is keyed by. `Origin` belongs there
+        // for a reason that is not obvious: `Access-Control-Allow-Origin` echoes
+        // the caller whenever the allowed list is not a wildcard, so the grant
+        // differs per origin while the browser's cache key does not include
+        // `Origin` on its own. It is set here rather than by the CORS filter
+        // because this is the class that decides the response may be stored at
+        // all — one `Vary`, in the one place that says "you may keep this".
         $response->headers->set('Cache-Control', 'private, no-cache');
-        $response->headers->add('Vary', 'Authorization');
+        $response->headers->set('Vary', 'Authorization, Origin');
 
         $etag = 'W/"' . sha1((string) $response->content) . '"';
         $response->headers->set(self::HEADER, $etag);

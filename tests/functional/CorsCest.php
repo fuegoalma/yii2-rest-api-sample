@@ -82,6 +82,27 @@ class CorsCest extends BaseCest
     }
 
     /**
+     * The grant above is per origin, and a storable response carries it. A
+     * browser's cache key does not include `Origin`, so without this a copy
+     * stored for one origin could be reused for another together with an
+     * `Access-Control-Allow-Origin` that never named it.
+     *
+     * @throws Exception
+     */
+    public function testAStorableResponseVariesByOrigin(FunctionalTester $I): void
+    {
+        $this->overrideParam('cors_allowed_origins', [self::ORIGIN]);
+
+        $I->haveHttpHeader('Origin', self::ORIGIN);
+        $I->sendGet('/users/me');
+
+        $I->seeResponseCodeIs(200);
+        $I->assertStringContainsString('Origin', (string) $I->grabHttpHeader('Vary'));
+
+        $I->deleteHeader('Origin');
+    }
+
+    /**
      * An origin nobody allowed gets no grant — the response still arrives, and
      * the browser is the one that refuses to hand it to the page.
      *

@@ -44,6 +44,12 @@ class ConditionalGetTest extends BaseUnitTest
      * so it never sends `If-None-Match` and the `304` below is unreachable from
      * a browser client. `private` keeps the copy out of shared caches, which
      * matters because every one of these bodies is answered per bearer token.
+     *
+     * `Vary` names both things the stored copy depends on. `Origin` is there
+     * because `Access-Control-Allow-Origin` echoes the caller whenever the
+     * allowed list is not a wildcard, so a copy stored for one origin carries a
+     * grant that does not apply to the next — and the browser's cache key does
+     * not include `Origin` by itself.
      */
     public function testAReadIsTaggedAndMayBeStoredPrivately(): void
     {
@@ -54,7 +60,7 @@ class ConditionalGetTest extends BaseUnitTest
 
         $this->assertSame('W/"' . sha1('{"success":true}') . '"', $response->headers->get(ConditionalGet::HEADER));
         $this->assertSame('private, no-cache', $response->headers->get('Cache-Control'));
-        $this->assertSame('Authorization', $response->headers->get('Vary'));
+        $this->assertSame('Authorization, Origin', $response->headers->get('Vary'));
         $this->assertSame(200, $response->statusCode);
     }
 
@@ -75,7 +81,7 @@ class ConditionalGetTest extends BaseUnitTest
         $this->assertSame('', $response->content);
         $this->assertNull($response->data);
         $this->assertSame('private, no-cache', $response->headers->get('Cache-Control'));
-        $this->assertSame('Authorization', $response->headers->get('Vary'));
+        $this->assertSame('Authorization, Origin', $response->headers->get('Vary'));
         $this->assertNotNull($response->headers->get(ConditionalGet::HEADER));
     }
 
