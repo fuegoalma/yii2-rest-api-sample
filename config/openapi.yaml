@@ -18,6 +18,21 @@ info:
     The public endpoints are the auth endpoints (`/auth/*`) and `/health`.
     Obtain a token pair from `POST /auth/login` or `POST /auth/register`.
 
+    ## Response headers
+
+    Every response carries `X-Request-Id`, the id this request is filed under in
+    the server's logs — quote it in a bug report. Send your own and it is echoed
+    back after sanitising.
+
+    Every `200` from a `GET` carries an `ETag` and
+    `Cache-Control: private, no-cache`: keep the body, and send it back as
+    `If-None-Match` on the next read. An unchanged resource answers `304` with no
+    body. A `429` carries `Retry-After`, in seconds.
+
+    Calling from a browser on another origin, these are the response headers you
+    may read and the only ones (`Access-Control-Expose-Headers`): `ETag`,
+    `Retry-After`, `X-Request-Id`.
+
     ## Authorization (RBAC)
     Access is flat: a role is a named set of permissions, a user may hold
     several, and effective permissions are their union. A freshly registered

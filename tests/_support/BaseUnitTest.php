@@ -5,11 +5,15 @@ declare(strict_types=1);
 namespace tests\unit;
 
 use app\components\CorrelationId;
+use app\controllers\AlbumsController;
 use app\models\contract\CorrelationIdInterface;
+use app\models\contract\service\AccessControlInterface;
+use app\models\contract\service\ApiServiceInterface;
 use app\models\contract\service\TransactionRunnerInterface;
 use app\models\db\User;
 use Codeception\Test\Unit;
 use RuntimeException;
+use Yii;
 use tests\support\CapturesConsoleOutput;
 use tests\support\CreatesImageFixtures;
 use tests\support\RestoresGlobalState;
@@ -68,6 +72,29 @@ abstract class BaseUnitTest extends Unit
     protected function correlationId(string $id = 'test-correlation-id'): CorrelationIdInterface
     {
         return new CorrelationId($id);
+    }
+
+    /**
+     * The behaviours a REST controller composes, as
+     * {@see \app\controllers\basic\ApiControllerTrait::apiBehaviors()} assembles
+     * them — CORS, content negotiation, revalidation and the authenticator.
+     *
+     * `AlbumsController` stands in for all of them: the trait builds the same
+     * array for every resource, and the alternative is each test picking its own
+     * controller and its own stubs for the same answer.
+     *
+     * @return array<string, mixed>
+     */
+    protected function restControllerBehaviors(): array
+    {
+        $controller = new AlbumsController(
+            'albums',
+            Yii::$app,
+            $this->createStub(ApiServiceInterface::class),
+            $this->createStub(AccessControlInterface::class),
+        );
+
+        return $controller->behaviors();
     }
 
     /**

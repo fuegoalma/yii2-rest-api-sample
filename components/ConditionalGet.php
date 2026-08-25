@@ -29,6 +29,14 @@ use Yii;
  */
 class ConditionalGet extends ActionFilter
 {
+    /**
+     * Named here rather than at the `set()` call below because the CORS filter
+     * has to expose it: a browser hides every header outside the safelist, so a
+     * validator this class sets and nobody may read is a validator no
+     * cross-origin client can ever send back.
+     */
+    public const string HEADER = 'ETag';
+
     public function afterAction($action, $result): mixed
     {
         // Deliberately not computed here. At this point `$response->data` is
@@ -50,8 +58,30 @@ class ConditionalGet extends ActionFilter
             return;
         }
 
+        // Set before the comparison below, so the 304 carries them too: a client
+        // that revalidated and got back no caching headers has nothing to store
+        // the refreshed copy under, and stops revalidating.
+        //
+        // Without a freshness directive a browser has no basis to keep the
+        // response at all, so it never sends `If-None-Match` and the 304 path is
+        // unreachable from a browser — the filter was machinery no browser
+        // client could get to. `no-cache` is not "do not store": it is store and
+        // revalidate every time, which is the only safe way to let a per-token
+        // body be kept, since every reuse is re-authorized by the request that
+        // revalidates it. `private` keeps it out of shared caches.
+        //
+        // `Vary` names what the stored copy is keyed by. `Origin` belongs there
+        // for a reason that is not obvious: `Access-Control-Allow-Origin` echoes
+        // the caller whenever the allowed list is not a wildcard, so the grant
+        // differs per origin while the browser's cache key does not include
+        // `Origin` on its own. It is set here rather than by the CORS filter
+        // because this is the class that decides the response may be stored at
+        // all — one `Vary`, in the one place that says "you may keep this".
+        $response->headers->set('Cache-Control', 'private, no-cache');
+        $response->headers->set('Vary', 'Authorization, Origin');
+
         $etag = 'W/"' . sha1((string) $response->content) . '"';
-        $response->headers->set('ETag', $etag);
+        $response->headers->set(self::HEADER, $etag);
 
         if ($this->matches($etag)) {
             $response->statusCode = 304;

@@ -43,6 +43,29 @@ final class OpenApiSpec
     }
 
     /**
+     * The document's prose preamble.
+     *
+     * Everything true of every endpoint at once — the response envelope, the
+     * authentication scheme, the headers every response carries — is stated
+     * here, because OpenAPI 3.0 has nowhere else to put it. That makes it the
+     * one part of the document a gate has to read as text.
+     */
+    public function description(): string
+    {
+        return (string) ($this->document['info']['description'] ?? '');
+    }
+
+    /**
+     * The header names a shared response component declares.
+     *
+     * @return string[]
+     */
+    public function responseHeaderNames(string $component): array
+    {
+        return array_keys($this->document['components']['responses'][$component]['headers'] ?? []);
+    }
+
+    /**
      * Every documented operation, keyed `"GET /users/{id}"`.
      *
      * `parameters` is skipped: it is a path-level key holding parameters shared

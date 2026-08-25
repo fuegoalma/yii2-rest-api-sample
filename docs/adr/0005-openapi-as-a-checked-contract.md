@@ -17,10 +17,11 @@ hand, and CI could lint it."*
 
 ## Decision
 
-Keep the document hand-written, and make it a **checked oracle**: six gates in
+Keep the document hand-written, and make it a **checked oracle**: eight gates in
 `tests/unit/contract/` hold the code to it — routes (both directions, through
 the real `UrlManager` so a shadowed rule is caught), response schemas, search
-forms, write forms, RBAC, and the document's own integrity.
+forms, write forms, RBAC, the published upload limits, the response headers, and
+the document's own integrity.
 
 Every gate is a set difference against an explicit registry plus an explicit,
 commented skip list. Adding a schema, an operation, a form or a permission fails
@@ -45,3 +46,10 @@ parses that prose. The sentence a human reads is then the thing under test.
 - Writing them found three real defects on day one: the document was not valid
   YAML, it promised a 255-character email address that `EmailValidator` can
   never accept, and nothing enforced "super_admin holds every permission".
+- **A gate can only check what the document mentions.** Response headers were
+  documented nowhere, so nothing noticed that the API sent `ETag`, `Retry-After`
+  and `X-Request-Id` while the CORS filter exposed none of them — a whole part
+  of the contract with no schema to hang a gate on. It took someone writing a
+  browser client to find it. The eighth gate exists because of that, and reads
+  the preamble's prose, since OpenAPI 3.0 has nowhere to declare a
+  document-wide header.

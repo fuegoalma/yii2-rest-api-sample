@@ -25,6 +25,51 @@ class ConditionalGetCest extends BaseCest
     }
 
     /**
+     * The validator is only half of it. A browser revalidates what it was told
+     * it may keep, so without a freshness directive it stores nothing, sends no
+     * `If-None-Match`, and never reaches the 304 below — which is what made this
+     * filter dead weight for every browser client until the header was added.
+     *
+     * @throws Exception
+     */
+    public function testAReadSaysItMayBeStoredAndMustBeRevalidated(FunctionalTester $I): void
+    {
+        $I->sendGet('/albums/my');
+
+        $I->seeResponseCodeIs(200);
+        $I->assertSame('private, no-cache', $I->grabHttpHeader('Cache-Control'));
+        $I->assertStringContainsString('Authorization', (string) $I->grabHttpHeader('Vary'));
+    }
+
+    /**
+     * @throws Exception
+     */
+    public function testThe304RepeatsTheCachingHeaders(FunctionalTester $I): void
+    {
+        $I->sendGet('/users/me');
+        $etag = $I->grabHttpHeader('ETag');
+
+        $I->haveHttpHeader('If-None-Match', $etag);
+        $I->sendGet('/users/me');
+
+        $I->seeResponseCodeIs(304);
+        $I->assertSame('private, no-cache', $I->grabHttpHeader('Cache-Control'));
+        $I->assertStringContainsString('Authorization', (string) $I->grabHttpHeader('Vary'));
+        $I->deleteHeader('If-None-Match');
+    }
+
+    /**
+     * @throws Exception
+     */
+    public function testAWriteIsNeverStorable(FunctionalTester $I): void
+    {
+        $I->sendPost('/albums', ['title' => 'Not storable']);
+
+        $I->seeResponseCodeIs(201);
+        $I->dontSeeHttpHeader('Cache-Control');
+    }
+
+    /**
      * @throws Exception
      */
     public function testAnUnchangedResourceAnswers304(FunctionalTester $I): void

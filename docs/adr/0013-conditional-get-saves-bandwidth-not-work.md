@@ -27,6 +27,43 @@ Two byte-identical payloads are semantically equivalent, which is all a weak
 validator claims, and equality is the only comparison a client may make against
 one.
 
+## Amendment: a validator nobody can reach saves nothing
+
+The filter above shipped with neither half of what a browser needs to use it,
+and every omission below was invisible from inside the API — the whole suite
+passed, and a `curl` with a hand-copied `If-None-Match` produced a `304` on
+demand. All three were found by someone writing a browser client against it.
+
+- No response carried a `Cache-Control` directive, so a browser had no basis to
+  store the body and never sent `If-None-Match`. The `304` path existed and was
+  unreachable from a browser client.
+- The CORS filter exposed no headers, so `ETag` was hidden from cross-origin JS
+  along with `Retry-After` and `X-Request-Id`.
+- And once it exposed them, a `429` still carried no `Access-Control-*` at all:
+  `yii\rest\Controller::behaviors()` already declares a `rateLimiter` key, so
+  `AuthController` overwriting it kept the parent's position — ahead of a
+  `corsFilter` appended at the end. The filter that grants a browser the right
+  to read a response has to run before every filter that can refuse one, so
+  `apiBehaviors()` prepends it.
+
+So a `200` from a `GET` now also carries `Cache-Control: private, no-cache` and
+`Vary: Authorization, Origin`, set in the same place as the ETag and before the
+comparison, so the `304` repeats them. `no-cache` means store and revalidate
+every time — not "do not store" — which is the only safe directive for a body
+answered per bearer token: every reuse is re-authorized by the request that
+revalidates it, and a `304` is possible only when the ETag of what *this* caller
+would receive matches. `private` keeps it out of shared caches.
+
+`Vary: Origin` is there because `Access-Control-Allow-Origin` echoes the caller
+whenever the allowed origin list is not a wildcard, and a browser's cache key
+does not include `Origin`. It is written here rather than by the CORS filter
+because this is the class that decides the response may be stored at all.
+
+The general lesson is the one worth keeping: **a capability is not delivered
+until it is reachable by the client it was built for.** Neither gap was a bug in
+the filter, both were the boundary around it, and neither would have been found
+by a test of this class.
+
 ## Consequences
 
 - **The action still runs.** The query is executed, the models are loaded, the

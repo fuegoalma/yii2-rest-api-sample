@@ -4,10 +4,9 @@ declare(strict_types=1);
 
 namespace tests\unit;
 
-use app\controllers\AlbumsController;
-use app\models\contract\service\AccessControlInterface;
-use app\models\contract\service\ApiServiceInterface;
-use Yii;
+use app\components\ConditionalGet;
+use app\components\CorrelationId;
+use app\components\RateLimiter;
 use yii\filters\Cors;
 
 /**
@@ -54,6 +53,22 @@ class CorsConfigurationTest extends BaseUnitTest
     }
 
     /**
+     * A browser hides every response header outside the CORS safelist, so the
+     * three this API sends on purpose have to be named or they reach no
+     * cross-origin client: a 429 that cannot say when to retry, a correlation
+     * id nobody can quote in a bug report, and a validator no client can send
+     * back. The list is composed from the emitting components' own constants,
+     * so it cannot come to name a header that no longer exists.
+     */
+    public function testTheHeadersAClientMustReadAreExposed(): void
+    {
+        $this->assertSame(
+            [ConditionalGet::HEADER, RateLimiter::HEADER, CorrelationId::HEADER],
+            $this->corsConfig()['Access-Control-Expose-Headers'],
+        );
+    }
+
+    /**
      * A preflight must not need a token — the authenticator is attached after
      * the CORS filter precisely so it can be skipped for OPTIONS.
      */
@@ -78,14 +93,7 @@ class CorsConfigurationTest extends BaseUnitTest
      */
     private function behaviors(): array
     {
-        $controller = new AlbumsController(
-            'albums',
-            Yii::$app,
-            $this->createStub(ApiServiceInterface::class),
-            $this->createStub(AccessControlInterface::class),
-        );
-
-        $behaviors = $controller->behaviors();
+        $behaviors = $this->restControllerBehaviors();
         $this->assertSame(Cors::class, $behaviors['corsFilter']['class']);
 
         return $behaviors;

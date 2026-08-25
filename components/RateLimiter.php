@@ -20,6 +20,13 @@ use yii\web\TooManyRequestsHttpException;
  */
 class RateLimiter extends ActionFilter
 {
+    /**
+     * The one thing a 429 says that the status code does not, which is why the
+     * CORS filter exposes it: unread, the client is left guessing how long to
+     * wait and will guess wrong in the direction that costs it the next window.
+     */
+    public const string HEADER = 'Retry-After';
+
     /** attempts allowed within one window */
     public int $maxAttempts = 5;
 
@@ -47,7 +54,7 @@ class RateLimiter extends ActionFilter
         $attempts = (int) $this->cache->get($key);
 
         if ($attempts >= $this->maxAttempts) {
-            Yii::$app->response->headers->set('Retry-After', (string) $this->window);
+            Yii::$app->response->headers->set(self::HEADER, (string) $this->window);
             throw new TooManyRequestsHttpException('Too many attempts. Please try again later.');
         }
 

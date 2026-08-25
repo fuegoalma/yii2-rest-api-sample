@@ -135,6 +135,63 @@ stop being merely permissive.
 - **Never authenticated** — the authenticator is attached *after* the CORS filter with `except => ['options']`, so a preflight needs no bearer token.
 - **Never throttled** — [`RateLimiter`](../components/RateLimiter.php) passes `OPTIONS` straight through, so a browser's preflights can't burn the caller's auth-endpoint budget.
 
+### The filter runs first, and that is not a detail
+
+`apiBehaviors()` **prepends** `corsFilter` to the behaviours array rather than assigning it, because
+filters run in declaration order and everything after it can refuse the request: the throttle, the
+authenticator, the verb filter, content negotiation. A refusal produced *ahead* of the CORS filter
+carries no `Access-Control-*` at all, so a browser hands the page a network error instead of the
+response — and the responses most worth reading (`401`, `429`) are exactly the ones produced before
+the action runs.
+
+Assigning was not enough for a subtle reason worth knowing: `yii\rest\Controller::behaviors()`
+already declares a `rateLimiter` key, so `AuthController` overwriting it **keeps the parent's
+position** — ahead of a `corsFilter` appended at the end. The 429 was the one response a browser
+could not read, on the endpoint whose entire purpose is telling a client how long to wait.
+[`CorsCest`](../tests/functional/CorsCest.php) pins it.
+
+### What a cross-origin client may read
+
+A browser hides every response header outside the CORS safelist, and Yii's `Cors` emits
+`Access-Control-Expose-Headers` **only when the key is present in the `cors` array** — so leaving it
+out is silent: the API keeps sending the header and no cross-origin client can see it. That is
+exactly what happened here, and it was found by someone writing a browser client, not by the suite:
+`ETag`, `Retry-After` and `X-Request-Id` were all sent and all invisible, which made
+`Retry-After` unreadable on a `429` and conditional GET unreachable from a browser.
+
+The list is composed from the emitting components' own constants
+(`ConditionalGet::HEADER`, `RateLimiter::HEADER`, `CorrelationId::HEADER`), so it cannot come to
+name a header that has been renamed or has stopped being sent, and
+[`CorsCest`](../tests/functional/CorsCest.php) asserts the headers **on a response** rather than the
+keys in a behaviours array — a unit test reading the same config could not have caught the omission,
+because the config was exactly what somebody had written.
+
+---
+
+## Response headers
+
+| Header | On | Set by |
+| --- | --- | --- |
+| `X-Request-Id` | every response | [`CorrelationIdBootstrap`](../components/CorrelationIdBootstrap.php) |
+| `ETag` | `200` from a `GET` | [`ConditionalGet`](../components/ConditionalGet.php) |
+| `Cache-Control: private, no-cache` | `200` from a `GET` | [`ConditionalGet`](../components/ConditionalGet.php) |
+| `Vary: Authorization, Origin` | `200` from a `GET` | [`ConditionalGet`](../components/ConditionalGet.php) |
+| `Retry-After` | `429` | [`RateLimiter`](../components/RateLimiter.php) |
+
+The caching pair is what makes the `ETag` reach a browser at all. A browser revalidates only what it
+was told it may store, so with no `Cache-Control` it keeps nothing, never sends `If-None-Match`, and
+never reaches the `304` — the filter was machinery no browser client could get to. `no-cache` is not
+"do not store": it is *store and revalidate every time*, which is what makes it safe for a body
+answered per bearer token, since every reuse is re-authorized by the request that revalidates it.
+`private` keeps the copy out of shared caches.
+
+`Vary` names what the stored copy is keyed by. `Origin` is in there because
+`Access-Control-Allow-Origin` echoes the caller whenever the allowed list is not a wildcard, so the
+grant differs per origin while a browser's cache key does not include `Origin` on its own. It is set
+beside the freshness directive rather than by the CORS filter: one `Vary`, written in the one place
+that decides the response may be stored. See
+[ADR 13](adr/0013-conditional-get-saves-bandwidth-not-work.md).
+
 ---
 
 ## Background Jobs
@@ -606,6 +663,11 @@ curl -i -X POST http://localhost:8084/auth/login \
 # HTTP/1.1 429 Too Many Requests
 # Retry-After: 60
 ```
+
+A browser can read that header only because the CORS filter runs **before** the throttle and names
+`Retry-After` in `Access-Control-Expose-Headers` — see [What a cross-origin client may
+read](#what-a-cross-origin-client-may-read). It did neither for a while, and the symptom was a
+client whose "try again in N seconds" was permanently `undefined`.
 
 ### Which address counts as "the client"
 
