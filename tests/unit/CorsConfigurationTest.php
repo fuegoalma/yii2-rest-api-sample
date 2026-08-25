@@ -7,10 +7,6 @@ namespace tests\unit;
 use app\components\ConditionalGet;
 use app\components\CorrelationId;
 use app\components\RateLimiter;
-use app\controllers\AlbumsController;
-use app\models\contract\service\AccessControlInterface;
-use app\models\contract\service\ApiServiceInterface;
-use Yii;
 use yii\filters\Cors;
 
 /**
@@ -97,14 +93,7 @@ class CorsConfigurationTest extends BaseUnitTest
      */
     private function behaviors(): array
     {
-        $controller = new AlbumsController(
-            'albums',
-            Yii::$app,
-            $this->createStub(ApiServiceInterface::class),
-            $this->createStub(AccessControlInterface::class),
-        );
-
-        $behaviors = $controller->behaviors();
+        $behaviors = $this->restControllerBehaviors();
         $this->assertSame(Cors::class, $behaviors['corsFilter']['class']);
 
         return $behaviors;
