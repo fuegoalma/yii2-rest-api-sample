@@ -58,6 +58,21 @@ class ConditionalGet extends ActionFilter
             return;
         }
 
+        // Set before the comparison below, so the 304 carries them too: a client
+        // that revalidated and got back no caching headers has nothing to store
+        // the refreshed copy under, and stops revalidating.
+        //
+        // Without a freshness directive a browser has no basis to keep the
+        // response at all, so it never sends `If-None-Match` and the 304 path is
+        // unreachable from a browser — the filter was machinery no browser
+        // client could get to. `no-cache` is not "do not store": it is store and
+        // revalidate every time, which is the only safe way to let a per-token
+        // body be kept, since every reuse is re-authorized by the request that
+        // revalidates it. `private` keeps it out of shared caches, and `Vary`
+        // names what the stored copy depends on.
+        $response->headers->set('Cache-Control', 'private, no-cache');
+        $response->headers->add('Vary', 'Authorization');
+
         $etag = 'W/"' . sha1((string) $response->content) . '"';
         $response->headers->set(self::HEADER, $etag);
 
