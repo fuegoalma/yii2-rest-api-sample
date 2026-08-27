@@ -17,19 +17,31 @@ contract quietly becomes a lie.
 ## Decision
 
 A parameter fed from `config/` declares **no default anywhere** in the
-application. `ImagickWebpEncoder` takes its three numbers as required
-constructor arguments; `JwtService::$ttl` is an uninitialised typed property
-with an `init()` guard (a `yii\base\Component` is configured by array, so it
-cannot use a constructor); `RefreshTokenService::$ttl` is required.
+application.
+
+| Where | Value | Source |
+| --- | --- | --- |
+| `ImagickWebpEncoder` — three required constructor arguments | bounding box, quality | `config/params.php` |
+| `RefreshTokenService::$ttl` — required | refresh-token lifetime | `JWT_REFRESH_TTL` |
+| `PasswordService::$ttl` — required | reset-link lifetime | `PASSWORD_RESET_TTL` |
+| `EmailVerificationService::$ttl` — required | verification-link lifetime | `EMAIL_VERIFICATION_TTL` |
+| `JwtService::$ttl` — uninitialised typed property plus an `init()` guard | access-token lifetime | `JWT_TTL` |
+
+`JwtService` is the odd one because a `yii\base\Component` is configured by
+array rather than through a constructor, so "no default" has to be expressed as
+a property that has never been assigned and a guard that says so.
 
 A missing binding therefore fails loudly at construction instead of restoring a
 magic number.
 
 ## Consequences
 
-- `tests/unit/ConfigDrivenDefaultsTest.php` is the one place this is asserted,
-  and a new config-driven parameter belongs in that test rather than in a fourth
-  copy of the same assertion.
+- `tests/unit/ConfigDrivenDefaultsTest.php` is the one place this is asserted —
+  one case per row of the table above — and a new config-driven parameter belongs
+  in that test rather than in a sixth copy of the same assertion. Two of the rows
+  went unpinned for a while, which is the failure mode to expect: the rule is
+  easy to follow when writing the service and easy to forget when writing its
+  test, because nothing about the service looks wrong.
 - That test proves only "no default exists". It would stay green if the
   parameter and the document drifted *together*, which is why
   `UploadParamsContractTest` separately holds `params.php` to the numbers the

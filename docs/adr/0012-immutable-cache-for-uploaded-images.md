@@ -1,8 +1,6 @@
 # 12. Uploaded images are cached as immutable for a year
 
-## Status
-
-Accepted.
+**Status:** accepted
 
 ## Context
 
