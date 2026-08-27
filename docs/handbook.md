@@ -35,10 +35,10 @@ make rebuild   # rebuild the web image via Buildx (after editing the Dockerfile)
 
 ### Startup order
 
-`db` declares a `healthcheck` and the other three services depend on it with `condition:
-service_healthy`. Plain `depends_on` waits only for the container to *start*, which for MySQL is
-several seconds before it accepts a connection — long enough for `web` and `worker` to come up
-against a database that is not there yet.
+`db` declares a `healthcheck` and every other service — `web`, `cron`, `worker` and `phpmyadmin` —
+depends on it with `condition: service_healthy`. Plain `depends_on` waits only for the container to
+*start*, which for MySQL is several seconds before it accepts a connection — long enough for `web`
+and `worker` to come up against a database that is not there yet.
 
 ### PHP configuration
 
@@ -194,6 +194,60 @@ that decides the response may be stored. See
 
 ---
 
+## The response envelope, and what an error says
+
+Every response is `{"success": bool, "data": ..., "code": int}`, built by
+[`BasicResponse`](../models/dto/BasicResponse.php). An index action's
+`DataProviderInterface` result is serialized to `data.items` + `data.pagination`
+via [`PaginationMeta`](../models/dto/PaginationMeta.php); anything `≥ 400` puts
+`{"message": ..., "error_code": ..., "error": {...}}` **inside** `data`, so
+validation errors surface at `data.error` and never at the top level.
+
+Two writers produce it and they must agree: [`ApiSerializer`](../components/ApiSerializer.php)
+wraps normal REST responses, [`JsonErrorHandler`](../components/JsonErrorHandler.php)
+renders uncaught exceptions. New endpoints get this automatically — don't
+hand-build an envelope.
+
+Four rules make an error worth reading, and each exists because the opposite was
+once true here. The full argument is in
+[ADR 11](adr/0011-machine-readable-error-codes.md); what follows is what you need
+to use them.
+
+**Branch on `data.error_code`, never on the prose.** It defaults to the status
+(`not_found`, `conflict`, …) via [`ApiErrorCatalog`](../components/ApiErrorCatalog.php),
+the single `status → [code, message]` table both writers read. An endpoint that
+can refuse for several distinguishable reasons narrows it:
+
+| `error_code` | Raised by |
+| --- | --- |
+| `auth.invalid_credentials` | bad login; a wrong `current_password` on `PUT /users/me/password` |
+| `refresh_token.invalid` / `.expired` / `.reused` | `RefreshTokenService::consume()` — `.reused` is a security event |
+| `password_reset.invalid` / `.expired` | spending a reset token |
+| `email_verification.invalid` / `.expired` | spending a verification token |
+| `role.system_immutable` / `.escalation_denied` / `.last_manager` | the three RBAC refusals |
+| `payload.too_large` | [`RequestSizeLimit`](../components/RequestSizeLimit.php), before PHP discards the body |
+
+Adding one means a new throw site in [`models/exception/`](../models/exception/)
+and a line in the `error_code` description in `config/openapi.yaml`. Nothing
+else.
+
+**`data.error` is strictly `field => string[]`,** and `{}` — never `[]` — when
+there is nothing to say. Debug detail lives under its own `data.debug`, present
+only under `YII_DEBUG`. Mixing the two meant a client could not read field errors
+without first guessing which entries were a backtrace.
+
+**A deliberate message survives verbatim.** A `yii\base\UserException` (every
+`HttpException` is one) carries wording the application chose — a `409` naming
+the invariant it refused — and the catalog only fills silence. Anything else is a
+bug report addressed to us: a driver exception can name tables or credentials, so
+outside a debug environment it is replaced. That decision lives in
+[`ApiError::fromException()`](../models/dto/ApiError.php), deliberately apart from
+the handler, because "may this string leave the building" is a security question
+worth testing directly. `JsonErrorHandler::$debugDetail` defaults to **false** —
+a handler nobody configured is the one running where nobody was watching.
+
+---
+
 ## Background Jobs
 
 Slow, retriable side-effects are pushed onto a queue instead of blocking the request. Everything depends on a small seam in [`models/contract/queue/`](../models/contract/queue/): a **job** ([`JobInterface`](../models/contract/queue/JobInterface.php)) is a plain serializable message that names its **handler** ([`JobHandlerInterface`](../models/contract/queue/JobHandlerInterface.php)), which holds the behaviour and takes its services by constructor injection. That split is what lets a job survive `serialize()` without carrying a database connection or a filesystem client around with it.
@@ -227,7 +281,25 @@ which is what used to happen — left the work undone with only a log line to sa
 SELECT id, attempts, last_error, failed_at FROM queue_job_failed ORDER BY failed_at DESC;
 ```
 
-The first use case is permanently deleting an album: the rows go in a transaction, and each album's on-disk directory cleanup is enqueued (`DeleteAlbumDirectoryJob`, run by `DeleteAlbumDirectoryHandler`) rather than done inline, so a large delete never blocks the response and a failure is retried by the worker instead of aborting the teardown.
+### The three jobs, and why each is one
+
+| Job | Enqueued by | Why it is not inline |
+| --- | --- | --- |
+| `DeleteAlbumDirectoryJob` | permanently deleting an album | the rows are already committed, so a filesystem error afterwards would answer `500` for an operation that succeeded — and a client retrying that `500` gets a `404` |
+| `DeletePhotoFileJob` | deleting one photo | same reason, one file instead of a directory |
+| `SendEmailJob` | password reset, email verification | an SMTP conversation is a third-party network call inside a request the user is waiting on, and a transient failure should be retried rather than become a `500` |
+
+The first two are about **correctness, not speed**, which is the part worth
+remembering: once the rows are gone the deletion has happened as far as any
+caller can tell. Removing bytes is the queue's job everywhere — no service
+deletes a file inline.
+
+Each job pairs with a handler (`DeleteAlbumDirectoryHandler`, and so on) that
+takes its services by constructor injection. Services belong on the handler,
+never on the job: a job is serialized into a table and must carry only plain
+data. The shared type guard — a handler satisfying itself that the payload it was
+handed is the one it knows how to read — lives once, on
+[`BaseJobHandler`](../models/jobs/basic/BaseJobHandler.php).
 
 > **Why a hand-rolled queue?** The idiomatic choice is `yiisoft/yii2-queue`, but its current release caps `symfony/process` at `^7` while this project runs `^8` (PHP 8.5), so it can't be installed here. On a mainstream stack yii2-queue (Redis/DB/AMQP driver) would back the same `QueueInterface` with no call-site changes.
 
@@ -253,6 +325,113 @@ curl http://localhost:8084/health
 ```
 
 Returns **200** when healthy, **503** (with `status: "error"`) otherwise — point your load balancer / uptime monitor at this endpoint.
+
+---
+
+## Observability
+
+`web` and `worker` are separate containers writing to the same place, so every
+line has to say which unit of work it belongs to.
+
+### The correlation id
+
+[`CorrelationIdInterface`](../models/contract/CorrelationIdInterface.php) is that
+id — a **singleton**, so every consumer in the process sees the same value. It is
+*renewed* at exactly two boundaries, and nowhere else:
+
+| Boundary | Renewed from | By |
+| --- | --- | --- |
+| the start of a web request | the caller's `X-Request-Id`, or a fresh id | [`CorrelationIdBootstrap`](../components/CorrelationIdBootstrap.php) |
+| the start of a queued job | `queue_job.correlation_id`, written when it was pushed | `DbQueue::runOne()` |
+
+A renewal rather than a constructor argument because one process serves many
+units of work — the worker runs for days, and an id that outlived its request
+would file every later line under the first one.
+
+**An inbound `X-Request-Id` is honoured and sanitised.** A caller's own id is
+adopted so their logs and ours can be read side by side, but the value is echoed
+in a response header *and* written into log lines: unfiltered, that is header
+injection and log forging in the same field. Everything outside `[A-Za-z0-9._-]`
+is stripped and the result capped at 64 characters, falling back to a generated
+id when nothing usable is left.
+
+The header is set **before the action runs**, which is what puts it on error
+responses too — exactly the answer a caller quotes in a bug report. A browser can
+read it only because it is named in `Access-Control-Expose-Headers` (see
+[What a cross-origin client may read](#what-a-cross-origin-client-may-read)).
+
+```bash
+curl -i http://localhost:8084/health -H 'X-Request-Id: my-trace-1'
+# X-Request-Id: my-trace-1
+```
+
+### Structured logs
+
+[`JsonLogTarget`](../components/log/JsonLogTarget.php) replaces `FileTarget` in
+both `config/web.php` and `config/console.php`: one JSON object per line on
+**stderr**, carrying `correlation_id`, level, category, route, `user_id` and the
+message.
+
+stderr rather than a file under `runtime/` because `docker compose logs` is where
+these are read, and a log nobody can reach from outside the container is a log
+nobody reads. A job inherits the id of the request that enqueued it, so
+`docker compose logs web` and `logs worker` tell one story — without it, "the
+album was deleted but its directory is still there" is untraceable past the
+response.
+
+```bash
+docker compose logs web worker | grep my-trace-1
+```
+
+One setting on that target is load-bearing: `logVars = []`. Yii's `Target`
+otherwise appends a dump of `$_GET`/`$_POST`/`$_SERVER` to every logged error,
+and in a container the environment *is* the configuration — so that dump wrote
+`JWT_SECRET`, `DB_PASSWORD` and `COOKIE_VALIDATION_KEY` into the log stream on
+every failure. It lives on the **target class**, not in a config file, so it
+holds wherever the target is used; it also cannot go on the `log` component,
+where `logVars` is not a `yii\log\Dispatcher` property and the application
+refuses to boot.
+
+See [ADR 17](adr/0017-one-correlation-id-renewed-at-two-boundaries.md).
+
+---
+
+## Metrics
+
+`GET /metrics` exposes operational gauges in the **Prometheus text exposition
+format** — a plain `yii\web\Controller` with `FORMAT_RAW`, deliberately *not* the
+JSON envelope, since Prometheus parses a specific line format.
+
+```bash
+curl http://localhost:8084/metrics
+```
+
+```
+# HELP queue_jobs_pending Jobs waiting to be claimed by a worker.
+# TYPE queue_jobs_pending gauge
+queue_jobs_pending 0
+```
+
+| Metric | What a rise means |
+| --- | --- |
+| `queue_jobs_pending` | the worker is gone or wedged |
+| `queue_jobs_reserved` | jobs are being claimed but not finishing |
+| `queue_jobs_failed_total` | jobs are exhausting their attempts and nobody has looked |
+| `users_total` | growth, and a sanity check after a destructive `seeder/clear` |
+| `one_time_tokens_live` | unspent reset and verification tokens outstanding |
+
+**Values are read from the database at scrape time**, not accumulated in the
+process: PHP shares no memory between requests, so a counter would report one
+container's slice with no way to tell which.
+
+Public and unauthenticated for the same reason as `/health` — a scraper is
+infrastructure and has no account. That is only acceptable because nothing
+exposed is per-user; **a metric that leaks something means moving this endpoint
+behind the network boundary.** Request rate and latency are deliberately absent:
+they belong to the web server or a sidecar, which still sees the requests PHP
+never got to serve.
+
+See [ADR 18](adr/0018-metrics-are-read-at-scrape-time.md).
 
 ---
 
@@ -403,6 +582,112 @@ A few things worth knowing:
 
 ---
 
+## Mutation Testing
+
+Coverage answers "was this line executed". It does not answer "would anyone
+notice if it were wrong", and a test that calls a method and asserts nothing is
+worth exactly 100% of its lines.
+
+```bash
+make mutation                  # threads=4 by default
+make mutation threads=1
+```
+
+[Infection](https://infection.github.io/) changes the code on purpose — flips a
+comparison, drops a method call, swaps `&&` for `||` — and reports how many of
+those changes the suite noticed. The baseline is **MSI ~79%, mutation code
+coverage 100%** (754 mutants, ~154 surviving), over `components/`, `models/service/`, `models/repository/` and
+`models/form/`, in about a minute. The floor lives in
+[`infection.json5`](../infection.json5) (`minMsi: 76`, a little under the
+measurement so the gate catches a regression without failing on the couple of
+points that move as coverage shifts between suites), and CI enforces it.
+
+Three things about the setup are non-obvious, and none should be undone.
+
+**It runs against a disposable database.** Infection executes *mutated* code
+against a real schema, so a mutant that removes the `is_system` guard genuinely
+deletes the seeded roles and every later test fails for unrelated reasons.
+`make mutation` drops and rebuilds `<TEST_DB_NAME>_mutation` per run and never
+touches the database `make test` uses.
+
+**Only the unit suite participates** (`--skip functional`), and not for speed:
+the functional suite truncates one shared database, so across threads workers
+clobber each other and a mutant gets scored "killed" by another worker's
+`TRUNCATE`. The same file measured 100% MSI at four threads and 97% at one.
+**The score is therefore a lower bound** — `RoleService`'s ~30 survivors all die
+against the full suite.
+
+**A survivor is a candidate, not a defect.** Apply it, run `make test`, and write
+a test only if it really survives. Many are equivalent mutants nothing can kill
+(`?? 0` → `?? -1` where neither value crosses the threshold), and chasing 100%
+produces tests that assert the implementation rather than the behaviour.
+
+Two pieces of wiring make it work at all: `composer.json` declares a **PSR-4
+mapping for `app\`** (Yii resolves those classes through its own alias
+autoloader, which only exists after the framework boots), and pcov is enabled via
+`--initial-tests-php-options` because `-d` on the Infection process does not reach
+the child test run — the failure mode is a bare `exit code 143` reported as
+"tests must be in a passing state".
+
+See [ADR 6](adr/0006-hundred-percent-coverage-as-a-gate.md) for what the two
+gates buy together, including the blind spot neither can see.
+
+---
+
+## The Contract Gates
+
+`config/openapi.yaml` is the published source of truth for the API, written by
+hand — and **checked, not trusted**. Eight gates in
+[`tests/unit/contract/`](../tests/unit/contract/) answer the one question the
+rest of the suite cannot: *does the code do what the published document
+promises?*
+
+```bash
+make test-contract     # only the gates; a bare `codecept run` picks them up too
+```
+
+| Gate | Holds |
+| --- | --- |
+| `RouteContractTest` | every route the app answers is documented, every documented operation is **actually routable** (through the real `UrlManager`, so a shadowed rule is caught), every documented route targets a real action |
+| `ResponseSchemaContractTest` | each response schema's property set equals the `fields()`/`toArray()` producing it — and every schema is either mirrored or listed in `NOT_MIRRORED` with a written reason |
+| `SearchFormContractTest` | each `*SearchForm`'s sortable whitelist and filters equal what the index operation documents; no documented query parameter is left unclaimed |
+| `WriteFormContractTest` | each request schema's attributes, `required` list and length limits equal the form that validates them, **probed at the boundary in both directions** |
+| `PermissionContractTest` | the catalog (read from the test DB — the migration's *effect*), the `x-permission` extensions and the permission literals in the code describe the same model; super_admin holds everything |
+| `UploadParamsContractTest` | `photo_max_upload_bytes`, `upload_max_filesize` and `post_max_size` stay ordered, and match the limit and conversion numbers the document publishes |
+| `SpecIntegrityContractTest` | the document parses, every `$ref` resolves, every operation declares a response — the external linter's job, done in-toolchain so a PHP image needs no Node |
+| `HeaderContractTest` | the headers the document promises are the headers the filters send |
+
+They live in a subdirectory of the *unit* suite rather than a suite of their own:
+Codeception's loader recurses, so they need no configuration, and every gate needs
+a booted application anyway. Shared readers (`OpenApiSpec`, `RouteTable`,
+`ContractTestCase`) live in `tests/_support/` because Codeception autoloads only
+that directory, and the suite loader's `~Test\.php$~` pattern would never load a
+`*TestCase.php` from beside the gates.
+
+Four standing rules:
+
+- **Every gate is a set difference against an explicit registry plus an explicit,
+  commented skip list** — never a spot check. Add a schema, operation, form or
+  permission and the build stays red until it has been *placed*.
+- **Always both directions.** "Documented but not implemented" is as much a
+  defect as "implemented but not documented".
+- **Where the document carries something only in prose** — sortable attributes,
+  accepted upload extensions, the 500×500/quality-80 numbers — the gate parses
+  that prose rather than keeping a transcribed copy, with an "it matched at all"
+  assertion so a reword fails instead of comparing nothing.
+- **A contract test asserts a shape, never a behaviour.** If deleting
+  `tests/unit/contract/` would drop line coverage, the missing test is
+  behavioural and belongs in `tests/unit/` or `tests/functional/`.
+
+Because the gates are green on a tree that already agrees, **prove a new gate
+bites by mutation**: break one thing (delete a route, rename a field, drop a
+sortable attribute), confirm the failure names the culprit, restore. Record it in
+the PR.
+
+See [ADR 5](adr/0005-openapi-as-a-checked-contract.md).
+
+---
+
 ## Test-Driven Development
 
 New work on this project is **test-first**. The cycle is the usual one:
@@ -520,48 +805,191 @@ Verify with `codegraph --version`, then run `codegraph init` from the project ro
 
 ## Continuous Integration & Delivery
 
-The project ships a two-stage GitHub Actions pipeline — the two badges at the top of this README reflect the latest runs on the default branch:
+Four GitHub Actions workflows. The badges at the top of the [README](../README.md) reflect the
+latest runs on the default branch.
 
-- **CI** ([`ci.yml`](../.github/workflows/ci.yml)) — runs on every push and pull request. It installs dependencies, spins up a MySQL service, and runs the same four gates as locally: code style (PHP CS Fixer), static analysis (PHPStan), the full test suite, and the [100% coverage gate](#code-coverage) (`make coverage`). When the coverage gate goes red the HTML report is uploaded as a build artifact, so the per-file breakdown is available without reproducing the run locally.
-- **CD** ([`cd.yml`](../.github/workflows/cd.yml)) — runs only *after* CI passes on `master`. It builds the self-contained production image (the `prod` stage of the [`Dockerfile`](../Dockerfile), via Buildx) to prove the app containerises and is deployable, then runs a deployment through a `production` GitHub Environment. The release step itself is **simulated** — this sample intentionally provisions no real server — but the complete CI → build → deploy chain runs on every green build.
+### CI ([`ci.yml`](../.github/workflows/ci.yml))
+
+Runs on pushes to `master` and on every pull request — narrowed that way so a branch with an open
+PR is not built twice for the same commit, with a `concurrency` group that cancels superseded runs
+everywhere except `master`, where CD chains off the completed run.
+
+It installs dependencies, spins up a MySQL service, and runs **six gates in the same order as
+`make check`**:
+
+| # | Gate | Local equivalent |
+| --- | --- | --- |
+| 1 | `composer audit` on runtime dependencies | `make audit` |
+| 2 | Code style (PHP CS Fixer) | `make cs-check` |
+| 3 | Static analysis (PHPStan) | `make stan` |
+| 4 | The full Codeception suite | `make test` |
+| 5 | [The 100% coverage gate](#code-coverage) | `make coverage` |
+| 6 | [The mutation gate](#mutation-testing) | `make mutation` |
+
+`make check` runs 2, 3, 5 and 6 — the tests run *inside* the coverage step, since the pass/fail
+signal is identical and a second full run would only double the wall clock. Mutation goes last both
+places: there is no sense asking whether the tests assert anything until they pass and cover
+everything, and Infection executes mutated code against the database, which would leave it unusable
+for anything after it.
+
+CI runs natively on the runner (PHP 8.5 + Imagick + pcov via `shivammathur/setup-php`), not through
+Docker, so the workflow's `env:` block and `ini-values` have to mirror `.env.example` and
+[`docker/php/app.ini`](../docker/php/app.ini) — `UploadParamsContractTest` fails the build if the
+runtime accepts less than the app promises. Keep the steps in step with the `Makefile` targets:
+they must stay runnable both ways.
+
+The HTML coverage report is uploaded as a build artifact on every run, red or green — a gate that
+passes at exactly 100% is the run you most want the report from when the next commit drops below it.
+
+### Security ([`security.yml`](../.github/workflows/security.yml))
+
+A different question from CI: not "is the code well formed" but "what are we shipping alongside it,
+and has anything secret leaked". CodeQL has no PHP analyzer, so the equivalent here is two jobs:
+
+- **`composer audit`** — blocking for runtime dependencies, **advisory-only for dev tooling**. A
+  static analyser that only reads our own source is a different risk from code running in
+  production, and a transitive advisory with no upstream fix would otherwise wedge every unrelated
+  pull request.
+- **`gitleaks`** over the **full history** — a secret deleted in a later commit is still published,
+  and a leaked `JWT_SECRET` here would forge access tokens for every account.
+
+It also runs **weekly**, because an advisory published against unchanged code is exactly what a
+commit-triggered run can never catch. `make audit` is the local half.
+
+Dependency updates come from [`dependabot.yml`](../.github/dependabot.yml) across three ecosystems:
+`composer` (grouped, so a week's patches arrive as one PR that still passes every gate),
+`github-actions` (the workflows pin actions by major version, and this is the only thing stopping
+them ageing onto a deprecated runner) and `docker` (the `Dockerfile`'s base images).
+
+### CD ([`cd.yml`](../.github/workflows/cd.yml))
+
+Chained to CI via `workflow_run`, so it triggers only after the **CI** workflow completes on
+`master` and a red CI never deploys — and its badge stays neutral rather than red. Two jobs:
+
+- **`build-image`** builds the `prod` stage of the [`Dockerfile`](../Dockerfile) with Buildx and GHA
+  layer cache, then smoke-tests it with [`docker/smoke.sh`](../docker/smoke.sh) — the same script
+  `make smoke` runs, so the two cannot drift. It carries the explicit
+  `if: github.event.workflow_run.conclusion == 'success'` guard.
+- **`deploy`** runs through a `production` GitHub Environment so it appears in the repository's
+  Environments/Deployments tab. It has no `if` of its own and is gated indirectly by
+  `needs: build-image`. The release itself is **simulated** — this sample deliberately provisions no
+  real server.
+
+The image is built with `push: false` / `load: true` and never reaches a registry.
+
+### Proving the image is deployable
+
+```bash
+make smoke     # build the prod image and exercise it against a real MySQL
+```
+
+[`docker/smoke.sh`](../docker/smoke.sh) boots the production image against a real database, runs the
+migrations *inside it*, and asks the questions a caller would: `/health`, the published spec, the
+`X-Request-Id` header, an anonymous `401`, a register → create album → list round trip, and the
+documented error shape.
+
+**It is also the only place two whole subsystems can be checked at all**, because no PHP test starts
+Apache: the [static-image cache policy](#caching) from `web/.htaccess` (including that a `304` still
+carries it) and the production PHP configuration (an ini is loaded, `display_errors` off, opcache
+not revalidating). Anything whose behaviour belongs to the web server or the image rather than to
+the application goes here.
+
+It replaced a `php --version` check that could only prove PHP starts, and writing it immediately
+caught two defects that check could never see: **console commands failed in the production image**
+(the entry scripts hard-coded `YII_ENV=dev`, so the app bootstrapped a debug module
+`composer install --no-dev` had not installed), and **every logged error dumped `$_SERVER`** —
+`JWT_SECRET`, `DB_PASSWORD` and `COOKIE_VALIDATION_KEY` included — into the log stream.
+
+Every check reads the whole response into a variable before matching: piping `curl` into `grep -q`
+makes grep exit on the first match and curl die of `SIGPIPE`, which is a failure of the test rather
+than of the thing tested.
+
+### Git hooks
+
+```bash
+make hooks-install    # also run automatically after `composer install`
+```
+
+[`captainhook.json`](../captainhook.json) declares three hooks, split by what is worth paying for
+when:
+
+| Hook | Runs | Why there |
+| --- | --- | --- |
+| `commit-msg` | Conventional Commits regex + subject/body length | the history is the first thing a reviewer reads, and a convention only holds while something checks it |
+| `pre-commit` | PHP CS Fixer over the **staged** PHP files | committing stays fast |
+| `pre-push` | PHPStan + the full suite | the two gates that only mean anything whole-project — too slow per commit, cheap enough per push |
+
+The hooks run on the **host**, because git hooks are host processes, but invoke the heavy tools
+through `docker compose exec`. There is one toolchain, not two.
+
+### Docs publishing ([`pages.yml`](../.github/workflows/pages.yml))
+
+Chains off a green CI on `master` and publishes [`config/openapi.yaml`](../config/openapi.yaml) to
+GitHub Pages as a self-contained Redoc page, plus the raw document. The application already serves
+`/docs`, but only where an instance is running; this is the copy anyone can read.
+
+Redoc renders to a single HTML file on purpose — the Swagger UI the app serves depends on a CDN
+staying up, which is fine for a developer with the stack running and wrong for a published page. The
+same workflow lints the document (advisory).
 
 ---
 
 ## Project Structure
 
 ```
-├── .github/workflows/ # CI (cs-fixer, phpstan, tests) + CD (build image, deploy) pipelines
+├── .github/
+│   ├── workflows/     # ci.yml, security.yml, cd.yml, pages.yml
+│   └── dependabot.yml # composer + github-actions + docker updates
 ├── Dockerfile         # Multi-stage image: base → dev → prod
 ├── .dockerignore      # Build-context excludes for the prod image
 ├── docker-compose.yml # Local dev stack (web + db + phpMyAdmin + cron + worker), builds the dev stage
-├── docker/cron/       # Cron service: entrypoint + the versioned schedule (crontab)
+├── docker/
+│   ├── cron/          # Cron service: entrypoint + the versioned schedule (crontab)
+│   ├── php/           # app.ini (shared) + dev.ini / prod.ini (per stage)
+│   └── smoke.sh       # Boots the prod image and proves it is deployable (`make smoke`)
 ├── commands/          # Console commands (seeders, RBAC bootstrap, refresh-token pruning, queue worker)
 ├── components/        # App components: JWT, rate limiter, image processing, queue drivers, response serialization
+│   ├── image/         # ImagickWebpEncoder — the ImageEncoderInterface implementation
+│   ├── log/           # JsonLogTarget — structured lines on stderr
+│   ├── mail/          # LogMailer — the MailerInterface implementation
+│   └── queue/         # DbQueue, SyncQueue, ContainerJobRunner
 ├── config/            # Application configuration
 │   ├── db.php         # Main database config (reads from .env)
 │   ├── test_db.php    # Test database config (reads from .env)
 │   ├── web.php        # Web application config
 │   ├── console.php    # Console application config
+│   ├── test.php       # Test overrides (SyncQueue, @runtime storage, strict routing)
+│   ├── di.php         # Container bindings — every interface → implementation
+│   ├── params.php     # Published constants (upload limits, encoder numbers, CORS origins)
 │   ├── url_rules.php  # Shared REST route table (used by web + test)
 │   └── openapi.yaml   # OpenAPI 3.0 spec — source of truth for the API docs (/docs)
 ├── controllers/       # API controllers
+├── docs/
+│   ├── handbook.md    # This file
+│   └── adr/           # Architecture decision records
 ├── migrations/        # Database migrations
 ├── models/
-│   ├── contract/      # Interfaces (repository, service & queue contracts)
+│   ├── contract/      # Interfaces (repository, service, queue & image contracts)
 │   ├── db/            # ActiveRecord models
 │   ├── dto/           # Data Transfer Objects
+│   ├── exception/     # Exceptions carrying a narrowed `error_code`
 │   ├── form/          # Form requests (validation of incoming request data)
-│   ├── jobs/          # Background-queue jobs
+│   ├── jobs/          # Background-queue jobs and their handlers
 │   ├── repository/    # Repository layer (database access)
 │   └── service/       # Service layer (business logic)
-├── web/               # Document root: entry script, uploads/, default-images/
+├── web/               # Document root: entry script, .htaccess, uploads/, default-images/
 ├── codeception.yml    # Test runner config (paths, modules, coverage scope)
 ├── phpstan.neon.dist  # Static analysis config (level 6)
+├── infection.json5    # Mutation testing scope and MSI floor
+├── captainhook.json   # commit-msg / pre-commit / pre-push hooks (`make hooks-install`)
+├── .gitleaks.toml     # Secret-scanning config used by security.yml
 ├── .php-cs-fixer.dist.php # PSR-12 + strict_types code style config
 ├── tests/
 │   ├── functional/    # Functional (integration) tests
 │   ├── unit/          # Unit tests
-│   ├── _support/      # Codeception helpers and base classes (BaseCest, BaseUnitTest)
+│   │   └── contract/  # The eight gates holding the code to config/openapi.yaml
+│   ├── _support/      # Codeception helpers and base classes (BaseCest, BaseUnitTest, OpenApiSpec)
+│   ├── load/          # api.js — the k6 scenario (`make load`)
 │   └── bin/           # coverage-check.php — the 100% coverage gate
 ├── init.sh            # First-time project initialization (`make init`)
 ├── setup.sh           # Database creation and migration runner (`make setup`)
@@ -644,11 +1072,100 @@ curl -X POST http://localhost:8084/auth/logout-all \
 
 Requests without a valid (unexpired, correctly signed) access token get a `401` — a refresh token is opaque and cannot be used as a bearer credential. Invalid credentials on login, and an invalid/expired/revoked refresh token, also return `401`; validation errors (e.g. a duplicate email on register) return `422`.
 
+### Changing a password
+
+```bash
+curl -X PUT http://localhost:8084/users/me/password \
+    -H 'Authorization: Bearer <access_token>' \
+    -H 'Content-Type: application/json' \
+    -d '{"current_password": "secret123", "password": "a-better-one"}'
+```
+
+`current_password` is required even though the caller is already authenticated: a
+bearer token left on a shared machine must not be enough to take an account over
+for good. There is **no id in the route**, so an admin cannot use this against
+somebody else — that is what the RBAC-gated user endpoints are for.
+
+### Recovering a forgotten one
+
+```bash
+curl -X POST http://localhost:8084/auth/forgot-password \
+    -H 'Content-Type: application/json' -d '{"email": "user@example.com"}'
+# 204, always
+
+curl -X POST http://localhost:8084/auth/reset-password \
+    -H 'Content-Type: application/json' \
+    -d '{"token": "<from the message>", "password": "a-better-one"}'
+```
+
+**`forgot-password` always answers `204`.** A different answer for an unknown
+address would rebuild the account-enumeration oracle `login()` works to avoid.
+
+The token is stored as a SHA-256 hash only, claimed with an atomic
+`UPDATE ... WHERE used_at IS NULL` so it cannot be spent twice, and a new request
+retires the previous one. TTL from `PASSWORD_RESET_TTL` (default 1h) —
+deliberately short, because the token is a bearer credential sitting in an inbox.
+
+### Every password change ends every session
+
+Both flows end in the same place (`PasswordService::applyNewPassword()`), and it
+does two things: revokes every refresh family **and** bumps `token_version`, so
+already-issued access tokens stop working immediately. If the reason for the
+change was that somebody else knew the old password, leaving their sessions alive
+defeats the exercise.
+
+### Email verification
+
+```bash
+curl -X POST http://localhost:8084/auth/verify-email \
+    -H 'Content-Type: application/json' -d '{"token": "<from the message>"}'
+
+curl -X POST http://localhost:8084/users/me/resend-verification \
+    -H 'Authorization: Bearer <access_token>'
+```
+
+**Verification is recorded, not enforced.** Registration succeeds, the account
+works, `user.email_verified_at` simply stays null, and `email_verified` on the
+user shape lets a client prompt. `verify-email` is public because the token *is*
+the proof — demanding a session as well breaks opening the link in another
+browser. Resend is a no-op once verified, so it cannot spray mail at a confirmed
+address. TTL from `EMAIL_VERIFICATION_TTL` (default 24h).
+
+See [ADR 15](adr/0015-email-verification-is-recorded-not-enforced.md) for why the
+gate is provided rather than built and switched off.
+
+### Where the messages go
+
+Mail goes through [`MailerInterface`](../models/contract/MailerInterface.php),
+queued as `SendEmailJob`. The bound implementation is
+[`LogMailer`](../components/mail/LogMailer.php), which **writes the message to
+the structured log** — honest for a sample with no mail server, and something
+that must not stay in front of real users, since a reset link in a log is a reset
+link anyone with log access can spend.
+
+```bash
+docker compose logs web | grep -i 'Mail to'
+```
+
+Swapping it for `yii\symfonymailer\Mailer` is one binding in `config/di.php`.
+
+### One table, two purposes
+
+Reset and verification tokens share the **`one_time_token`** table, separated by
+a `purpose` column, because a second table would have been the same hash /
+expiry / single-use-claim machinery copied. Every repository lookup is scoped by
+purpose — a verification token must never be spendable as a password reset, and
+the hash alone cannot say which it is. See
+[ADR 14](adr/0014-one-table-for-every-single-use-token.md).
+
 ---
 
 ## Rate Limiting
 
-The five `/auth/*` endpoints are throttled per client IP to protect against brute-force credential guessing. Each action (`login`, `register`, `refresh`, `logout`, `logout-all`) has its **own independent budget** — hammering `/auth/login` doesn't affect your `/auth/refresh` allowance.
+The eight `/auth/*` endpoints are throttled per client IP to protect against brute-force credential
+guessing. Each action (`login`, `register`, `refresh`, `logout`, `logout-all`, `forgot-password`,
+`reset-password`, `verify-email`) has its **own independent budget** — the cache key includes
+`$action->getUniqueId()`, so hammering `/auth/login` doesn't affect your `/auth/refresh` allowance.
 
 - Every non-OPTIONS request increments the counter and refreshes the window.
 - A **successful** response (status `< 400`) resets the counter early.
@@ -793,6 +1310,37 @@ make rbac-assign role=super_admin email=user@example.com
 
 These mutations are **atomic and concurrency-safe**: each runs inside a DB transaction (injected via `TransactionRunnerInterface`) and takes a `SELECT ... FOR UPDATE` lock on the current role-managers before checking the invariant, so two concurrent requests can't each pass the check and *together* remove the last manager. User deletion (account + all its albums, photos and files) is wrapped in the same way.
 
+### Every RBAC mutation is recorded
+
+Everything else about the model is reconstructible from the tables — but only its
+*current* state. "Who gave this account `super_admin`, and when" is the question
+asked after an incident, and it needs its own record.
+
+[`RbacAuditInterface`](../models/contract/service/RbacAuditInterface.php)
+(implemented by `models/service/RbacAudit`) appends to the **`rbac_audit`** table
+on the four mutations that exist — `role.created`, `role.updated`,
+`role.deleted`, `roles.assigned` — storing actor, subject, action and a JSON
+diff (`granted` / `revoked` role ids, not the whole set: the diff is what
+somebody reconstructing an incident is after).
+
+```sql
+SELECT actor_id, subject_id, action, detail, created_at
+FROM rbac_audit ORDER BY created_at DESC;
+```
+
+Two details are deliberate and easy to undo by accident:
+
+- **It is a separate contract from `RoleService` on purpose.** The service must
+  refuse an unsafe change; the writer must never refuse anything, because an
+  audit writer that can veto the operation it describes has become part of the
+  operation. The write happens inside the same transaction, so a refused change
+  leaves no trace of having been attempted.
+- **The record outlives both parties.** `actor_id` is `ON DELETE SET NULL` and
+  `subject_id` is not a foreign key at all — deleting a user is itself an
+  auditable event, so the row has to survive its subject.
+
+See [ADR 16](adr/0016-the-audit-writer-cannot-refuse.md).
+
 ---
 
 ## API Endpoints
@@ -822,7 +1370,8 @@ So they are gone. Each of them now has a gate behind it instead:
 | Response envelopes | `ResponseSchemaContractTest` |
 | Upload conversion (WebP, quality, bounding box) | `UploadParamsContractTest` |
 
-See [ADR 5](adr/0005-openapi-as-a-checked-contract.md) for why the document is
+[The contract gates](#the-contract-gates) covers all eight and how to run them;
+[ADR 5](adr/0005-openapi-as-a-checked-contract.md) covers why the document is
 written by hand and checked rather than generated.
 
 ---
