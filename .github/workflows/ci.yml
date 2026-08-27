@@ -18,7 +18,7 @@ concurrency:
 
 jobs:
   checks:
-    name: cs-fixer · phpstan · tests · coverage
+    name: audit · cs-fixer · phpstan · tests · coverage · mutation
     runs-on: ubuntu-latest
 
     services:

@@ -7,7 +7,7 @@ WEB := $(DC) exec -T web
         seed seed-clear \
         refresh-token-prune rbac-assign \
         test test-unit test-functional test-one test-contract build \
-        coverage coverage-html \
+        coverage coverage-html mutation load \
         cs-check cs-fix stan check audit hooks-install smoke
 
 help:
@@ -35,10 +35,12 @@ help:
 	@echo "  build                Rebuild Codeception support classes (after changing modules)"
 	@echo "  coverage             Run the suite with coverage and enforce the 100% gate"
 	@echo "  coverage-html        Same as coverage, then print the HTML report path"
+	@echo "  mutation [threads=N] Run Infection against a disposable DB and enforce the MSI floor"
+	@echo "  load [vus=N duration=T]  Run the k6 load scenario against a running stack"
 	@echo "  cs-check             Show PSR-12 code style violations (dry-run)"
 	@echo "  cs-fix               Auto-fix PSR-12 code style violations"
 	@echo "  stan                 Run PHPStan static analysis"
-	@echo "  check                cs-check + stan + coverage — what CI runs"
+	@echo "  check                cs-check + stan + coverage + mutation — what CI runs"
 	@echo "  audit                Report known advisories in the installed dependencies"
 	@echo "  hooks-install        Install the git hooks (commit-msg, pre-commit, pre-push)"
 	@echo "  smoke                Build the prod image and prove it is deployable"
