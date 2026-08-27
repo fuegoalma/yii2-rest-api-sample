@@ -23,3 +23,8 @@ somewhere other than where the benefit shows up.
 | [0011](0011-machine-readable-error-codes.md)         | Errors carry a machine-readable code, and disclose nothing by accident |
 | [0012](0012-immutable-cache-for-uploaded-images.md)  | Uploaded images are cached as immutable for a year                   |
 | [0013](0013-conditional-get-saves-bandwidth-not-work.md) | Conditional GET saves bandwidth, not work                        |
+| [0014](0014-one-table-for-every-single-use-token.md) | One table for every single-use token                                  |
+| [0015](0015-email-verification-is-recorded-not-enforced.md) | Email verification is recorded, not enforced                   |
+| [0016](0016-the-audit-writer-cannot-refuse.md)       | The audit writer cannot refuse the change it records                 |
+| [0017](0017-one-correlation-id-renewed-at-two-boundaries.md) | One correlation id, renewed at two boundaries                 |
+| [0018](0018-metrics-are-read-at-scrape-time.md)      | Metrics are read at scrape time, and request rate is not among them  |
