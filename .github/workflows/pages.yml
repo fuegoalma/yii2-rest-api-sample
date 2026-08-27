@@ -58,7 +58,7 @@ jobs:
       - name: Lint the document (advisory)
         run: npx --yes @redocly/cli@latest lint config/openapi.yaml || true
 
-      - uses: actions/configure-pages@v5
+      - uses: actions/configure-pages@v6
 
       - uses: actions/upload-pages-artifact@v3
         with:
