@@ -15,7 +15,7 @@ Everything runs in Docker. The whole toolchain is behind `make` — see
 
 ```bash
 make init && make setup     # first time: .env, containers, databases, migrations
-make check                  # every gate CI runs: style, static analysis, tests at 100% coverage
+make check                  # every gate CI runs: style, static analysis, 100% coverage, mutation
 ```
 
 **📖 [Read the API documentation](https://fuegoalma.github.io/yii2-rest-api-sample/)** — published from
@@ -99,6 +99,8 @@ make up / down / logs / sh    # container lifecycle
 make test                     # the full suite
 make test-contract            # only the OpenAPI contract gates
 make coverage                 # the suite with the 100% gate enforced
+make mutation                 # would the suite notice if the code were wrong?
+make audit                    # known advisories in the runtime dependencies
 make check                    # everything CI runs
 make smoke                    # build the production image and prove it is deployable
 make hooks-install            # commit-msg, pre-commit and pre-push hooks
