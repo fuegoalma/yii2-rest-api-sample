@@ -6,7 +6,13 @@ namespace tests\unit;
 
 use app\components\image\ImagickWebpEncoder;
 use app\components\JwtService;
+use app\models\contract\queue\QueueInterface;
+use app\models\contract\repository\OneTimeTokenRepositoryInterface;
 use app\models\contract\repository\RefreshTokenRepositoryInterface;
+use app\models\contract\repository\UserRepositoryInterface;
+use app\models\service\basic\OneTimeTokenFlow;
+use app\models\service\EmailVerificationService;
+use app\models\service\PasswordService;
 use app\models\service\RefreshTokenService;
 use ArgumentCountError;
 use yii\base\InvalidConfigException;
@@ -51,6 +57,52 @@ class ConfigDrivenDefaultsTest extends BaseUnitTest
 
         /** @phpstan-ignore-next-line arguments.count (that is the assertion) */
         new RefreshTokenService($this->createStub(RefreshTokenRepositoryInterface::class));
+    }
+
+    /**
+     * $ttl comes from PASSWORD_RESET_TTL via config/di.php. Deliberately short:
+     * a default here would quietly extend the life of a bearer credential
+     * sitting in an inbox, which is the one thing this value exists to bound.
+     */
+    public function testPasswordServiceRequiresTtlToBeSuppliedExplicitly(): void
+    {
+        $this->expectException(ArgumentCountError::class);
+
+        /** @phpstan-ignore-next-line arguments.count (that is the assertion) */
+        new PasswordService(
+            $this->createStub(UserRepositoryInterface::class),
+            $this->createStub(OneTimeTokenRepositoryInterface::class),
+            $this->createStub(RefreshTokenRepositoryInterface::class),
+            $this->createStub(QueueInterface::class),
+            $this->oneTimeTokenFlow(),
+        );
+    }
+
+    /**
+     * $ttl comes from EMAIL_VERIFICATION_TTL via config/di.php. It is longer
+     * than the reset above, which is exactly why neither may default: two
+     * lifetimes that differ on purpose are two lifetimes that must both be
+     * stated.
+     */
+    public function testEmailVerificationServiceRequiresTtlToBeSuppliedExplicitly(): void
+    {
+        $this->expectException(ArgumentCountError::class);
+
+        /** @phpstan-ignore-next-line arguments.count (that is the assertion) */
+        new EmailVerificationService(
+            $this->createStub(UserRepositoryInterface::class),
+            $this->createStub(QueueInterface::class),
+            $this->oneTimeTokenFlow(),
+        );
+    }
+
+    /** The shared token machinery both services above take, with nothing behind it. */
+    private function oneTimeTokenFlow(): OneTimeTokenFlow
+    {
+        return new OneTimeTokenFlow(
+            $this->createStub(UserRepositoryInterface::class),
+            $this->createStub(OneTimeTokenRepositoryInterface::class),
+        );
     }
 
     /**
