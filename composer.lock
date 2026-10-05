@@ -159,16 +159,16 @@
         },
         {
             "name": "bower-asset/inputmask",
-            "version": "5.0.9",
+            "version": "5.0.10",
             "source": {
                 "type": "git",
                 "url": "git@github.com:RobinHerbots/Inputmask.git",
-                "reference": "310a33557e2944daf86d5946a5e8c82b9118f8f7"
+                "reference": "325dde43365b7638393e5dc1a2b6463114ef14dd"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/RobinHerbots/Inputmask/zipball/310a33557e2944daf86d5946a5e8c82b9118f8f7",
-                "reference": "310a33557e2944daf86d5946a5e8c82b9118f8f7"
+                "url": "https://api.github.com/repos/RobinHerbots/Inputmask/zipball/325dde43365b7638393e5dc1a2b6463114ef14dd",
+                "reference": "325dde43365b7638393e5dc1a2b6463114ef14dd"
             },
             "require": {
                 "bower-asset/jquery": ">=1.7"
@@ -2166,16 +2166,16 @@
         },
         {
             "name": "bizley/migration",
-            "version": "4.4.3",
+            "version": "4.4.4",
             "source": {
                 "type": "git",
                 "url": "https://github.com/bizley/yii2-migration.git",
-                "reference": "b1f4f5e7cf1dc48be6b2db645fd347da5d26fbcf"
+                "reference": "b8e30019ec45b7e60561c33bfe743cc722fb5820"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/bizley/yii2-migration/zipball/b1f4f5e7cf1dc48be6b2db645fd347da5d26fbcf",
-                "reference": "b1f4f5e7cf1dc48be6b2db645fd347da5d26fbcf",
+                "url": "https://api.github.com/repos/bizley/yii2-migration/zipball/b8e30019ec45b7e60561c33bfe743cc722fb5820",
+                "reference": "b8e30019ec45b7e60561c33bfe743cc722fb5820",
                 "shasum": ""
             },
             "require": {
@@ -2225,7 +2225,7 @@
                     "type": "github"
                 }
             ],
-            "time": "2025-09-14T08:49:25+00:00"
+            "time": "2026-06-03T17:18:14+00:00"
         },
         {
             "name": "captainhook/captainhook",
